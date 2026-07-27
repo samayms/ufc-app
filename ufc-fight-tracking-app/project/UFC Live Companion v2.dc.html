@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet"><style>body{margin:0;background:#0C0A09;font-family:Barlow,system-ui,sans-serif}a{color:#E2603F}a:hover{color:#F0846A}::-webkit-scrollbar{width:0;height:0}@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.2}}</style></helmet>
+<div style="min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:36px 0 56px;background:radial-gradient(120% 80% at 50% 0%,#1A1512 0%,#0C0A09 70%)">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+<div style="min-height:100%;background:#14110F;color:#F5F1EC;display:flex;flex-direction:column">
+
+<div style="position:sticky;top:0;z-index:5;background:rgba(20,17,15,.95);backdrop-filter:blur(14px);border-bottom:1px solid rgba(245,241,236,.09);padding:52px 15px 8px;display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<div style="display:flex;align-items:baseline;gap:7px"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:21px;line-height:1">UFC 300</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;color:rgba(245,241,236,.34);text-transform:uppercase">fixture data</span></div>
+<div style="display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:rgba(245,241,236,.5)"><span style="width:6px;height:6px;border-radius:50%;background:#E2603F;animation:pulseDot 1.6s ease-in-out infinite"></span>{{ syncLabel }}</div>
+</div>
+
+<div style="flex:1;padding:11px 15px 88px">
+
+<sc-if value="{{ isLive }}" hint-placeholder-val="{{ true }}">
+<div>
+
+<div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px">
+<div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+<div style="width:66px;height:66px;border-radius:50%;border:2px solid #E2603F;background:repeating-linear-gradient(45deg,rgba(245,241,236,.07) 0 5px,rgba(245,241,236,.02) 5px 10px);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;color:rgba(245,241,236,.42)">photo</div>
+<div style="text-align:center">
+<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:21px;line-height:1.05">{{ bout.a.last }}</div>
+<div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:rgba(245,241,236,.42);margin-top:2px">{{ bout.a.record }}</div>
+</div>
+</div>
+<div style="text-align:center;min-width:92px">
+<div style="font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.1em;padding:3px 8px;border-radius:5px;background:{{ status.bg }};color:{{ status.fg }};display:inline-block">{{ status.label }}</div>
+<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:34px;line-height:1.05;margin-top:5px">{{ clock.time }}</div>
+<div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.08em;color:rgba(245,241,236,.42)">{{ clock.round }}</div>
+</div>
+<div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+<div style="width:66px;height:66px;border-radius:50%;border:2px solid #4C8CE0;background:repeating-linear-gradient(45deg,rgba(245,241,236,.07) 0 5px,rgba(245,241,236,.02) 5px 10px);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;color:rgba(245,241,236,.42)">photo</div>
+<div style="text-align:center">
+<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:21px;line-height:1.05">{{ bout.b.last }}</div>
+<div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:rgba(245,241,236,.42);margin-top:2px">{{ bout.b.record }}</div>
+</div>
+</div>
+</div>
+
+<div style="display:flex;gap:5px;margin-top:12px">
+<sc-for list="{{ roundChips }}" as="c" hint-placeholder-count="6">
+<div onClick="{{ c.onClick }}" style="flex:1;cursor:pointer;text-align:center;padding:6px 0 5px;border-radius:8px;border:1px solid {{ c.border }};background:{{ c.bg }};color:{{ c.color }};font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:13.5px;letter-spacing:.04em">{{ c.label }}</div>
+</sc-for>
+</div>
+
+<div style="margin-top:11px;border:1px solid rgba(245,241,236,.1);border-radius:13px;background:#1A1614;padding:11px 12px 4px">
+<sc-for list="{{ coreStats }}" as="s" hint-placeholder-count="4">
+<div style="margin-bottom:10px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+<span style="width:78px;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;color:{{ s.aColor }}">{{ s.aVal }}</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.08em;color:rgba(245,241,236,.42);text-transform:uppercase">{{ s.label }}</span>
+<span style="width:78px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600;color:{{ s.bColor }}">{{ s.bVal }}</span>
+</div>
+<div style="display:flex;gap:3px;margin-top:5px">
+<div style="flex:1;display:flex;justify-content:flex-end;height:5px;background:rgba(245,241,236,.06);border-radius:3px;overflow:hidden"><div style="height:5px;background:#E2603F;width:{{ s.aW }}"></div></div>
+<div style="flex:1;height:5px;background:rgba(245,241,236,.06);border-radius:3px;overflow:hidden"><div style="height:5px;background:#4C8CE0;width:{{ s.bW }}"></div></div>
+</div>
+</div>
+</sc-for>
+</div>
+
+<div style="margin-top:11px;border:1px solid rgba(76,140,224,.26);border-radius:13px;background:rgba(76,140,224,.08);padding:10px 12px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+<span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:17px;letter-spacing:.03em">{{ score.line }}</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(245,241,236,.42)">{{ score.scorers }}</span>
+</div>
+<div style="margin-top:6px;font-size:12px;line-height:1.42;color:rgba(245,241,236,.66);text-wrap:pretty">{{ score.summary }}</div>
+<div style="margin-top:6px;font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:rgba(245,241,236,.3)">{{ score.provenance }}</div>
+</div>
+
+<div style="margin-top:11px;display:flex;flex-direction:column;gap:7px">
+
+<div style="border:1px solid rgba(245,241,236,.1);border-radius:13px;background:#1A1614;overflow:hidden">
+<div onClick="{{ toggleStats }}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:11px 12px">
+<span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:rgba(245,241,236,.78)">Detailed stats</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(245,241,236,.4)">{{ caretStats }}</span>
+</div>
+<sc-if value="{{ openStats }}" hint-placeholder-val="{{ false }}">
+<div style="padding:0 12px 10px">
+<sc-for list="{{ detailGroups }}" as="g" hint-placeholder-count="4">
+<div style="margin-top:6px">
+<div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:rgba(245,241,236,.34);padding:6px 0 4px;border-top:1px solid rgba(245,241,236,.07)">{{ g.title }}</div>
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:3px 0">
+<span style="width:74px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:{{ r.aColor }}">{{ r.aVal }}</span>
+<span style="font-size:11px;color:rgba(245,241,236,.46)">{{ r.label }}</span>
+<span style="width:74px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:12px;color:{{ r.bColor }}">{{ r.bVal }}</span>
+</div>
+</sc-for>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<div style="border:1px solid rgba(245,241,236,.1);border-radius:13px;background:#1A1614;overflow:hidden">
+<div onClick="{{ toggleOdds }}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:11px 12px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:rgba(245,241,236,.78)">Market odds</span><span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:rgba(245,241,236,.36)">{{ oddsPeek }}</span></div>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(245,241,236,.4)">{{ caretOdds }}</span>
+</div>
+<sc-if value="{{ openOdds }}" hint-placeholder-val="{{ false }}">
+<div>
+<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:0 8px;padding:0 12px 5px">
+<span></span>
+<span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#E2603F;text-align:center">{{ bout.a.last }}</span>
+<span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:#4C8CE0;text-align:center">{{ bout.b.last }}</span>
+</div>
+<sc-for list="{{ oddsRows }}" as="o" hint-placeholder-count="2">
+<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:0 8px;align-items:center;padding:8px 12px;border-top:1px solid rgba(245,241,236,.07)">
+<div>
+<div style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:13.5px;line-height:1.05">{{ o.src }}</div>
+<div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:rgba(245,241,236,.34);margin-top:2px">{{ o.note }}</div>
+</div>
+<div style="text-align:center">
+<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;line-height:1">{{ o.aNow }}</div>
+<div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:{{ o.aChgColor }};margin-top:1px">{{ o.aChg }}</div>
+<div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:rgba(245,241,236,.3)">{{ o.aOpen }}</div>
+</div>
+<div style="text-align:center">
+<div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:22px;line-height:1">{{ o.bNow }}</div>
+<div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;color:{{ o.bChgColor }};margin-top:1px">{{ o.bChg }}</div>
+<div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:rgba(245,241,236,.3)">{{ o.bOpen }}</div>
+</div>
+</div>
+</sc-for>
+<div style="padding:7px 12px 9px;border-top:1px solid rgba(245,241,236,.07);background:rgba(0,0,0,.2);font-family:'IBM Plex Mono',monospace;font-size:8.5px;line-height:1.5;color:rgba(245,241,236,.34)">{{ oddsFooter }}</div>
+</div>
+</sc-if>
+</div>
+
+<div style="border:1px solid rgba(245,241,236,.1);border-radius:13px;background:#1A1614;overflow:hidden">
+<div onClick="{{ toggleProfiles }}" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:11px 12px">
+<span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:rgba(245,241,236,.78)">Fighter profiles</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(245,241,236,.4)">{{ caretProfiles }}</span>
+</div>
+<sc-if value="{{ openProfiles }}" hint-placeholder-val="{{ false }}">
+<div style="padding:0 12px 11px">
+<sc-for list="{{ profileRows }}" as="r" hint-placeholder-count="8">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:3.5px 0;border-top:1px solid rgba(245,241,236,.06)">
+<span style="width:96px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(245,241,236,.8)">{{ r.aVal }}</span>
+<span style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:rgba(245,241,236,.38)">{{ r.label }}</span>
+<span style="width:96px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:rgba(245,241,236,.8)">{{ r.bVal }}</span>
+</div>
+</sc-for>
+<div style="display:flex;gap:10px;margin-top:9px">
+<div style="flex:1;display:flex;gap:3px">
+<sc-for list="{{ lastFiveA }}" as="x" hint-placeholder-count="5">
+<span style="flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:8.5px;font-weight:600;padding:4px 0;border-radius:5px;background:{{ x.bg }};color:{{ x.color }}">{{ x.label }}</span>
+</sc-for>
+</div>
+<div style="flex:1;display:flex;gap:3px">
+<sc-for list="{{ lastFiveB }}" as="x" hint-placeholder-count="5">
+<span style="flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:8.5px;font-weight:600;padding:4px 0;border-radius:5px;background:{{ x.bg }};color:{{ x.color }}">{{ x.label }}</span>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+</div>
+
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isCard }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<sc-for list="{{ cardBouts }}" as="c" hint-placeholder-count="6">
+<div onClick="{{ c.onClick }}" style="cursor:pointer;border:1px solid {{ c.border }};border-radius:12px;background:{{ c.bg }};padding:10px 12px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+<span style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:rgba(245,241,236,.5)">{{ c.weight }}</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;letter-spacing:.08em;padding:3px 6px;border-radius:4px;background:{{ c.statusBg }};color:{{ c.statusFg }}">{{ c.status }}</span>
+</div>
+<div style="display:flex;align-items:center;gap:9px;margin-top:8px">
+<span style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(226,96,63,.55);background:repeating-linear-gradient(45deg,rgba(245,241,236,.07) 0 4px,rgba(245,241,236,.02) 4px 8px)"></span>
+<span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;line-height:1.05;color:{{ c.aColor }}">{{ c.aLast }}</span>
+<span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:rgba(245,241,236,.3)">vs</span>
+<span style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:18px;line-height:1.05;color:{{ c.bColor }}">{{ c.bLast }}</span>
+<span style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(76,140,224,.55);background:repeating-linear-gradient(45deg,rgba(245,241,236,.07) 0 4px,rgba(245,241,236,.02) 4px 8px)"></span>
+</div>
+<div style="margin-top:6px;font-size:11.5px;line-height:1.35;color:rgba(245,241,236,.52)">{{ c.detail }}</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+</div>
+
+<div style="position:sticky;bottom:0;display:flex;background:rgba(20,17,15,.95);backdrop-filter:blur(14px);border-top:1px solid rgba(245,241,236,.1);padding:9px 10px 6px">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="2">
+<div onClick="{{ t.onClick }}" style="flex:1;cursor:pointer;text-align:center;padding:5px 0 3px;color:{{ t.color }}">
+<div style="width:22px;height:3px;border-radius:2px;margin:0 auto 7px;background:{{ t.bar }}"></div>
+<div style="font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:13px;letter-spacing:.1em;text-transform:uppercase">{{ t.label }}</div>
+</div>
+</sc-for>
+</div>
+
+</div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:520,&quot;height&quot;:980},&quot;syncSeconds&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:5,&quot;min&quot;:1,&quot;max&quot;:60,&quot;unit&quot;:&quot;s&quot;,&quot;tsType&quot;:&quot;number&quot;},&quot;startExpanded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+const RED = '#E2603F', BLUE = '#4C8CE0', DIM = 'rgba(245,241,236,.42)', GRN = '#7FC79B';
+
+function rd(n, verdict, summary, s) {
+  return Object.assign({ n, verdict, summary }, s);
+}
+
+const BOUTS = [
+  {
+    id: 'peh', weight: 'Light Heavyweight Title', cardStatus: 'UP NEXT', kind: 'next', scheduled: 5,
+    a: { first: 'Alex', last: 'Pereira', record: '9-2-0', rank: 'Champion', age: 36, height: "6'4\"", reach: '79\"', stance: 'Orthodox', country: 'Brazil', streak: 'W3', lastFive: ['W KO', 'W TKO', 'W KO', 'L TKO', 'W KO'] },
+    b: { first: 'Jamahal', last: 'Hill', record: '12-1-0', rank: '#3', age: 32, height: "6'4\"", reach: '79\"', stance: 'Southpaw', country: 'USA', streak: 'W1', lastFive: ['W TKO', 'W DEC', 'W TKO', 'W DEC', 'L DEC'] },
+    detail: 'Walkouts start after the current bout.',
+    odds: [
+      { src: 'Kalshi', note: '2.1k contracts', a: ['58%', '-138', '55%', '+3'], b: ['42%', '+138', '45%', '-3'] },
+      { src: 'Sportsbooks', note: 'avg of 38 books', a: ['60%', '-150', '58%', '+2'], b: ['43%', '+125', '45%', '-2'] }
+    ],
+    oddsFooter: 'Books polled 6m ago, 12 of 500 monthly credits used. Sportsbook percentages carry about 3.8% vig, so they do not sum to 100 and are not directly comparable to Kalshi.'
+  },
+  {
+    id: 'gah', weight: 'BMF Title', cardStatus: 'LIVE', kind: 'live', scheduled: 5, currentRound: 3,
+    a: { first: 'Justin', last: 'Gaethje', record: '25-4-0', rank: '#2', age: 35, height: "5'11\"", reach: '70\"', stance: 'Orthodox', country: 'USA', streak: 'W2', lastFive: ['W KO', 'W DEC', 'L SUB', 'W TKO', 'W KO'], tale: ['7.12', '6.94', '54%', '58%', '0.30', '33%', '80%'] },
+    b: { first: 'Max', last: 'Holloway', record: '25-7-0', rank: '#1 FW', age: 32, height: "5'11\"", reach: '69\"', stance: 'Orthodox', country: 'USA', streak: 'W1', lastFive: ['W DEC', 'L DEC', 'W DEC', 'W TKO', 'W DEC'], tale: ['7.51', '5.02', '48%', '62%', '0.11', '25%', '74%'] },
+    detail: 'Live now, round 3 of 5.',
+    rounds: [
+      rd(1, 'Gaethje', 'Gaethje opened on the low kick and dropped Holloway with a right hand late. Holloway recovered before the horn and answered with combinations at range.', { sig: [[41, 89], [38, 77]], head: [[22, 58], [25, 50]], body: [[9, 14], [6, 11]], leg: [[10, 17], [7, 16]], dist: [[38, 84], [34, 70]], clinch: [[2, 3], [3, 5]], ground: [[1, 2], [1, 2]], td: [[0, 1], [0, 0]], ctrl: [0, 12], kd: [1, 0], sub: [0, 0], scorers: [4, 0] }),
+    rd(2, 'Holloway', 'Even exchanges for three minutes before Holloway found the counter right and stacked volume down the stretch. No grappling from either side.', { sig: [[47, 96], [52, 99]], head: [[26, 64], [33, 70]], body: [[12, 18], [11, 16]], leg: [[9, 14], [8, 13]], dist: [[45, 92], [48, 93]], clinch: [[2, 4], [3, 5]], ground: [[0, 0], [1, 1]], td: [[0, 0], [0, 1]], ctrl: [0, 0], kd: [0, 0], sub: [0, 0], scorers: [1, 3] }),
+      rd(3, 'Holloway', 'Holloway took over on volume and landed a takedown with 90 seconds left, holding position into the horn. Gaethje kept the leg kicks going but his output fell off sharply.', { sig: [[39, 88], [58, 104]], head: [[18, 52], [37, 72]], body: [[11, 19], [13, 20]], leg: [[10, 17], [8, 12]], dist: [[36, 82], [49, 92]], clinch: [[2, 4], [4, 6]], ground: [[1, 2], [5, 6]], td: [[0, 1], [1, 2]], ctrl: [8, 94], kd: [0, 0], sub: [0, 1], scorers: [1, 3] })
+    ],
+    odds: [
+      { src: 'Kalshi', note: '9.4k contracts', a: ['54%', '-117', '68%', '-7'], b: ['46%', '+117', '32%', '+7'] },
+      { src: 'Sportsbooks', note: 'avg of 38 books', a: ['57%', '-133', '70%', '-5'], b: ['46%', '+118', '33%', '+5'] }
+    ],
+    oddsFooter: 'Kalshi is live in play. Sportsbook lines were last polled 4m ago and 6 books are still suspended, so treat the average as stale between rounds. Market implied, not a forecast.'
+  },
+  {
+    id: 'olt', weight: 'Lightweight', cardStatus: 'FINAL', kind: 'final', scheduled: 3,
+    a: { first: 'Charles', last: 'Oliveira', record: '34-10-0', rank: '#2', age: 34, height: "5'10\"", reach: '74\"', stance: 'Orthodox', country: 'Brazil', streak: 'L1', lastFive: ['L DEC', 'W SUB', 'L KO', 'W SUB', 'W SUB'] },
+    b: { first: 'Arman', last: 'Tsarukyan', record: '22-3-0', rank: '#4', age: 27, height: "5'7\"", reach: '72\"', stance: 'Orthodox', country: 'Armenia', streak: 'W4', lastFive: ['W DEC', 'W DEC', 'W TKO', 'W DEC', 'L DEC'] },
+    detail: 'Tsarukyan def. Oliveira by split decision, 29-28, 28-29, 29-28.',
+    rounds: [
+      rd(1, 'Tsarukyan', 'Tsarukyan scored two takedowns and held top position for most of the round. Oliveira threatened off his back late but could not stand up.', { sig: [[18, 41], [24, 48]], head: [[9, 24], [15, 30]], body: [[5, 10], [6, 12]], leg: [[4, 7], [3, 6]], dist: [[15, 36], [14, 32]], clinch: [[2, 3], [4, 7]], ground: [[1, 2], [6, 9]], td: [[0, 2], [2, 3]], ctrl: [22, 168], kd: [0, 0], sub: [1, 0], scorers: [0, 2] }),
+      rd(2, 'Oliveira', 'Oliveira found his range in the second, mixing in the body kick and a late takedown of his own. Tsarukyan slowed noticeably.', { sig: [[31, 62], [19, 44]], head: [[20, 40], [11, 25]], body: [[7, 14], [5, 11]], leg: [[4, 8], [3, 8]], dist: [[28, 56], [16, 38]], clinch: [[2, 4], [2, 4]], ground: [[1, 2], [1, 2]], td: [[1, 2], [0, 1]], ctrl: [96, 41], kd: [0, 0], sub: [0, 0], scorers: [2, 0] }),
+      rd(3, 'Tsarukyan', 'Close final round decided by control time. Tsarukyan closed distance repeatedly and finished on top.', { sig: [[26, 58], [29, 57]], head: [[15, 34], [18, 33]], body: [[6, 13], [7, 14]], leg: [[5, 11], [4, 10]], dist: [[24, 52], [22, 44]], clinch: [[1, 3], [3, 6]], ground: [[1, 3], [4, 7]], td: [[0, 1], [1, 2]], ctrl: [14, 122], kd: [0, 0], sub: [0, 0], scorers: [1, 1] })
+    ],
+    odds: [
+      { src: 'Kalshi', note: 'settled', a: ['0%', 'lost', '46%', '0'], b: ['100%', 'won', '54%', '0'] },
+      { src: 'Sportsbooks', note: 'closing line', a: ['48%', '+108', '47%', '0'], b: ['54%', '-118', '55%', '0'] }
+    ],
+    oddsFooter: 'Markets resolved 41m ago. Closing sportsbook line shown for reference.'
+  },
+  { id: 'zhy', weight: "Women's Strawweight Title", cardStatus: 'FINAL', kind: 'final', scheduled: 5, a: { first: 'Weili', last: 'Zhang', record: '24-3-0' }, b: { first: 'Xiaonan', last: 'Yan', record: '17-4-0' }, detail: 'Zhang def. Yan by unanimous decision, 50-45, 50-44, 50-44.' },
+  { id: 'prk', weight: 'Light Heavyweight', cardStatus: 'FINAL', kind: 'final', scheduled: 3, a: { first: 'Jiri', last: 'Prochazka', record: '30-4-1' }, b: { first: 'Aleksandar', last: 'Rakic', record: '14-4-0' }, detail: 'Prochazka def. Rakic by TKO, round 2 at 3:17.' },
+  { id: 'hah', weight: "Women's Lightweight", cardStatus: 'FINAL', kind: 'final', scheduled: 3, a: { first: 'Kayla', last: 'Harrison', record: '16-1-0' }, b: { first: 'Holly', last: 'Holm', record: '15-7-0' }, detail: 'Harrison def. Holm by submission, kimura, round 2 at 4:34.' }
+];
+
+const mmss = v => Math.floor(v / 60) + ':' + String(Math.round(v % 60)).padStart(2, '0');
+const la = p => p[0] + '/' + p[1];
+const pct = p => p[1] ? Math.round(p[0] / p[1] * 100) + '%' : '0%';
+
+class Component extends DCLogic {
+  state = { tab: 'live', boutId: 'gah', round: 3, clock: 137, ago: 0, syncs: 0, openStats: null, openOdds: null, openProfiles: null };
+
+  open(key) { const v = this.state[key]; return v === null ? !!this.props.startExpanded : v; }
+
+  componentDidMount() {
+    this._t = setInterval(() => this.setState(s => {
+      const ago = s.ago + 1;
+      const bumped = ago >= (this.props.syncSeconds || 5);
+      const running = s.clock > 0;
+      return { clock: Math.max(0, s.clock - 1), ago: bumped ? 0 : ago, syncs: bumped && running ? s.syncs + 1 : s.syncs };
+    }), 1000);
+  }
+  componentWillUnmount() { clearInterval(this._t); }
+
+  bout() { return BOUTS.find(b => b.id === this.state.boutId) || BOUTS[1]; }
+
+  pick(id) {
+    const b = BOUTS.find(x => x.id === id);
+    this.setState({ boutId: id, tab: 'live', round: b && b.rounds ? (b.currentRound || b.rounds.length) : 1 });
+  }
+
+  liveRound(r, live) {
+    if (!live) return r;
+    const k = this.state.syncs;
+    const add = (p, l, a) => [p[0] + l, p[1] + a];
+    return Object.assign({}, r, {
+      sig: [add(r.sig[0], k, k + 1), add(r.sig[1], k + 1, k + 2)],
+      head: [add(r.head[0], Math.round(k * .5), k), add(r.head[1], k, k + 1)],
+      dist: [add(r.dist[0], k, k + 1), add(r.dist[1], k + 1, k + 2)]
+    });
+  }
+
+  totals(rounds) {
+    const sum2 = key => [0, 1].map(i => rounds.reduce((acc, r) => [acc[0] + r[key][i][0], acc[1] + r[key][i][1]], [0, 0]));
+    const sum1 = key => [0, 1].map(i => rounds.reduce((acc, r) => acc + r[key][i], 0));
+    return { n: 'T', verdict: '', summary: '', sig: sum2('sig'), head: sum2('head'), body: sum2('body'), leg: sum2('leg'), dist: sum2('dist'), clinch: sum2('clinch'), ground: sum2('ground'), td: sum2('td'), ctrl: sum1('ctrl'), kd: sum1('kd'), sub: sum1('sub'), scorers: sum1('scorers') };
+  }
+
+  renderVals() {
+    const st = this.state, b = this.bout(), rounds = b.rounds || [];
+    const isTotal = st.round === 'T';
+    const live = b.kind === 'live';
+    const base = isTotal ? this.totals(rounds.map(r => this.liveRound(r, live && r.n === b.currentRound))) : rounds.find(x => x.n === st.round);
+    const r = base ? (isTotal ? base : this.liveRound(base, live && base.n === b.currentRound)) : null;
+
+    const cmp = (x, y) => [x >= y ? RED : DIM, y >= x ? BLUE : DIM];
+    const bars = (x, y) => { const t = x + y || 1; return [Math.round(x / t * 100) + '%', Math.round(y / t * 100) + '%']; };
+    const row = (label, aVal, bVal, aN, bN) => { const c = cmp(aN, bN); return { label, aVal, bVal, aColor: c[0], bColor: c[1] }; };
+
+    const coreStats = r ? [
+      ['Sig. strikes', la(r.sig[0]), la(r.sig[1]), r.sig[0][0], r.sig[1][0]],
+      ['Takedowns', la(r.td[0]), la(r.td[1]), r.td[0][0], r.td[1][0]],
+      ['Control', mmss(r.ctrl[0]), mmss(r.ctrl[1]), r.ctrl[0], r.ctrl[1]],
+      ['Knockdowns', String(r.kd[0]), String(r.kd[1]), r.kd[0], r.kd[1]]
+    ].map(([label, av, bv, an, bn]) => {
+      const c = cmp(an, bn), w = bars(an, bn);
+      return { label, aVal: av, bVal: bv, aColor: c[0], bColor: c[1], aW: w[0], bW: w[1] };
+    }) : [];
+
+    const mins = isTotal ? rounds.length * 5 : 5;
+    const detailGroups = r ? [
+      { title: 'Striking targets', rows: [row('Head', la(r.head[0]), la(r.head[1]), r.head[0][0], r.head[1][0]), row('Body', la(r.body[0]), la(r.body[1]), r.body[0][0], r.body[1][0]), row('Leg', la(r.leg[0]), la(r.leg[1]), r.leg[0][0], r.leg[1][0]), row('Sig. accuracy', pct(r.sig[0]), pct(r.sig[1]), r.sig[0][0] / (r.sig[0][1] || 1), r.sig[1][0] / (r.sig[1][1] || 1)), row('Sig. differential', (r.sig[0][0] - r.sig[1][0] > 0 ? '+' : '') + (r.sig[0][0] - r.sig[1][0]), (r.sig[1][0] - r.sig[0][0] > 0 ? '+' : '') + (r.sig[1][0] - r.sig[0][0]), r.sig[0][0], r.sig[1][0])] },
+      { title: 'Positions', rows: [row('Distance', la(r.dist[0]), la(r.dist[1]), r.dist[0][0], r.dist[1][0]), row('Clinch', la(r.clinch[0]), la(r.clinch[1]), r.clinch[0][0], r.clinch[1][0]), row('Ground', la(r.ground[0]), la(r.ground[1]), r.ground[0][0], r.ground[1][0])] },
+      { title: 'Grappling', rows: [row('TD accuracy', pct(r.td[0]), pct(r.td[1]), r.td[0][0], r.td[1][0]), row('Sub. attempts', String(r.sub[0]), String(r.sub[1]), r.sub[0], r.sub[1]), row('Control share', Math.round(r.ctrl[0] / ((r.ctrl[0] + r.ctrl[1]) || 1) * 100) + '%', Math.round(r.ctrl[1] / ((r.ctrl[0] + r.ctrl[1]) || 1) * 100) + '%', r.ctrl[0], r.ctrl[1])] },
+      { title: 'Pace', rows: [row('Sig. landed / min', (r.sig[0][0] / mins).toFixed(1), (r.sig[1][0] / mins).toFixed(1), r.sig[0][0], r.sig[1][0]), row('Sig. thrown / min', (r.sig[0][1] / mins).toFixed(1), (r.sig[1][1] / mins).toFixed(1), r.sig[0][1], r.sig[1][1])] }
+    ] : [];
+
+    const chip = (label, val, enabled) => ({
+      label, onClick: () => enabled && this.setState({ round: val }),
+      bg: st.round === val ? 'rgba(226,96,63,.18)' : 'transparent',
+      border: st.round === val ? 'rgba(226,96,63,.55)' : 'rgba(245,241,236,.12)',
+      color: st.round === val ? '#F5F1EC' : enabled ? 'rgba(245,241,236,.5)' : 'rgba(245,241,236,.22)'
+    });
+    const roundChips = Array.from({ length: b.scheduled || 3 }, (_, i) => i + 1)
+      .map(n => chip('R' + n, n, !!rounds.find(x => x.n === n)))
+      .concat(rounds.length ? [chip('TOT', 'T', true)] : []);
+
+    const scorers = r && r.scorers ? r.scorers : [0, 0];
+    const winner = scorers[0] === scorers[1] ? 'split' : scorers[0] > scorers[1] ? b.a.last : b.b.last;
+    const score = {
+      line: isTotal ? 'Unofficial ' + (rounds.length ? this.cardScore(rounds, b) : '') : r ? (winner === 'split' ? '10-9, scorers split' : '10-9 ' + winner) : 'No round data',
+      scorers: scorers[0] + scorers[1] ? Math.max(scorers[0], scorers[1]) + ' of ' + (scorers[0] + scorers[1]) + ' scorers' : '',
+      summary: isTotal ? 'Through ' + rounds.length + ' rounds, ' + (b.kind === 'final' ? b.detail : 'the fight is trending toward ' + b.b.last + ' on volume and position.') : r ? r.summary : 'Round data arrives once the round is scored.',
+      provenance: 'Summary generated from Sherdog round prose. Stats: ESPN FightCenter.'
+    };
+
+    const oddsRows = (b.odds || []).map(o => ({
+      src: o.src, note: o.note,
+      aNow: o.a[0], bNow: o.b[0],
+      aChg: o.a[3] + ' this round',
+      bChg: o.b[3] + ' this round',
+      aChgColor: parseFloat(o.a[3]) > 0 ? GRN : Number(o.a[3]) < 0 ? RED : 'rgba(245,241,236,.35)',
+      bChgColor: parseFloat(o.b[3]) > 0 ? GRN : parseFloat(o.b[3]) < 0 ? RED : 'rgba(245,241,236,.35)',
+      aOpen: 'now ' + o.a[1] + ' \u00b7 open ' + o.a[2], bOpen: 'now ' + o.b[1] + ' \u00b7 open ' + o.b[2]
+    }));
+
+    const p = (label, key) => ({ label, aVal: String(b.a[key] ?? 'n/a'), bVal: String(b.b[key] ?? 'n/a') });
+    const profileRows = [p('Rank', 'rank'), p('Record', 'record'), p('Age', 'age'), p('Height', 'height'), p('Reach', 'reach'), p('Stance', 'stance'), p('Country', 'country'), p('Streak', 'streak')];
+    const five = k => (b[k].lastFive || []).map(l => ({ label: l, bg: l.charAt(0) === 'W' ? 'rgba(127,199,155,.13)' : 'rgba(226,96,63,.14)', color: l.charAt(0) === 'W' ? '#8ED0A6' : '#F08A6E' }));
+
+    const cardBouts = BOUTS.map(x => {
+      const active = x.id === st.boutId, isLiveB = x.kind === 'live';
+      return {
+        weight: x.weight, status: x.cardStatus, aLast: x.a.last, bLast: x.b.last, detail: x.detail,
+        aColor: x.kind === 'final' ? 'rgba(245,241,236,.85)' : RED, bColor: x.kind === 'final' ? 'rgba(245,241,236,.85)' : BLUE,
+        bg: active ? '#221C19' : '#1A1614', border: active ? 'rgba(245,241,236,.28)' : 'rgba(245,241,236,.1)',
+        statusBg: isLiveB ? 'rgba(226,96,63,.18)' : x.kind === 'next' ? 'rgba(224,179,65,.15)' : 'rgba(245,241,236,.08)',
+        statusFg: isLiveB ? '#F08A6E' : x.kind === 'next' ? '#E0B341' : 'rgba(245,241,236,.5)',
+        onClick: () => this.pick(x.id)
+      };
+    });
+
+    const between = live && st.clock === 0;
+    return {
+      syncLabel: 'ESPN sync ' + st.ago + 's ago',
+      isLive: st.tab === 'live', isCard: st.tab === 'card',
+      bout: { a: b.a, b: b.b, weight: b.weight },
+      status: {
+        label: live ? (between ? 'BETWEEN RDS' : 'LIVE') : b.kind === 'next' ? 'UP NEXT' : 'FINAL',
+        bg: live ? 'rgba(226,96,63,.18)' : b.kind === 'next' ? 'rgba(224,179,65,.15)' : 'rgba(245,241,236,.08)',
+        fg: live ? '#F08A6E' : b.kind === 'next' ? '#E0B341' : 'rgba(245,241,236,.55)'
+      },
+      clock: {
+        time: live ? mmss(st.clock) : b.kind === 'next' ? '0:00' : 'DEC',
+        round: live ? 'ROUND ' + b.currentRound + ' OF ' + b.scheduled : b.kind === 'next' ? b.scheduled + ' ROUNDS' : 'FIGHT OVER'
+      },
+      roundChips, coreStats, score, detailGroups, oddsRows, profileRows,
+      lastFiveA: five('a'), lastFiveB: five('b'),
+      oddsPeek: b.odds ? b.odds[0].src + ' ' + b.odds[0].a[0] + ' / ' + b.odds[0].b[0] : 'no data',
+      oddsFooter: b.oddsFooter || 'No market data for this bout.',
+      openStats: this.open('openStats'), openOdds: this.open('openOdds'), openProfiles: this.open('openProfiles'),
+      caretStats: this.open('openStats') ? 'hide' : 'show', caretOdds: this.open('openOdds') ? 'hide' : 'show', caretProfiles: this.open('openProfiles') ? 'hide' : 'show',
+      toggleStats: () => this.setState({ openStats: !this.open('openStats') }),
+      toggleOdds: () => this.setState({ openOdds: !this.open('openOdds') }),
+      toggleProfiles: () => this.setState({ openProfiles: !this.open('openProfiles') }),
+      cardBouts,
+      tabs: [['live', 'Live'], ['card', 'Card']].map(([id, label]) => ({
+        label, color: st.tab === id ? '#F5F1EC' : 'rgba(245,241,236,.38)',
+        bar: st.tab === id ? RED : 'transparent', onClick: () => this.setState({ tab: id })
+      }))
+    };
+  }
+
+  cardScore(rounds, b) {
+    let a = 0, bb = 0;
+    rounds.forEach(r => { if (r.scorers[0] > r.scorers[1]) a += 10, bb += 9; else if (r.scorers[1] > r.scorers[0]) a += 9, bb += 10; else a += 10, bb += 10; });
+    return a + '-' + bb + ' ' + (a > bb ? b.a.last : a < bb ? b.b.last : 'even');
+  }
+}
+</script>
+</body>
+</html>
