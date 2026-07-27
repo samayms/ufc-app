@@ -1,0 +1,493 @@
+{
+  "_comment": "SYNTHETIC fixture shaped like Cito MMA API free-tier responses. canonical_ids is fixture-only reconciliation metadata and is not part of a Cito response.",
+  "meta": {
+    "fetched_at": "2026-07-26T02:41:00Z",
+    "plan": "free"
+  },
+  "canonical_ids": {
+    "events": {
+      "ufc-fixture-night": "evt-fixture-001"
+    },
+    "bouts": {
+      "cito-bout-9001": "bout-main",
+      "cito-bout-9002": "bout-comain",
+      "cito-bout-9003": "bout-3",
+      "cito-bout-9004": "bout-4",
+      "cito-bout-9005": "bout-5"
+    },
+    "fighters": {
+      "cito-fighter-7001": "ftr-reyes",
+      "cito-fighter-7002": "ftr-volkov",
+      "cito-fighter-7003": "ftr-castillo",
+      "cito-fighter-7004": "ftr-okafor",
+      "cito-fighter-7005": "ftr-hendricks",
+      "cito-fighter-7006": "ftr-saito",
+      "cito-fighter-7007": "ftr-mbeki",
+      "cito-fighter-7008": "ftr-carvalho",
+      "cito-fighter-7009": "ftr-novak",
+      "cito-fighter-7010": "ftr-tuivasa"
+    }
+  },
+  "event_response": {
+    "data": {
+      "id": "ufc-fixture-night",
+      "name": "UFC Fight Night: Reyes vs. Volkov",
+      "starts_at": "2026-07-25T23:00:00Z",
+      "venue": {
+        "name": "UFC Apex",
+        "city": "Las Vegas, Nevada"
+      },
+      "status": "live",
+      "bouts": [
+        {
+          "id": "cito-bout-9001",
+          "card_order": 1,
+          "card_segment": "main_card",
+          "weight_class": "Lightweight",
+          "scheduled_rounds": 5,
+          "title_fight": false,
+          "status": "between_rounds",
+          "current_round": 2,
+          "red_fighter_id": "cito-fighter-7001",
+          "blue_fighter_id": "cito-fighter-7002",
+          "result": null
+        },
+        {
+          "id": "cito-bout-9002",
+          "card_order": 2,
+          "card_segment": "main_card",
+          "weight_class": "Women's Flyweight",
+          "scheduled_rounds": 3,
+          "title_fight": false,
+          "status": "completed",
+          "current_round": 2,
+          "red_fighter_id": "cito-fighter-7003",
+          "blue_fighter_id": "cito-fighter-7004",
+          "result": {
+            "winner_corner": "blue",
+            "method": "SUB",
+            "round": 2,
+            "time": "3:17"
+          }
+        },
+        {
+          "id": "cito-bout-9003",
+          "card_order": 3,
+          "card_segment": "main_card",
+          "weight_class": "Middleweight",
+          "scheduled_rounds": 3,
+          "title_fight": false,
+          "status": "scheduled",
+          "current_round": null,
+          "red_fighter_id": "cito-fighter-7005",
+          "blue_fighter_id": "cito-fighter-7006",
+          "result": null
+        },
+        {
+          "id": "cito-bout-9004",
+          "card_order": 4,
+          "card_segment": "prelims",
+          "weight_class": "Bantamweight",
+          "scheduled_rounds": 3,
+          "title_fight": false,
+          "status": "scheduled",
+          "current_round": null,
+          "red_fighter_id": "cito-fighter-7007",
+          "blue_fighter_id": "cito-fighter-7008",
+          "result": null
+        },
+        {
+          "id": "cito-bout-9005",
+          "card_order": 5,
+          "card_segment": "prelims",
+          "weight_class": "Heavyweight",
+          "scheduled_rounds": 3,
+          "title_fight": false,
+          "status": "completed",
+          "current_round": 1,
+          "red_fighter_id": "cito-fighter-7009",
+          "blue_fighter_id": "cito-fighter-7010",
+          "result": {
+            "winner_corner": "red",
+            "method": "KO/TKO",
+            "round": 1,
+            "time": "0:48"
+          }
+        }
+      ]
+    }
+  },
+  "round_results_responses": [
+    {
+      "bout_id": "cito-bout-9001",
+      "data": [
+        {
+          "round": 1,
+          "status": "completed",
+          "score": {
+            "red": 10,
+            "blue": 9
+          },
+          "stats": {
+            "red": {
+              "significant_strikes": 24,
+              "total_strikes": 31,
+              "takedowns": 1,
+              "control_time_seconds": 72,
+              "knockdowns": 0
+            },
+            "blue": {
+              "significant_strikes": 19,
+              "total_strikes": 25,
+              "takedowns": 0,
+              "control_time_seconds": 18,
+              "knockdowns": 0
+            }
+          }
+        },
+        {
+          "round": 2,
+          "status": "completed",
+          "score": {
+            "red": 9,
+            "blue": 10
+          },
+          "stats": {
+            "red": {
+              "significant_strikes": 21,
+              "total_strikes": 28,
+              "takedowns": 0,
+              "control_time_seconds": 26,
+              "knockdowns": 0
+            },
+            "blue": {
+              "significant_strikes": 30,
+              "total_strikes": 38,
+              "takedowns": 1,
+              "control_time_seconds": 64,
+              "knockdowns": 1
+            }
+          }
+        }
+      ]
+    },
+    {
+      "bout_id": "cito-bout-9002",
+      "data": [
+        {
+          "round": 1,
+          "status": "completed",
+          "score": {
+            "red": 9,
+            "blue": 10
+          },
+          "stats": {
+            "red": {
+              "significant_strikes": 18,
+              "total_strikes": 24,
+              "takedowns": 0,
+              "control_time_seconds": 21,
+              "knockdowns": 0
+            },
+            "blue": {
+              "significant_strikes": 22,
+              "total_strikes": 35,
+              "takedowns": 2,
+              "control_time_seconds": 109,
+              "knockdowns": 0
+            }
+          }
+        },
+        {
+          "round": 2,
+          "status": "completed",
+          "score": null,
+          "stats": {
+            "red": {
+              "significant_strikes": 9,
+              "total_strikes": 14,
+              "takedowns": 0,
+              "control_time_seconds": 11,
+              "knockdowns": 0
+            },
+            "blue": {
+              "significant_strikes": 13,
+              "total_strikes": 26,
+              "takedowns": 1,
+              "control_time_seconds": 137,
+              "knockdowns": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "bout_id": "cito-bout-9005",
+      "data": [
+        {
+          "round": 1,
+          "status": "completed",
+          "score": null,
+          "stats": {
+            "red": {
+              "significant_strikes": 11,
+              "total_strikes": 13,
+              "takedowns": 0,
+              "control_time_seconds": 0,
+              "knockdowns": 1
+            },
+            "blue": {
+              "significant_strikes": 3,
+              "total_strikes": 4,
+              "takedowns": 0,
+              "control_time_seconds": 0,
+              "knockdowns": 0
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "fighter_responses": [
+    {
+      "data": {
+        "id": "cito-fighter-7001",
+        "full_name": "Danilo Reyes",
+        "nickname": "El Rayo",
+        "record": {
+          "wins": 17,
+          "losses": 3,
+          "draws": 0,
+          "no_contests": 0
+        },
+        "stance": "Southpaw",
+        "height_cm": 178,
+        "reach_cm": 183,
+        "age": 29,
+        "country": "Mexico",
+        "recent_bouts": [
+          {
+            "opponent_name": "Kai Anderson",
+            "result": "W",
+            "method": "KO/TKO",
+            "round": 2,
+            "date": "2026-03-14",
+            "event_name": "UFC 314"
+          },
+          {
+            "opponent_name": "Yusuf Demir",
+            "result": "W",
+            "method": "U-DEC",
+            "round": null,
+            "date": "2025-11-02",
+            "event_name": "UFC Fight Night"
+          },
+          {
+            "opponent_name": "Blake Corrigan",
+            "result": "L",
+            "method": "S-DEC",
+            "round": null,
+            "date": "2025-06-21",
+            "event_name": "UFC 309"
+          }
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "cito-fighter-7002",
+        "full_name": "Artem Volkov",
+        "nickname": "The Icebreaker",
+        "record": {
+          "wins": 21,
+          "losses": 5,
+          "draws": 1,
+          "no_contests": 0
+        },
+        "stance": "Orthodox",
+        "height_cm": 183,
+        "reach_cm": 188,
+        "age": 32,
+        "country": "Kazakhstan",
+        "recent_bouts": [
+          {
+            "opponent_name": "Marcus Hale",
+            "result": "W",
+            "method": "SUB",
+            "round": 3,
+            "date": "2026-02-07",
+            "event_name": "UFC Fight Night"
+          },
+          {
+            "opponent_name": "Diego Fontes",
+            "result": "W",
+            "method": "KO/TKO",
+            "round": 1,
+            "date": "2025-09-13",
+            "event_name": "UFC 311"
+          },
+          {
+            "opponent_name": "Tomas Lindgren",
+            "result": "L",
+            "method": "U-DEC",
+            "round": null,
+            "date": "2025-04-26",
+            "event_name": "UFC 307"
+          }
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "cito-fighter-7003",
+        "full_name": "Marisol Castillo",
+        "nickname": "La Serpiente",
+        "record": {
+          "wins": 12,
+          "losses": 2,
+          "draws": 0,
+          "no_contests": 0
+        },
+        "stance": "Orthodox",
+        "height_cm": 165,
+        "reach_cm": 168,
+        "age": 27,
+        "country": "Peru",
+        "recent_bouts": []
+      }
+    },
+    {
+      "data": {
+        "id": "cito-fighter-7004",
+        "full_name": "Adaeze Okafor",
+        "nickname": null,
+        "record": {
+          "wins": 14,
+          "losses": 1,
+          "draws": 0,
+          "no_contests": 1
+        },
+        "stance": "Switch",
+        "height_cm": 168,
+        "reach_cm": 170,
+        "age": 30,
+        "country": "Nigeria",
+        "recent_bouts": []
+      }
+    },
+    {
+      "data": {
+        "id": "cito-fighter-7005",
+        "full_name": "Cole Hendricks",
+        "nickname": null,
+        "record": {
+          "wins": 10,
+          "losses": 4,
+          "draws": 0,
+          "no_contests": 0
+        },
+        "stance": "Orthodox",
+        "height_cm": 185,
+        "reach_cm": 190,
+        "age": 31,
+        "country": "United States",
+        "recent_bouts": []
+      }
+    },
+    {
+      "data": {
+        "id": "cito-fighter-7006",
+        "full_name": "Kenji Saito",
+        "nickname": "Typhoon",
+        "record": {
+          "wins": 15,
+          "losses": 6,
+          "draws": 2,
+          "no_contests": 0
+        },
+        "stance": "Southpaw",
+        "height_cm": 188,
+        "reach_cm": 193,
+        "age": 34,
+        "country": "Japan",
+        "recent_bouts": []
+      }
+    },
+    {
+      "data": {
+        "id": "cito-fighter-7007",
+        "full_name": "Sipho Mbeki",
+        "nickname": null,
+        "record": {
+          "wins": 8,
+          "losses": 1,
+          "draws": 0,
+          "no_contests": 0
+        },
+        "stance": "Orthodox",
+        "height_cm": 170,
+        "reach_cm": 175,
+        "age": 25,
+        "country": "South Africa",
+        "recent_bouts": []
+      }
+    },
+    {
+      "data": {
+        "id": "cito-fighter-7008",
+        "full_name": "Rafael Carvalho",
+        "nickname": "Foguete",
+        "record": {
+          "wins": 11,
+          "losses": 3,
+          "draws": 0,
+          "no_contests": 0
+        },
+        "stance": "Orthodox",
+        "height_cm": 173,
+        "reach_cm": 178,
+        "age": 28,
+        "country": "Brazil",
+        "recent_bouts": []
+      }
+    },
+    {
+      "data": {
+        "id": "cito-fighter-7009",
+        "full_name": "Petr Novak",
+        "nickname": "The Anvil",
+        "record": {
+          "wins": 13,
+          "losses": 7,
+          "draws": 0,
+          "no_contests": 0
+        },
+        "stance": "Orthodox",
+        "height_cm": 193,
+        "reach_cm": 198,
+        "age": 35,
+        "country": "Czech Republic",
+        "recent_bouts": []
+      }
+    },
+    {
+      "data": {
+        "id": "cito-fighter-7010",
+        "full_name": "Manaia Tuivasa",
+        "nickname": null,
+        "record": {
+          "wins": 9,
+          "losses": 5,
+          "draws": 1,
+          "no_contests": 0
+        },
+        "stance": "Orthodox",
+        "height_cm": 190,
+        "reach_cm": 192,
+        "age": 33,
+        "country": "New Zealand",
+        "recent_bouts": []
+      }
+    }
+  ]
+}
