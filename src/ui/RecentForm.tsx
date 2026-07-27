@@ -1,5 +1,5 @@
 import type { Bout, Corner, Fighter, PastBout } from "../schema/types.ts";
-import { fmtMethod } from "./format.ts";
+import { fmtMethod, fmtTime } from "./format.ts";
 
 const RESULT_LETTER: Record<PastBout["result"], string> = {
   win: "W",
@@ -45,7 +45,10 @@ export function RecentForm({ bout }: { bout: Bout }) {
     <section className="panel" aria-label="Recent form">
       <div className="panel-head">
         <h2>Recent form</h2>
-        <span className="freshness">cached fighter history</span>
+        <span className="freshness">
+          cached fighter history · fetched{" "}
+          <span className="num">{fmtTime(bout.fighters.red.provenance.fetchedAt)}</span>
+        </span>
       </div>
       <div className="form-grid">
         <FormColumn fighter={bout.fighters.red} corner="red" />

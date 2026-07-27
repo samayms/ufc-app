@@ -59,12 +59,24 @@ export function RoundGrid({ view }: { view: BoutView }) {
     .filter((u) => u.summary)
     .sort((a, b) => b.round - a.round)[0];
 
+  const newestFetch = Object.values(rounds)
+    .flat()
+    .map((u) => u.provenance.fetchedAt)
+    .sort()
+    .at(-1);
+
   return (
     <section className="panel" aria-label="Round scores">
       <div className="panel-head">
         <h2>Rounds</h2>
         <span className="freshness">
           per-source scoring · updated between rounds
+          {newestFetch && (
+            <>
+              {" · as of "}
+              <span className="num">{fmtTime(newestFetch)}</span>
+            </>
+          )}
         </span>
       </div>
       <table className="rg-table">

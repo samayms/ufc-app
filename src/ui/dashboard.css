@@ -43,7 +43,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--market);
+  color: var(--live);
 }
 
 .topbar-title h1 {
@@ -260,15 +260,21 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: var(--sp-3);
+  border-radius: var(--radius);
 }
 
+/* The corner halves stay visible with all content removed — the world's
+   red/blue duotone lives in the structure, not just the text. */
 .tot-red {
   align-items: flex-end;
   text-align: right;
+  background: linear-gradient(to left, transparent, var(--red-corner-dim));
 }
 
 .tot-blue {
   align-items: flex-start;
+  background: linear-gradient(to right, transparent, var(--blue-corner-dim));
 }
 
 .tot-name {
@@ -698,7 +704,71 @@
     border-bottom: 1px solid var(--border);
   }
 
+  .topbar {
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-4);
+  }
+
+  .topbar-title {
+    flex-basis: 100%;
+  }
+
+  .topbar-status {
+    margin-left: 0;
+  }
+
   .tot-name {
     font-size: var(--fs-lg);
+  }
+
+  /* Stack the tale of the tape: red half, status, blue half. */
+  .tot-grid {
+    grid-template-columns: 1fr;
+    gap: var(--sp-3);
+  }
+
+  .tot-red,
+  .tot-blue {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .tot-red {
+    background: linear-gradient(to right, var(--red-corner-dim), transparent);
+  }
+
+  .tot-center {
+    align-items: flex-start;
+    padding: 0 var(--sp-3);
+  }
+
+  /* Fight stats: label on its own row, full-width mirrored bars below. */
+  .stat-row {
+    grid-template-columns: 48px 1fr 1fr 48px;
+    grid-template-areas:
+      "label label label label"
+      "rval rbar bbar bval";
+    row-gap: 2px;
+  }
+
+  .stat-label {
+    grid-area: label;
+    text-align: left;
+  }
+
+  .stat-row .stat-val:first-child {
+    grid-area: rval;
+  }
+
+  .stat-bar-red {
+    grid-area: rbar;
+  }
+
+  .stat-bar-blue {
+    grid-area: bbar;
+  }
+
+  .stat-val-blue {
+    grid-area: bval;
   }
 }
