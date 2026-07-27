@@ -141,8 +141,9 @@ export function OddsPanel({ view }: { view: BoutView }) {
       </div>
       <MarketBlock
         title="Kalshi"
+        note="Mid of bid/ask, in contract cents."
         snapshot={latestOdds.kalshi ?? null}
-        emptyText="Kalshi client lands in Phase 4 — panel wired, awaiting source."
+        emptyText={finalText}
       />
       <MarketBlock
         title="Polymarket"

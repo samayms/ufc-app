@@ -14,6 +14,7 @@ import type {
 import type { SourceConfig } from "../sources/contract.ts";
 import { createCitoSource } from "../sources/cito.ts";
 import { createEspnSource } from "../sources/espn.ts";
+import { createKalshiSource } from "../sources/kalshi.ts";
 import { createOddsApiSource } from "../sources/oddsapi.ts";
 import { createPolymarketSource } from "../sources/polymarket.ts";
 import { createSherdogSource } from "../sources/sherdog.ts";
@@ -35,15 +36,17 @@ async function assemble(): Promise<DashboardState> {
   const polymarket = createPolymarketSource(config);
   const oddsApi = createOddsApiSource(config);
   const sherdog = createSherdogSource(config);
+  const kalshi = createKalshiSource(config);
   const espn = createEspnSource(config);
   const cito = createCitoSource(config);
 
   const boutViews: Record<string, BoutView> = {};
   await Promise.all(
     event.bouts.map(async (bout) => {
-      const [pm, book, sherdogRounds, espnRounds, citoRounds] = await Promise.all([
+      const [pm, book, kalshiSnap, sherdogRounds, espnRounds, citoRounds] = await Promise.all([
         polymarket.getOddsSnapshot(bout),
         oddsApi.getOddsSnapshot(bout),
+        kalshi.getOddsSnapshot(bout),
         sherdog.getRoundUpdates(bout),
         espn.getRoundUpdates(bout),
         cito.getRoundUpdates(bout),
@@ -56,6 +59,7 @@ async function assemble(): Promise<DashboardState> {
         latestOdds[market] = snap;
         oddsHistory[market] = [snap];
       };
+      record("kalshi", kalshiSnap);
       record("polymarket", pm);
       record("sportsbook", book);
 

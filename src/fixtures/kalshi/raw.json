@@ -1,0 +1,97 @@
+{
+  "_comment": "SYNTHETIC fixture shaped like Kalshi trade-api v2 GET /markets responses for UFC fight-winner markets. One YES/NO market per fighter; prices in cents. boutTickers is fixture-only reconciliation metadata mapping canonical bout ids to the per-corner market tickers, not part of a Kalshi response.",
+  "fetchedAt": "2026-07-26T02:41:30Z",
+  "boutTickers": {
+    "bout-main": { "red": "KXUFCFIGHT-26JUL25REYVOL-REY", "blue": "KXUFCFIGHT-26JUL25REYVOL-VOL" },
+    "bout-3": { "red": "KXUFCFIGHT-26JUL25HENSAI-HEN", "blue": "KXUFCFIGHT-26JUL25HENSAI-SAI" },
+    "bout-4": { "red": "KXUFCFIGHT-26JUL25MBECAR-MBE", "blue": "KXUFCFIGHT-26JUL25MBECAR-CAR" }
+  },
+  "markets_response": {
+    "markets": [
+      {
+        "ticker": "KXUFCFIGHT-26JUL25REYVOL-REY",
+        "event_ticker": "KXUFCFIGHT-26JUL25REYVOL",
+        "title": "Will Danilo Reyes win?",
+        "status": "active",
+        "yes_bid": 59,
+        "yes_ask": 62,
+        "no_bid": 38,
+        "no_ask": 41,
+        "last_price": 60,
+        "volume": 48210,
+        "open_interest": 15320,
+        "close_time": "2026-07-26T05:00:00Z"
+      },
+      {
+        "ticker": "KXUFCFIGHT-26JUL25REYVOL-VOL",
+        "event_ticker": "KXUFCFIGHT-26JUL25REYVOL",
+        "title": "Will Artem Volkov win?",
+        "status": "active",
+        "yes_bid": 38,
+        "yes_ask": 41,
+        "no_bid": 59,
+        "no_ask": 62,
+        "last_price": 40,
+        "volume": 45180,
+        "open_interest": 14890,
+        "close_time": "2026-07-26T05:00:00Z"
+      },
+      {
+        "ticker": "KXUFCFIGHT-26JUL25HENSAI-HEN",
+        "event_ticker": "KXUFCFIGHT-26JUL25HENSAI",
+        "title": "Will Cole Hendricks win?",
+        "status": "active",
+        "yes_bid": 44,
+        "yes_ask": 47,
+        "no_bid": 53,
+        "no_ask": 56,
+        "last_price": 45,
+        "volume": 12040,
+        "open_interest": 5210,
+        "close_time": "2026-07-26T04:00:00Z"
+      },
+      {
+        "ticker": "KXUFCFIGHT-26JUL25HENSAI-SAI",
+        "event_ticker": "KXUFCFIGHT-26JUL25HENSAI",
+        "title": "Will Kenji Saito win?",
+        "status": "active",
+        "yes_bid": 53,
+        "yes_ask": 56,
+        "no_bid": 44,
+        "no_ask": 47,
+        "last_price": 55,
+        "volume": 11780,
+        "open_interest": 4980,
+        "close_time": "2026-07-26T04:00:00Z"
+      },
+      {
+        "ticker": "KXUFCFIGHT-26JUL25MBECAR-MBE",
+        "event_ticker": "KXUFCFIGHT-26JUL25MBECAR",
+        "title": "Will Sipho Mbeki win?",
+        "status": "active",
+        "yes_bid": 66,
+        "yes_ask": 69,
+        "no_bid": 31,
+        "no_ask": 34,
+        "last_price": 68,
+        "volume": 6320,
+        "open_interest": 2110,
+        "close_time": "2026-07-26T03:00:00Z"
+      },
+      {
+        "ticker": "KXUFCFIGHT-26JUL25MBECAR-CAR",
+        "event_ticker": "KXUFCFIGHT-26JUL25MBECAR",
+        "title": "Will Rafael Carvalho win?",
+        "status": "active",
+        "yes_bid": 31,
+        "yes_ask": 34,
+        "no_bid": 66,
+        "no_ask": 69,
+        "last_price": 32,
+        "volume": 5890,
+        "open_interest": 1970,
+        "close_time": "2026-07-26T03:00:00Z"
+      }
+    ]
+  }
+}
