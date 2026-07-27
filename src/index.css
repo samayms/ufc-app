@@ -35,9 +35,9 @@
   --danger: #e2603f;
 
   /* Type */
-  --font-ui: "Barlow", system-ui, sans-serif;
-  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --font-data: "IBM Plex Mono", ui-monospace, monospace;
+  --font-ui: "Schibsted Grotesk", system-ui, sans-serif;
+  --font-display: "Asap Condensed", "Arial Narrow", sans-serif;
+  --font-data: "Schibsted Grotesk", system-ui, sans-serif;
 
   --fs-xs: 0.6875rem; /* 11px labels */
   --fs-sm: 0.8125rem; /* 13px dense body */
@@ -79,7 +79,7 @@ body {
   overscroll-behavior-y: none;
 }
 
-/* Data numerals: always tabular, always the data face */
+/* Data stays aligned without adopting a code-like monospace voice. */
 .num {
   font-family: var(--font-data);
   font-variant-numeric: tabular-nums;
