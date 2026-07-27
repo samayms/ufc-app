@@ -1,0 +1,197 @@
+[
+  {
+    "id": "odds-event-reyes-volkov",
+    "sport_key": "mma_mixed_martial_arts",
+    "sport_title": "MMA",
+    "commence_time": "2026-07-26T02:50:00Z",
+    "home_team": "Danilo Reyes",
+    "away_team": "Artem Volkov",
+    "bookmakers": [
+      {
+        "key": "draftkings",
+        "title": "DraftKings",
+        "last_update": "2026-07-26T02:40:12Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T02:40:12Z",
+            "outcomes": [
+              { "name": "Danilo Reyes", "price": -185 },
+              { "name": "Artem Volkov", "price": 150 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "fanduel",
+        "title": "FanDuel",
+        "last_update": "2026-07-26T02:40:28Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T02:40:28Z",
+            "outcomes": [
+              { "name": "Danilo Reyes", "price": -178 },
+              { "name": "Artem Volkov", "price": 146 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "betmgm",
+        "title": "BetMGM",
+        "last_update": "2026-07-26T02:39:51Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T02:39:51Z",
+            "outcomes": [
+              { "name": "Danilo Reyes", "price": -190 },
+              { "name": "Artem Volkov", "price": 155 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "williamhill_us",
+        "title": "Caesars",
+        "last_update": "2026-07-26T02:40:03Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T02:40:03Z",
+            "outcomes": [
+              { "name": "Danilo Reyes", "price": -180 },
+              { "name": "Artem Volkov", "price": 148 }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "odds-event-hendricks-saito",
+    "sport_key": "mma_mixed_martial_arts",
+    "sport_title": "MMA",
+    "commence_time": "2026-07-26T01:35:00Z",
+    "home_team": "Cole Hendricks",
+    "away_team": "Kenji Saito",
+    "bookmakers": [
+      {
+        "key": "draftkings",
+        "title": "DraftKings",
+        "last_update": "2026-07-26T01:22:41Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T01:22:41Z",
+            "outcomes": [
+              { "name": "Cole Hendricks", "price": 120 },
+              { "name": "Kenji Saito", "price": -145 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "fanduel",
+        "title": "FanDuel",
+        "last_update": "2026-07-26T01:23:08Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T01:23:08Z",
+            "outcomes": [
+              { "name": "Cole Hendricks", "price": 124 },
+              { "name": "Kenji Saito", "price": -148 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "betmgm",
+        "title": "BetMGM",
+        "last_update": "2026-07-26T01:22:19Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T01:22:19Z",
+            "outcomes": [
+              { "name": "Cole Hendricks", "price": 115 },
+              { "name": "Kenji Saito", "price": -140 }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "odds-event-mbeki-carvalho",
+    "sport_key": "mma_mixed_martial_arts",
+    "sport_title": "MMA",
+    "commence_time": "2026-07-26T00:50:00Z",
+    "home_team": "Sipho Mbeki",
+    "away_team": "Rafael Carvalho",
+    "bookmakers": [
+      {
+        "key": "draftkings",
+        "title": "DraftKings",
+        "last_update": "2026-07-26T00:37:35Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T00:37:35Z",
+            "outcomes": [
+              { "name": "Sipho Mbeki", "price": -130 },
+              { "name": "Rafael Carvalho", "price": 108 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "fanduel",
+        "title": "FanDuel",
+        "last_update": "2026-07-26T00:38:02Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T00:38:02Z",
+            "outcomes": [
+              { "name": "Sipho Mbeki", "price": -126 },
+              { "name": "Rafael Carvalho", "price": 106 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "betmgm",
+        "title": "BetMGM",
+        "last_update": "2026-07-26T00:37:17Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T00:37:17Z",
+            "outcomes": [
+              { "name": "Sipho Mbeki", "price": -135 },
+              { "name": "Rafael Carvalho", "price": 110 }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "williamhill_us",
+        "title": "Caesars",
+        "last_update": "2026-07-26T00:37:49Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-26T00:37:49Z",
+            "outcomes": [
+              { "name": "Sipho Mbeki", "price": -128 },
+              { "name": "Rafael Carvalho", "price": 107 }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -6,3 +6,5 @@ dist/
 .claude/skills/
 .DS_Store
 .npm-cache/
+tsconfig.tsbuildinfo
+__pycache__/
