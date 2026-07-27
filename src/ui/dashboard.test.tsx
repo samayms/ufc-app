@@ -111,7 +111,8 @@ describe("dashboard state surfaces", () => {
       <ScorecardFeed view={view} accounts={state.scorecardAccounts} />,
     );
     expect(scorecards.match(/class="media-scorecard"/g)).toHaveLength(4);
-    expect(scorecards).toContain("4 voices");
-    expect(scorecards).toContain("Awaiting");
+    expect(scorecards).toContain("Demo cards");
+    expect(scorecards).toContain("10–9");
+    expect(scorecards).toContain("Cleaner counters");
   });
 });

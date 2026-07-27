@@ -901,43 +901,60 @@
 .media-scorecard-grid {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
+  gap: 4px;
   margin: 0;
   padding: 0;
 }
 
 .media-scorecard {
   min-width: 0;
-  min-height: 48px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
-  padding: 6px 7px;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: minmax(92px, 0.9fr) minmax(92px, auto) minmax(0, 1.35fr);
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-3);
 }
 
-.media-scorecard strong {
+.media-scorecard-name {
   overflow: hidden;
   font-family: var(--font-display);
-  font-size: 0.69rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  line-height: 1.05;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.media-scorecard > span {
+.media-scorecard-score,
+.media-scorecard-note {
   overflow: hidden;
-  color: var(--text-faint);
-  font-size: 0.47rem;
-  line-height: 1.2;
+  font-size: 0.55rem;
+  line-height: 1;
   text-overflow: ellipsis;
-  text-transform: uppercase;
   white-space: nowrap;
+}
+
+.media-scorecard-score {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.media-scorecard-score b {
+  margin-right: 3px;
+}
+
+.media-scorecard-note {
+  color: var(--text-faint);
+  text-align: right;
+}
+
+.media-scorecard-note b {
+  color: var(--text-muted);
+  font-weight: 500;
 }
 
 .chip {
@@ -1722,8 +1739,19 @@
   }
 
   .media-scorecard {
-    min-height: 46px;
-    padding: 5px 6px;
+    min-height: 30px;
+    grid-template-columns: minmax(78px, 0.85fr) minmax(76px, auto) minmax(0, 1.3fr);
+    gap: 5px;
+    padding: 3px 6px;
+  }
+
+  .media-scorecard-name {
+    font-size: 0.65rem;
+  }
+
+  .media-scorecard-score,
+  .media-scorecard-note {
+    font-size: 0.48rem;
   }
 
   .bottom-nav {
