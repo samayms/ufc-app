@@ -26,7 +26,11 @@ function scoreCell(update: RoundUpdate | undefined, round: number) {
 
 export function RoundGrid({ view }: { view: BoutView }) {
   const { bout, rounds } = view;
-  const sources = (Object.keys(rounds) as SourceId[]).filter((s) => rounds[s]?.length);
+  // Table rows only for sources that actually score rounds; summary-only
+  // sources (e.g. ESPN recaps) still feed the prose block below.
+  const sources = (Object.keys(rounds) as SourceId[]).filter((s) =>
+    rounds[s]?.some((u) => u.score),
+  );
   const roundNumbers = Array.from({ length: bout.scheduledRounds }, (_, i) => i + 1);
 
   if (sources.length === 0) {
@@ -44,7 +48,11 @@ export function RoundGrid({ view }: { view: BoutView }) {
     );
   }
 
-  const latest = rounds[sources[0]!]?.at(-1);
+  // Prose: the latest-round summary, preferring Sherdog's live blog.
+  const latest = (["sherdog", ...sources] as SourceId[])
+    .flatMap((s) => rounds[s] ?? [])
+    .filter((u) => u.summary)
+    .sort((a, b) => b.round - a.round)[0];
 
   return (
     <section className="panel" aria-label="Round scores">

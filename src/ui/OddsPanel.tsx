@@ -86,6 +86,14 @@ function MarketBar({ snapshot }: { snapshot: OddsSnapshot }) {
   );
 }
 
+const BOOK_LABEL: Record<string, string> = {
+  draftkings: "DraftKings",
+  fanduel: "FanDuel",
+  betmgm: "BetMGM",
+  caesars: "Caesars",
+  williamhill_us: "William Hill",
+};
+
 function BookRows({ snapshot }: { snapshot: OddsSnapshot }) {
   const books = new Map<string, { red?: number; blue?: number }>();
   for (const q of snapshot.quotes) {
@@ -111,7 +119,7 @@ function BookRows({ snapshot }: { snapshot: OddsSnapshot }) {
       <tbody>
         {[...books.entries()].map(([book, lines]) => (
           <tr key={book}>
-            <th scope="row">{book}</th>
+            <th scope="row">{BOOK_LABEL[book] ?? book}</th>
             <td className="num">{lines.red != null ? fmtMoneyline(lines.red) : "—"}</td>
             <td className="num">{lines.blue != null ? fmtMoneyline(lines.blue) : "—"}</td>
           </tr>

@@ -3,19 +3,38 @@
   "event": {
     "id": "evt-fixture-001",
     "externalRefs": [
-      { "source": "espn", "id": "600051234" },
-      { "source": "cito", "id": "ufc-fixture-night" }
+      {
+        "source": "espn",
+        "id": "600051234"
+      },
+      {
+        "source": "cito",
+        "id": "ufc-fixture-night"
+      }
     ],
     "name": "UFC Fight Night: Reyes vs. Volkov",
     "startsAt": "2026-07-25T23:00:00Z",
     "venue": "UFC Apex",
     "city": "Las Vegas, Nevada",
-    "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+    "provenance": {
+      "source": "fixture",
+      "fetchedAt": "2026-07-26T02:41:00Z",
+      "synthetic": true
+    }
   },
   "bouts": [
     {
       "id": "bout-main",
-      "externalRefs": [{ "source": "espn", "id": "401770001" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "401770001"
+        },
+        {
+          "source": "cito",
+          "id": "cito-bout-9001"
+        }
+      ],
       "eventId": "evt-fixture-001",
       "cardPosition": 1,
       "segment": "main-card",
@@ -24,11 +43,23 @@
       "titleFight": false,
       "status": "between-rounds",
       "currentRound": 2,
-      "fighterIds": { "red": "ftr-reyes", "blue": "ftr-volkov" }
+      "fighterIds": {
+        "red": "ftr-reyes",
+        "blue": "ftr-volkov"
+      }
     },
     {
       "id": "bout-comain",
-      "externalRefs": [{ "source": "espn", "id": "401770002" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "401770002"
+        },
+        {
+          "source": "cito",
+          "id": "cito-bout-9002"
+        }
+      ],
       "eventId": "evt-fixture-001",
       "cardPosition": 2,
       "segment": "main-card",
@@ -36,12 +67,29 @@
       "scheduledRounds": 3,
       "titleFight": false,
       "status": "final",
-      "result": { "winner": "blue", "method": "submission", "round": 2, "time": "3:17" },
-      "fighterIds": { "red": "ftr-castillo", "blue": "ftr-okafor" }
+      "result": {
+        "winner": "blue",
+        "method": "submission",
+        "round": 2,
+        "time": "3:17"
+      },
+      "fighterIds": {
+        "red": "ftr-castillo",
+        "blue": "ftr-okafor"
+      }
     },
     {
       "id": "bout-3",
-      "externalRefs": [{ "source": "espn", "id": "401770003" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "401770003"
+        },
+        {
+          "source": "cito",
+          "id": "cito-bout-9003"
+        }
+      ],
       "eventId": "evt-fixture-001",
       "cardPosition": 3,
       "segment": "main-card",
@@ -49,11 +97,23 @@
       "scheduledRounds": 3,
       "titleFight": false,
       "status": "upcoming",
-      "fighterIds": { "red": "ftr-hendricks", "blue": "ftr-saito" }
+      "fighterIds": {
+        "red": "ftr-hendricks",
+        "blue": "ftr-saito"
+      }
     },
     {
       "id": "bout-4",
-      "externalRefs": [{ "source": "espn", "id": "401770004" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "401770004"
+        },
+        {
+          "source": "cito",
+          "id": "cito-bout-9004"
+        }
+      ],
       "eventId": "evt-fixture-001",
       "cardPosition": 4,
       "segment": "prelims",
@@ -61,11 +121,23 @@
       "scheduledRounds": 3,
       "titleFight": false,
       "status": "upcoming",
-      "fighterIds": { "red": "ftr-mbeki", "blue": "ftr-carvalho" }
+      "fighterIds": {
+        "red": "ftr-mbeki",
+        "blue": "ftr-carvalho"
+      }
     },
     {
       "id": "bout-5",
-      "externalRefs": [{ "source": "espn", "id": "401770005" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "401770005"
+        },
+        {
+          "source": "cito",
+          "id": "cito-bout-9005"
+        }
+      ],
       "eventId": "evt-fixture-001",
       "cardPosition": 5,
       "segment": "prelims",
@@ -73,152 +145,341 @@
       "scheduledRounds": 3,
       "titleFight": false,
       "status": "final",
-      "result": { "winner": "red", "method": "ko-tko", "round": 1, "time": "0:48" },
-      "fighterIds": { "red": "ftr-novak", "blue": "ftr-tuivasa" }
+      "result": {
+        "winner": "red",
+        "method": "ko-tko",
+        "round": 1,
+        "time": "0:48"
+      },
+      "fighterIds": {
+        "red": "ftr-novak",
+        "blue": "ftr-tuivasa"
+      }
     }
   ],
   "fighters": [
     {
       "id": "ftr-reyes",
       "externalRefs": [
-        { "source": "espn", "id": "5088801" },
-        { "source": "sherdog", "id": "Danilo-Reyes-198765" }
+        {
+          "source": "espn",
+          "id": "5088801"
+        },
+        {
+          "source": "sherdog",
+          "id": "Danilo-Reyes-198765"
+        }
       ],
       "name": "Danilo Reyes",
       "nickname": "El Rayo",
-      "record": { "wins": 17, "losses": 3, "draws": 0, "noContests": 0 },
+      "record": {
+        "wins": 17,
+        "losses": 3,
+        "draws": 0,
+        "noContests": 0
+      },
       "stance": "southpaw",
       "heightCm": 178,
       "reachCm": 183,
       "age": 29,
       "country": "Mexico",
       "recentBouts": [
-        { "opponentName": "Kai Anderson", "result": "win", "method": "ko-tko", "round": 2, "date": "2026-03-14", "eventName": "UFC 314" },
-        { "opponentName": "Yusuf Demir", "result": "win", "method": "decision-unanimous", "date": "2025-11-02", "eventName": "UFC Fight Night" },
-        { "opponentName": "Blake Corrigan", "result": "loss", "method": "decision-split", "date": "2025-06-21", "eventName": "UFC 309" }
+        {
+          "opponentName": "Kai Anderson",
+          "result": "win",
+          "method": "ko-tko",
+          "round": 2,
+          "date": "2026-03-14",
+          "eventName": "UFC 314"
+        },
+        {
+          "opponentName": "Yusuf Demir",
+          "result": "win",
+          "method": "decision-unanimous",
+          "date": "2025-11-02",
+          "eventName": "UFC Fight Night"
+        },
+        {
+          "opponentName": "Blake Corrigan",
+          "result": "loss",
+          "method": "decision-split",
+          "date": "2025-06-21",
+          "eventName": "UFC 309"
+        }
       ],
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     },
     {
       "id": "ftr-volkov",
       "externalRefs": [
-        { "source": "espn", "id": "5088802" },
-        { "source": "sherdog", "id": "Artem-Volkov-201122" }
+        {
+          "source": "espn",
+          "id": "5088802"
+        },
+        {
+          "source": "sherdog",
+          "id": "Artem-Volkov-201122"
+        }
       ],
       "name": "Artem Volkov",
       "nickname": "The Icebreaker",
-      "record": { "wins": 21, "losses": 5, "draws": 1, "noContests": 0 },
+      "record": {
+        "wins": 21,
+        "losses": 5,
+        "draws": 1,
+        "noContests": 0
+      },
       "stance": "orthodox",
       "heightCm": 183,
       "reachCm": 188,
       "age": 32,
       "country": "Kazakhstan",
       "recentBouts": [
-        { "opponentName": "Marcus Hale", "result": "win", "method": "submission", "round": 3, "date": "2026-02-07", "eventName": "UFC Fight Night" },
-        { "opponentName": "Diego Fontes", "result": "win", "method": "ko-tko", "round": 1, "date": "2025-09-13", "eventName": "UFC 311" },
-        { "opponentName": "Tomas Lindgren", "result": "loss", "method": "decision-unanimous", "date": "2025-04-26", "eventName": "UFC 307" }
+        {
+          "opponentName": "Marcus Hale",
+          "result": "win",
+          "method": "submission",
+          "round": 3,
+          "date": "2026-02-07",
+          "eventName": "UFC Fight Night"
+        },
+        {
+          "opponentName": "Diego Fontes",
+          "result": "win",
+          "method": "ko-tko",
+          "round": 1,
+          "date": "2025-09-13",
+          "eventName": "UFC 311"
+        },
+        {
+          "opponentName": "Tomas Lindgren",
+          "result": "loss",
+          "method": "decision-unanimous",
+          "date": "2025-04-26",
+          "eventName": "UFC 307"
+        }
       ],
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     },
     {
       "id": "ftr-castillo",
-      "externalRefs": [{ "source": "espn", "id": "5088803" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "5088803"
+        }
+      ],
       "name": "Marisol Castillo",
       "nickname": "La Serpiente",
-      "record": { "wins": 12, "losses": 2, "draws": 0, "noContests": 0 },
+      "record": {
+        "wins": 12,
+        "losses": 2,
+        "draws": 0,
+        "noContests": 0
+      },
       "stance": "orthodox",
       "heightCm": 165,
       "reachCm": 168,
       "age": 27,
       "country": "Peru",
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     },
     {
       "id": "ftr-okafor",
-      "externalRefs": [{ "source": "espn", "id": "5088804" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "5088804"
+        }
+      ],
       "name": "Adaeze Okafor",
-      "record": { "wins": 14, "losses": 1, "draws": 0, "noContests": 1 },
+      "record": {
+        "wins": 14,
+        "losses": 1,
+        "draws": 0,
+        "noContests": 1
+      },
       "stance": "switch",
       "heightCm": 168,
       "reachCm": 170,
       "age": 30,
       "country": "Nigeria",
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     },
     {
       "id": "ftr-hendricks",
-      "externalRefs": [{ "source": "espn", "id": "5088805" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "5088805"
+        }
+      ],
       "name": "Cole Hendricks",
-      "record": { "wins": 10, "losses": 4, "draws": 0, "noContests": 0 },
+      "record": {
+        "wins": 10,
+        "losses": 4,
+        "draws": 0,
+        "noContests": 0
+      },
       "stance": "orthodox",
       "heightCm": 185,
       "reachCm": 190,
       "age": 31,
       "country": "United States",
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     },
     {
       "id": "ftr-saito",
-      "externalRefs": [{ "source": "espn", "id": "5088806" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "5088806"
+        }
+      ],
       "name": "Kenji Saito",
       "nickname": "Typhoon",
-      "record": { "wins": 15, "losses": 6, "draws": 2, "noContests": 0 },
+      "record": {
+        "wins": 15,
+        "losses": 6,
+        "draws": 2,
+        "noContests": 0
+      },
       "stance": "southpaw",
       "heightCm": 188,
       "reachCm": 193,
       "age": 34,
       "country": "Japan",
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     },
     {
       "id": "ftr-mbeki",
-      "externalRefs": [{ "source": "espn", "id": "5088807" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "5088807"
+        }
+      ],
       "name": "Sipho Mbeki",
-      "record": { "wins": 8, "losses": 1, "draws": 0, "noContests": 0 },
+      "record": {
+        "wins": 8,
+        "losses": 1,
+        "draws": 0,
+        "noContests": 0
+      },
       "stance": "orthodox",
       "heightCm": 170,
       "reachCm": 175,
       "age": 25,
       "country": "South Africa",
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     },
     {
       "id": "ftr-carvalho",
-      "externalRefs": [{ "source": "espn", "id": "5088808" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "5088808"
+        }
+      ],
       "name": "Rafael Carvalho",
       "nickname": "Foguete",
-      "record": { "wins": 11, "losses": 3, "draws": 0, "noContests": 0 },
+      "record": {
+        "wins": 11,
+        "losses": 3,
+        "draws": 0,
+        "noContests": 0
+      },
       "stance": "orthodox",
       "heightCm": 173,
       "reachCm": 178,
       "age": 28,
       "country": "Brazil",
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     },
     {
       "id": "ftr-novak",
-      "externalRefs": [{ "source": "espn", "id": "5088809" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "5088809"
+        }
+      ],
       "name": "Petr Novak",
       "nickname": "The Anvil",
-      "record": { "wins": 13, "losses": 7, "draws": 0, "noContests": 0 },
+      "record": {
+        "wins": 13,
+        "losses": 7,
+        "draws": 0,
+        "noContests": 0
+      },
       "stance": "orthodox",
       "heightCm": 193,
       "reachCm": 198,
       "age": 35,
       "country": "Czech Republic",
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     },
     {
       "id": "ftr-tuivasa",
-      "externalRefs": [{ "source": "espn", "id": "5088810" }],
+      "externalRefs": [
+        {
+          "source": "espn",
+          "id": "5088810"
+        }
+      ],
       "name": "Manaia Tuivasa",
-      "record": { "wins": 9, "losses": 5, "draws": 1, "noContests": 0 },
+      "record": {
+        "wins": 9,
+        "losses": 5,
+        "draws": 1,
+        "noContests": 0
+      },
       "stance": "orthodox",
       "heightCm": 190,
       "reachCm": 192,
       "age": 33,
       "country": "New Zealand",
-      "provenance": { "source": "fixture", "fetchedAt": "2026-07-26T02:41:00Z", "synthetic": true }
+      "provenance": {
+        "source": "fixture",
+        "fetchedAt": "2026-07-26T02:41:00Z",
+        "synthetic": true
+      }
     }
   ]
 }
