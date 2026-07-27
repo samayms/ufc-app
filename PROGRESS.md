@@ -25,7 +25,8 @@ Last updated: 2026-07-27 ~03:15 (Phase 0)
 - [ ] Design unified data model all four sources normalize into
 
 ### Phase 2 — UI shell against mock data
-- [ ] `/impeccable init`
+- [x] `/impeccable init` — PRODUCT.md written (inferred from BUILD_PLAN.md;
+      no interview possible in unattended run, assumptions labeled inline)
 - [ ] Vite scaffold with hot reload
 - [ ] ui-ux-pro-max design system pass (per component, before code)
 - [ ] Dashboard shell: fight card view, odds comparison, round timeline,
