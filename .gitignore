@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.env.*
+.claude/settings.local.json
+.claude/skills/
+.DS_Store
