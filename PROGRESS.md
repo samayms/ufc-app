@@ -1,6 +1,9 @@
 # PROGRESS — UFC Live Dashboard overnight build
 
-Last updated: 2026-07-27 ~03:15 (Phase 0)
+Last updated: 2026-07-27 ~03:55 — **all five phases complete.** Run
+`npm run dev` and open http://localhost:5173 for the dashboard on
+synthetic fixture data. 32 tests green (`npm test`), zero console errors
+in Playwright checks (`scripts/screenshot.py`, `scripts/walkthrough.py`).
 
 ## Task list
 
@@ -56,13 +59,42 @@ Last updated: 2026-07-27 ~03:15 (Phase 0)
   wiring pending an externalRef fix — see notes).
 
 ### Phase 4 — Kalshi client + auth scaffold (Fable)
-- [ ] Kalshi client (public reads, mock-backed; RSA-PSS auth scaffold for
-      tomorrow's credentials)
+- [x] Kalshi client (fixture markets in cents, mid of bid/ask) +
+      RSA-PSS request signer on WebCrypto (src/sources/kalshiAuth.ts),
+      tested with a generated PKCS#8 key sign→verify round trip
 
 ### Phase 5 — Integration
-- [ ] Odds-normalization module (Sonnet subagent)
-- [ ] Wire clients into UI, Playwright check after each integration point
-- [ ] code-simplifier milestone pass
+- [x] Odds-normalization module src/lib/oddsMath.ts (Sonnet subagent):
+      American↔prob conversion, multiplicative de-vig, per-market
+      probabilities, cross-market consensus with spread — 10 tests
+- [x] All six sources wired into the UI store; vig-free consensus strip
+      atop the markets panel; Playwright check after each integration
+- [x] code-simplifier milestone pass (also surfaced a real prose-source
+      bug in RoundGrid, fixed)
+- [x] impeccable finish review (subagent) — material fixes applied:
+      amber reservation enforced (kicker recolored), structural red/blue
+      corner tints, mobile tale-of-the-tape + stat-row reflow, freshness
+      stamps on Rounds and Recent Form
+- [x] DESIGN.md + .impeccable/design.json recorded by the impeccable
+      documenter from the shipped system
+
+## Morning follow-ups (deliberately deferred, not blocked)
+
+- **Odds movement (amber's reserved job).** The finish reviewer's one
+  unapplied fix: showing per-market deltas needs odds *history* (multiple
+  snapshots), which means extending the OddsSource contract with a
+  history method + multi-tick fixtures across three clients. Right scope
+  for tomorrow, wrong scope for 4am.
+- **Live-mode transports** for all six clients behind the existing
+  factories (each currently throws on `mode: "live"`); credentials due
+  today. The parse layers are transport-ready.
+- **X embed rendering** in ScorecardFeed (widget script + real post ids);
+  fixture mode intentionally shows an empty state, no invented posts.
+- Verify which journalist accounts are consistently active; flip
+  `active: false` in useDashboard's roster for dead ones.
+- Test Cito free tier live during a real event (per plan).
+- Unused-but-defined tokens `--border-strong` and Fira Sans 300 — drop or
+  use (documenter deliberately left them out of DESIGN.md).
 
 ## Blocked
 
@@ -80,4 +112,20 @@ Last updated: 2026-07-27 ~03:15 (Phase 0)
 
 ## Notes / decisions
 
-- (running log below)
+- Codex delegation worked as planned: all five Phase-3 clients built by
+  `codex exec -s workspace-write` in parallel (note the `-a` flag no
+  longer exists), each verified and committed individually by Fable.
+- Odds schema keeps native prices (Kalshi cents / Polymarket dollars /
+  American lines) beside implied probability; de-vig only happens in
+  src/lib/oddsMath.ts, and the UI labels vigged vs vig-free numbers.
+- Cross-source identity = canonical ids + per-source externalRefs on
+  every entity (one real bug tonight — Cito refs missing from bouts —
+  confirmed this is the right seam).
+- Design direction: "corner-colored fight terminal" (contract in
+  index.html head comment; system recorded in DESIGN.md). Corner palette
+  validated CVD-safe with the dataviz checker.
+- impeccable init interview was impossible unattended; PRODUCT.md was
+  inferred from BUILD_PLAN.md with assumptions labeled — worth a skim to
+  correct anything mis-assumed.
+- No AI attribution anywhere in git history (checked); no live API calls
+  attempted; no credentials touched.
