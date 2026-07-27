@@ -1,5 +1,5 @@
 import type { Bout, Corner, Fighter } from "../schema/types.ts";
-import { fmtMethod, fmtRecord, fmtTime, WEIGHT_LABEL } from "./format.ts";
+import { fmtMethod, fmtRecord, WEIGHT_LABEL } from "./format.ts";
 
 function FighterBlock({ fighter, corner }: { fighter: Fighter; corner: Corner }) {
   return (
@@ -58,9 +58,9 @@ function CenterStatus({ bout }: { bout: Bout }) {
   }
   return (
     <>
-      <span className="tot-live-label">Upcoming</span>
-      <span className="tot-round-label num">{fmtTime(bout.provenance.fetchedAt)}</span>
-      <span className="tot-substate">{bout.scheduledRounds} rounds</span>
+      <span className="tot-live-label tot-upcoming">Upcoming</span>
+      <span className="tot-round-label num">{bout.scheduledRounds}×5</span>
+      <span className="tot-substate">rounds · not started</span>
     </>
   );
 }

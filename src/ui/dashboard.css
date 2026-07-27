@@ -315,6 +315,10 @@
   color: var(--live);
 }
 
+.tot-upcoming {
+  color: var(--text-faint);
+}
+
 .tot-round-label {
   font-size: var(--fs-2xl);
   font-weight: 700;

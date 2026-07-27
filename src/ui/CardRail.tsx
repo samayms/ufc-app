@@ -22,7 +22,7 @@ function StatusChip({ bout }: { bout: Bout }) {
       );
     }
     default:
-      return <span className="chip chip-upcoming">UP NEXT</span>;
+      return <span className="chip chip-upcoming">UPCOMING</span>;
   }
 }
 
