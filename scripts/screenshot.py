@@ -51,8 +51,12 @@ with sync_playwright() as p:
               bodyWidth: document.body.scrollWidth,
               contentWidth: document.querySelector('.app-content')?.scrollWidth ?? 0,
               contentClientWidth: document.querySelector('.app-content')?.clientWidth ?? 0,
+              contentHeight: document.querySelector('.app-content')?.scrollHeight ?? 0,
+              contentClientHeight: document.querySelector('.app-content')?.clientHeight ?? 0,
               summaryTop: document.querySelector('.round-summary')?.getBoundingClientRect().top ?? -1,
               summaryBottom: document.querySelector('.round-summary')?.getBoundingClientRect().bottom ?? -1,
+              scorecardsBottom: document.querySelector('.scorecard-panel')?.getBoundingClientRect().bottom ?? -1,
+              scorecardCount: document.querySelectorAll('.media-scorecard').length,
               navBottom: document.querySelector('.mobile-nav')?.getBoundingClientRect().bottom ?? -1,
             })"""
         )
@@ -67,6 +71,12 @@ with sync_playwright() as p:
                 problems.append(
                     f"{name}: round summary does not begin in first viewport {metrics}"
                 )
+            if metrics["contentHeight"] > metrics["contentClientHeight"] + 1:
+                problems.append(f"{name}: homepage requires vertical scrolling {metrics}")
+            if metrics["scorecardCount"] != 4:
+                problems.append(f"{name}: expected four media scorecards {metrics}")
+            if not (0 < metrics["scorecardsBottom"] < height):
+                problems.append(f"{name}: media scorecards do not fit in first viewport {metrics}")
             if abs(metrics["navBottom"] - height) > 1:
                 problems.append(f"{name}: bottom navigation is not viewport-safe {metrics}")
         if name in {"iphone15", "desktop"}:

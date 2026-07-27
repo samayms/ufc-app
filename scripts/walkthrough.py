@@ -52,9 +52,9 @@ with sync_playwright() as p:
             problems.append(f"upcoming bout missing: {needle}")
 
     # Source page keeps partial availability visible.
-    page.get_by_role("button", name="Source status").click()
+    page.get_by_role("button", name="Data health").click()
     body = page.inner_text("body").lower()
-    for needle in ["fixture mode", "unavailable", "personal, non-commercial"]:
+    for needle in ["fixture data", "waiting", "personal, non-commercial"]:
         if needle not in body:
             problems.append(f"source page missing: {needle}")
 

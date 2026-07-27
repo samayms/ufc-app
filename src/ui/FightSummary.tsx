@@ -211,16 +211,13 @@ export function FightSummary({
       )}
 
       <section className="round-summary" aria-label="Round summary">
-        <div className="round-summary-head">
-          <span>Round summary</span>
-          {summary && (
-            <span className="freshness">
-              {SOURCE_LABEL[summary.provenance.source] ??
-                summary.provenance.source}{" "}
-              · <span className="num">{fmtTime(summary.provenance.fetchedAt)}</span>
-            </span>
-          )}
-        </div>
+        {summary && (
+          <span className="round-summary-source">
+            {SOURCE_LABEL[summary.provenance.source] ??
+              summary.provenance.source}{" "}
+            · <span className="num">{fmtTime(summary.provenance.fetchedAt)}</span>
+          </span>
+        )}
         <p>
           {summary?.summary ??
             (view.bout.status === "canceled" ||
@@ -230,11 +227,6 @@ export function FightSummary({
               ? "A grounded summary will appear after the round is complete."
               : "No narrative source has published this round yet.")}
         </p>
-        <span className="summary-provenance">
-          {summary
-            ? "Source account shown; no actions are inferred beyond the supplied report."
-            : "Completed snapshots remain visible while a source catches up."}
-        </span>
       </section>
     </div>
   );

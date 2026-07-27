@@ -12,25 +12,36 @@ export function ScorecardFeed({
   view: BoutView;
   accounts: ScorecardAccount[];
 }) {
-  const active = accounts.filter((a) => a.active);
+  const featured = accounts.filter((account) => account.active).slice(0, 4);
+
   return (
-    <section className="panel" aria-label="Media scorecards">
+    <section className="panel scorecard-panel" aria-label="Media scorecards">
       <div className="panel-head">
         <h2>Media scorecards</h2>
+        <span className="freshness num">{featured.length} voices</span>
       </div>
-      <ul className="scorecard-accounts">
-        {active.map((a) => (
-          <li key={a.handle} className="chip chip-handle" title={a.displayName}>
-            @{a.handle}
-          </li>
-        ))}
+      <ul className="media-scorecard-grid">
+        {featured.map((account) => {
+          const card = view.scorecards.find(
+            (scorecard) => scorecard.handle === account.handle,
+          );
+
+          return (
+            <li
+              key={account.handle}
+              className="media-scorecard"
+              title={`@${account.handle}`}
+            >
+              <strong>{account.displayName}</strong>
+              <span className="num">
+                {card
+                  ? `${card.round ? `R${card.round} · ` : ""}posted`
+                  : "Awaiting"}
+              </span>
+            </li>
+          );
+        })}
       </ul>
-      {view.scorecards.length === 0 && (
-        <p className="empty">
-          Live X embeds appear here during an event. Nothing to show in fixture
-          mode — no posts are invented.
-        </p>
-      )}
     </section>
   );
 }

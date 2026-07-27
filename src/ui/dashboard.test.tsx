@@ -11,6 +11,7 @@ import {
   RoundSelector,
 } from "./RoundSelector.tsx";
 import { RoundStatsPanel } from "./RoundStatsPanel.tsx";
+import { ScorecardFeed } from "./ScorecardFeed.tsx";
 import { SourceStatus } from "./SourceStatus.tsx";
 import { EventSubheader, TopBar } from "./TopBar.tsx";
 
@@ -98,5 +99,19 @@ describe("dashboard state surfaces", () => {
     );
     expect(sources).toContain("Data feeds");
     expect(sources).toContain("Fixture data");
+  });
+
+  it("reserves exactly four compact media scorecard slots", async () => {
+    const state = await assembleDashboard();
+    const view = state.boutViews["bout-main"];
+    expect(view).toBeDefined();
+    if (!view) return;
+
+    const scorecards = renderToStaticMarkup(
+      <ScorecardFeed view={view} accounts={state.scorecardAccounts} />,
+    );
+    expect(scorecards.match(/class="media-scorecard"/g)).toHaveLength(4);
+    expect(scorecards).toContain("4 voices");
+    expect(scorecards).toContain("Awaiting");
   });
 });
