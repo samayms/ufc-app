@@ -1,7 +1,109 @@
+/* Design tokens — ui-ux-pro-max "UFC Live Dashboard" system (dark, dense,
+   density dial 8) with the corner-color grammar from the direction
+   contract. Every color used by components is a token; no raw hex in
+   component CSS. */
+
 :root {
   color-scheme: dark;
+
+  /* Ground */
+  --bg: #070a12;
+  --surface: #0e1423;
+  --surface-2: #151d31;
+  --border: #232c42;
+  --border-strong: #33405e;
+
+  /* Text */
+  --text: #e8ecf5;
+  --text-muted: #96a0b8;
+  --text-faint: #6a7490;
+
+  /* Corner grammar — the identity. Red corner vs blue corner. */
+  --red-corner: #e8564a;
+  --red-corner-strong: #ff7365;
+  --red-corner-dim: rgba(232, 86, 74, 0.16);
+  --blue-corner: #4e91f5;
+  --blue-corner-strong: #79aeff;
+  --blue-corner-dim: rgba(78, 145, 245, 0.16);
+
+  /* Market accent — amber, reserved for money movement and market labels */
+  --market: #e5a83b;
+  --market-dim: rgba(229, 168, 59, 0.14);
+
+  /* Status */
+  --live: #46c08a;
+  --live-dim: rgba(70, 192, 138, 0.14);
+  --danger: #e8564a;
+
+  /* Type */
+  --font-ui: "Fira Sans", system-ui, sans-serif;
+  --font-data: "Fira Code", ui-monospace, monospace;
+
+  --fs-xs: 0.6875rem; /* 11px labels */
+  --fs-sm: 0.8125rem; /* 13px dense body */
+  --fs-base: 0.9375rem; /* 15px body */
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2rem;
+
+  /* Density-8 spacing scale */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
   margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Data numerals: always tabular, always the data face */
+.num {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--blue-corner);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
