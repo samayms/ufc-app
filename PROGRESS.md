@@ -22,24 +22,38 @@ Last updated: 2026-07-27 ~03:15 (Phase 0)
       `codex exec -s workspace-write "<task>"`
 
 ### Phase 1 — Unified data schema (Fable)
-- [ ] Design unified data model all four sources normalize into
+- [x] Unified data model (src/schema/types.ts): canonical ids +
+      externalRefs, native-price-preserving odds, honest provenance
+- [x] Source client contracts (src/sources/contract.ts) + canonical
+      synthetic fixture event (src/fixtures/event.json)
 
 ### Phase 2 — UI shell against mock data
 - [x] `/impeccable init` — PRODUCT.md written (inferred from BUILD_PLAN.md;
       no interview possible in unattended run, assumptions labeled inline)
-- [ ] Vite scaffold with hot reload
-- [ ] ui-ux-pro-max design system pass (per component, before code)
-- [ ] Dashboard shell: fight card view, odds comparison, round timeline,
-      scorecard commentary, fighter records
+- [x] Vite scaffold with hot reload (React 19 + TS strict + Vitest)
+- [x] ui-ux-pro-max design system (persisted to
+      design-system/ufc-live-dashboard/; dark dense terminal, Fira
+      Sans/Fira Code, corner-color grammar validated with the dataviz
+      palette checker; direction contract in index.html)
+- [x] Dashboard shell: top bar, card rail, tale of the tape, per-source
+      round grid + prose, odds comparison (Polymarket + sportsbooks),
+      scorecard roster with honest empty state
 - [ ] impeccable polish/audit pass on each finished piece
-- [ ] webapp-testing (Playwright) render verification
+- [x] webapp-testing (Playwright) render verification — desktop + mobile
+      screenshots clean, zero console errors, fixture content asserted
+      (scripts/screenshot.py; rerun via
+      `python3 .agents/skills/webapp-testing/scripts/with_server.py
+       --server "npm run dev" --port 5173 -- python3 scripts/screenshot.py`)
 
 ### Phase 3 — Client wrappers (Codex, parallel, mock-backed)
-- [ ] Polymarket client + tests
-- [ ] The Odds API client + tests
-- [ ] ESPN client + tests
-- [ ] Cito client + tests
-- [ ] Sherdog live-blog scraper + tests
+- [x] Polymarket client + tests (Codex)
+- [x] The Odds API client + tests (Codex)
+- [x] ESPN client + tests (Codex)
+- [x] Cito client + tests (Codex)
+- [x] Sherdog live-blog scraper + tests (Codex)
+- All five verified (tsc strict, 17 vitest tests, no-network grep) and
+  committed individually. Wired into the UI store (Cito round-stats
+  wiring pending an externalRef fix — see notes).
 
 ### Phase 4 — Kalshi client + auth scaffold (Fable)
 - [ ] Kalshi client (public reads, mock-backed; RSA-PSS auth scaffold for

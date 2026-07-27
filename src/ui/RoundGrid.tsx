@@ -7,12 +7,18 @@ const SOURCE_LABEL: Partial<Record<SourceId, string>> = {
   cito: "Cito",
 };
 
-function scoreCell(update: RoundUpdate | undefined) {
-  if (!update?.score) return <td className="rg-cell rg-empty">—</td>;
+function scoreCell(update: RoundUpdate | undefined, round: number) {
+  if (!update?.score) {
+    return (
+      <td key={round} className="rg-cell rg-empty">
+        —
+      </td>
+    );
+  }
   const { red, blue } = update.score;
   const winner: Corner | null = red > blue ? "red" : blue > red ? "blue" : null;
   return (
-    <td className={`rg-cell num${winner ? ` rg-win-${winner}` : ""}`}>
+    <td key={round} className={`rg-cell num${winner ? ` rg-win-${winner}` : ""}`}>
       {red}-{blue}
     </td>
   );
@@ -81,7 +87,7 @@ export function RoundGrid({ view }: { view: BoutView }) {
                 <th scope="row" className="rg-source-col">
                   {SOURCE_LABEL[source] ?? source}
                 </th>
-                {roundNumbers.map((n) => scoreCell(byRound.get(n)))}
+                {roundNumbers.map((n) => scoreCell(byRound.get(n), n))}
                 <td className="rg-cell rg-total num">
                   {scored.length ? `${totals.red}-${totals.blue}` : "—"}
                 </td>

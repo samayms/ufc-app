@@ -12,6 +12,8 @@ import type {
   ScorecardAccount,
 } from "../schema/types.ts";
 import type { SourceConfig } from "../sources/contract.ts";
+import { createCitoSource } from "../sources/cito.ts";
+import { createEspnSource } from "../sources/espn.ts";
 import { createOddsApiSource } from "../sources/oddsapi.ts";
 import { createPolymarketSource } from "../sources/polymarket.ts";
 import { createSherdogSource } from "../sources/sherdog.ts";
@@ -33,14 +35,18 @@ async function assemble(): Promise<DashboardState> {
   const polymarket = createPolymarketSource(config);
   const oddsApi = createOddsApiSource(config);
   const sherdog = createSherdogSource(config);
+  const espn = createEspnSource(config);
+  const cito = createCitoSource(config);
 
   const boutViews: Record<string, BoutView> = {};
   await Promise.all(
     event.bouts.map(async (bout) => {
-      const [pm, book, sherdogRounds] = await Promise.all([
+      const [pm, book, sherdogRounds, espnRounds, citoRounds] = await Promise.all([
         polymarket.getOddsSnapshot(bout),
         oddsApi.getOddsSnapshot(bout),
         sherdog.getRoundUpdates(bout),
+        espn.getRoundUpdates(bout),
+        cito.getRoundUpdates(bout),
       ]);
 
       const latestOdds: BoutView["latestOdds"] = {};
@@ -53,9 +59,14 @@ async function assemble(): Promise<DashboardState> {
       record("polymarket", pm);
       record("sportsbook", book);
 
+      const rounds: BoutView["rounds"] = {};
+      if (sherdogRounds.length) rounds.sherdog = sherdogRounds;
+      if (espnRounds.length) rounds.espn = espnRounds;
+      if (citoRounds.length) rounds.cito = citoRounds;
+
       boutViews[bout.id] = {
         bout,
-        rounds: sherdogRounds.length ? { sherdog: sherdogRounds } : {},
+        rounds,
         latestOdds,
         oddsHistory,
         scorecards: [],
