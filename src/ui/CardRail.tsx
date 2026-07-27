@@ -56,6 +56,10 @@ export function CardRail({
                   onClick={() => onSelect(bout.id)}
                   aria-current={bout.id === selectedId ? "true" : undefined}
                 >
+                  <span className="rail-corners" aria-hidden="true">
+                    <span className="rail-corner rail-corner-red" />
+                    <span className="rail-corner rail-corner-blue" />
+                  </span>
                   <span className="rail-names">
                     <span className={`rail-name corner-red${winner === "blue" ? " is-loser" : ""}`}>
                       {bout.fighters.red.name}

@@ -1,43 +1,43 @@
-/* Design tokens — ui-ux-pro-max "UFC Live Dashboard" system (dark, dense,
-   density dial 8) with the corner-color grammar from the direction
-   contract. Every color used by components is a token; no raw hex in
-   component CSS. */
+/* Prototype-derived tokens. Component styles only consume these named roles. */
 
 :root {
   color-scheme: dark;
 
   /* Ground */
-  --bg: #070a12;
-  --surface: #0e1423;
-  --surface-2: #151d31;
-  --border: #232c42;
-  --border-strong: #33405e;
+  --bg: #0c0a09;
+  --surface: #14110f;
+  --surface-2: #1a1614;
+  --surface-3: #221c19;
+  --border: rgba(245, 241, 236, 0.1);
+  --border-strong: rgba(245, 241, 236, 0.22);
 
   /* Text */
-  --text: #e8ecf5;
-  --text-muted: #96a0b8;
-  --text-faint: #6a7490;
+  --text: #f5f1ec;
+  --text-muted: rgba(245, 241, 236, 0.62);
+  --text-faint: rgba(245, 241, 236, 0.4);
+  --text-ghost: rgba(245, 241, 236, 0.24);
 
   /* Corner grammar — the identity. Red corner vs blue corner. */
-  --red-corner: #e8564a;
-  --red-corner-strong: #ff7365;
-  --red-corner-dim: rgba(232, 86, 74, 0.16);
-  --blue-corner: #4e91f5;
-  --blue-corner-strong: #79aeff;
-  --blue-corner-dim: rgba(78, 145, 245, 0.16);
+  --red-corner: #e2603f;
+  --red-corner-strong: #f08a6e;
+  --red-corner-dim: rgba(226, 96, 63, 0.16);
+  --blue-corner: #4c8ce0;
+  --blue-corner-strong: #7fb0ee;
+  --blue-corner-dim: rgba(76, 140, 224, 0.16);
 
   /* Market accent — amber, reserved for money movement and market labels */
-  --market: #e5a83b;
-  --market-dim: rgba(229, 168, 59, 0.14);
+  --market: #e0b341;
+  --market-dim: rgba(224, 179, 65, 0.15);
 
   /* Status */
-  --live: #46c08a;
-  --live-dim: rgba(70, 192, 138, 0.14);
-  --danger: #e8564a;
+  --live: #7fc79b;
+  --live-dim: rgba(127, 199, 155, 0.14);
+  --danger: #e2603f;
 
   /* Type */
-  --font-ui: "Fira Sans", system-ui, sans-serif;
-  --font-data: "Fira Code", ui-monospace, monospace;
+  --font-ui: "Barlow", system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, monospace;
 
   --fs-xs: 0.6875rem; /* 11px labels */
   --fs-sm: 0.8125rem; /* 13px dense body */
@@ -65,7 +65,7 @@
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
@@ -76,6 +76,7 @@ body {
   font-size: var(--fs-base);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
 }
 
 /* Data numerals: always tabular, always the data face */
@@ -91,6 +92,10 @@ button {
   border: none;
   padding: 0;
   cursor: pointer;
+}
+
+a {
+  color: var(--red-corner-strong);
 }
 
 button:focus-visible,

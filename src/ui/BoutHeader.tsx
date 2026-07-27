@@ -2,21 +2,22 @@ import type { Bout, Corner, Fighter } from "../schema/types.ts";
 import { fmtMethod, fmtRecord, WEIGHT_LABEL } from "./format.ts";
 
 function FighterBlock({ fighter, corner }: { fighter: Fighter; corner: Corner }) {
+  const initials = fighter.name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2);
+  const lastName = fighter.name.split(" ").at(-1) ?? fighter.name;
+
   return (
     <div className={`tot-fighter tot-${corner}`}>
-      <span className={`tot-name corner-${corner}`}>{fighter.name}</span>
-      {fighter.nickname && <span className="tot-nick">“{fighter.nickname}”</span>}
-      <span className="tot-record num">{fmtRecord(fighter.record)}</span>
-      <span className="tot-meta">
-        {[fighter.country, fighter.stance, fighter.age ? `${fighter.age} yrs` : null]
-          .filter(Boolean)
-          .join(" · ")}
+      <span className={`fighter-photo fighter-photo-${corner}`} aria-hidden="true">
+        {initials}
       </span>
-      {fighter.heightCm && fighter.reachCm && (
-        <span className="tot-meta num">
-          {fighter.heightCm} cm · reach {fighter.reachCm} cm
-        </span>
-      )}
+      <span className={`tot-name corner-${corner}`} title={fighter.name}>
+        {lastName}
+      </span>
+      <span className="tot-record num">{fmtRecord(fighter.record)}</span>
     </div>
   );
 }
@@ -47,7 +48,7 @@ function CenterStatus({ bout }: { bout: Bout }) {
       <>
         <span className="tot-live-label">
           <span className="live-dot" aria-hidden="true" />
-          {bout.status === "in-round" ? "Live" : "Between rounds"}
+          {bout.status === "in-round" ? "Live" : "Between rds"}
         </span>
         <span className="tot-round-label num">
           {bout.status === "in-round" ? `R${bout.currentRound}` : `End R${bout.currentRound}`}
