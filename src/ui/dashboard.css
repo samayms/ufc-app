@@ -407,6 +407,129 @@
   font-size: var(--fs-xs);
 }
 
+/* Fight stats --------------------------------------------------------- */
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 132px 1fr 48px;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.stat-label {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.stat-val {
+  text-align: right;
+  font-weight: 600;
+}
+
+.stat-val-blue {
+  text-align: left;
+}
+
+.stat-bar {
+  height: 8px;
+  display: flex;
+}
+
+.stat-bar-red {
+  justify-content: flex-end;
+}
+
+.stat-bar-red > span {
+  background: var(--red-corner);
+  border-radius: 4px 0 0 4px;
+}
+
+.stat-bar-blue > span {
+  background: var(--blue-corner);
+  border-radius: 0 4px 4px 0;
+}
+
+/* Recent form --------------------------------------------------------- */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-5);
+}
+
+.form-col h3 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.form-red {
+  text-align: right;
+}
+
+.form-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.form-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+
+.form-red .form-list li {
+  flex-direction: row-reverse;
+}
+
+.form-result {
+  font-family: var(--font-data);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+.form-result-win {
+  color: var(--live);
+  background: var(--live-dim);
+}
+
+.form-result-loss {
+  color: var(--danger);
+  background: var(--red-corner-dim);
+}
+
+.form-opp {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form-method {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  flex-shrink: 0;
+}
+
 /* Markets ------------------------------------------------------------ */
 
 .market {

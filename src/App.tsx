@@ -3,7 +3,9 @@ import { useDashboard } from "./store/useDashboard.ts";
 import { BoutHeader } from "./ui/BoutHeader.tsx";
 import { CardRail } from "./ui/CardRail.tsx";
 import { OddsPanel } from "./ui/OddsPanel.tsx";
+import { RecentForm } from "./ui/RecentForm.tsx";
 import { RoundGrid } from "./ui/RoundGrid.tsx";
+import { RoundStatsPanel } from "./ui/RoundStatsPanel.tsx";
 import { ScorecardFeed } from "./ui/ScorecardFeed.tsx";
 import { TopBar } from "./ui/TopBar.tsx";
 import "./ui/dashboard.css";
@@ -40,6 +42,8 @@ export default function App() {
           <main className="center">
             <BoutHeader bout={view.bout} />
             <RoundGrid view={view} />
+            <RoundStatsPanel view={view} />
+            <RecentForm bout={view.bout} />
           </main>
           <aside className="side">
             <OddsPanel view={view} />
