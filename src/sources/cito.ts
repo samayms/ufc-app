@@ -87,6 +87,7 @@ interface CitoRoundStats {
   significant_strikes: number;
   total_strikes: number;
   takedowns: number;
+  takedowns_attempted: number;
   control_time_seconds: number;
   knockdowns: number;
 }
@@ -317,6 +318,7 @@ function parseRoundStats(raw: CitoRoundStats): RoundStats {
     significantStrikes: raw.significant_strikes,
     totalStrikes: raw.total_strikes,
     takedowns: raw.takedowns,
+    takedownsAttempted: raw.takedowns_attempted,
     controlTimeSeconds: raw.control_time_seconds,
     knockdowns: raw.knockdowns,
   };

@@ -193,6 +193,7 @@ export interface RoundStats {
   significantStrikes?: number;
   totalStrikes?: number;
   takedowns?: number;
+  takedownsAttempted?: number;
   controlTimeSeconds?: number;
   knockdowns?: number;
 }

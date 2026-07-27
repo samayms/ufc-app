@@ -1,16 +1,18 @@
-import type { BoutView, ScorecardAccount } from "../schema/types.ts";
+import type { BoutView, Corner, ScorecardAccount } from "../schema/types.ts";
+import { completedRounds } from "./RoundSelector.tsx";
 
-const DEMO_CARDS = [
-  { corner: "blue" as const, note: "Cleaner counters" },
-  { corner: "blue" as const, note: "Control and pressure" },
-  { corner: "red" as const, note: "Sharper late work" },
-  { corner: "blue" as const, note: "Edged the exchanges" },
+/** Each demo journalist's round-by-round pick, oldest round first. */
+const DEMO_CARDS: { rounds: Corner[] }[] = [
+  { rounds: ["blue", "blue"] },
+  { rounds: ["red", "blue"] },
+  { rounds: ["blue", "red"] },
+  { rounds: ["blue", "blue"] },
 ];
 
 /**
  * Journalist scorecards arrive as X posts and render through the official
  * embed widget in live mode. Until live posts are connected, fixture mode
- * renders four explicitly labeled demo cards to exercise the final layout.
+ * renders four demo cards to exercise the final layout.
  */
 export function ScorecardFeed({
   view,
@@ -20,40 +22,54 @@ export function ScorecardFeed({
   accounts: ScorecardAccount[];
 }) {
   const featured = accounts.filter((account) => account.active).slice(0, 4);
-  const latestRound =
-    Object.values(view.rounds)
-      .flat()
-      .map((round) => round.round)
-      .sort((a, b) => b - a)[0] ??
-    view.bout.currentRound ??
-    1;
+  const roundsSoFar = completedRounds(view).length || 1;
 
   return (
     <section className="panel scorecard-panel" aria-label="Media scorecards">
-      <div className="panel-head">
-        <h2>Media scorecards</h2>
-        <span className="badge-synthetic">Demo cards</span>
-      </div>
       <ul className="media-scorecard-grid">
         {featured.map((account, index) => {
           const demo = DEMO_CARDS[index];
           if (!demo) return null;
-          const favored = view.bout.fighters[demo.corner].name.split(" ").at(-1);
+          let red = 0;
+          let blue = 0;
+          for (let round = 0; round < roundsSoFar; round += 1) {
+            const pick = demo.rounds[round] ?? demo.rounds.at(-1);
+            if (pick === "red") {
+              red += 10;
+              blue += 9;
+            } else {
+              red += 9;
+              blue += 10;
+            }
+          }
+          const corner = demo.rounds[roundsSoFar - 1] ?? demo.rounds.at(-1) ?? "red";
+          const favored = view.bout.fighters[corner].name.split(" ").at(-1);
+          const initials = account.displayName
+            .split(/\s+/)
+            .map((part) => part[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase();
 
           return (
-            <li
-              key={account.handle}
-              className="media-scorecard"
-              title={`@${account.handle}`}
-            >
-              <strong className="media-scorecard-name">
-                {account.displayName}
-              </strong>
-              <span className={`media-scorecard-score corner-${demo.corner}`}>
-                <b className="num">10–9</b> {favored}
+            <li key={account.handle} className="media-scorecard">
+              <span className="media-scorecard-avatar" aria-hidden="true">
+                {initials}
               </span>
-              <span className="media-scorecard-note">
-                <b className="num">R{latestRound}</b> · {demo.note}
+              <span className="media-scorecard-id">
+                <strong className="media-scorecard-name">
+                  {account.displayName}
+                </strong>
+                <span className="media-scorecard-handle">
+                  @{account.handle}
+                </span>
+              </span>
+              <span className={`media-scorecard-score corner-${corner}`}>
+                <b className="num">10–9</b>
+                <span>{favored}</span>
+                <span className="media-scorecard-total num">
+                  ({red}–{blue})
+                </span>
               </span>
             </li>
           );

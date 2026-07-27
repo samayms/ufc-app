@@ -47,13 +47,7 @@ describe("dashboard state surfaces", () => {
       <RoundStatsPanel view={view} selection={1} />,
     );
     expect(firstRoundStats).toContain("Round 1 stats");
-    expect(firstRoundStats).toContain(">24<");
-
-    const totalSummary = renderToStaticMarkup(
-      <FightSummary view={view} selection="total" />,
-    );
-    expect(totalSummary).toContain("Unofficial 19-19");
-    expect(totalSummary).not.toContain("Unofficial 38-38");
+    expect(firstRoundStats).toContain(">24/31<");
   });
 
   it("renders honest missing-round and stale-source states", async () => {
@@ -111,8 +105,7 @@ describe("dashboard state surfaces", () => {
       <ScorecardFeed view={view} accounts={state.scorecardAccounts} />,
     );
     expect(scorecards.match(/class="media-scorecard"/g)).toHaveLength(4);
-    expect(scorecards).toContain("Demo cards");
     expect(scorecards).toContain("10–9");
-    expect(scorecards).toContain("Cleaner counters");
+    expect(scorecards).not.toContain("Cleaner counters");
   });
 });

@@ -9,10 +9,14 @@ import { fmtTime } from "./format.ts";
 
 type StatKey = keyof RoundStats;
 
-const STAT_ROWS: { key: StatKey; label: string; fmt?: (n: number) => string }[] = [
-  { key: "significantStrikes", label: "Significant strikes" },
-  { key: "totalStrikes", label: "Total strikes" },
-  { key: "takedowns", label: "Takedowns" },
+const STAT_ROWS: {
+  key: StatKey;
+  totalKey?: StatKey;
+  label: string;
+  fmt?: (n: number) => string;
+}[] = [
+  { key: "significantStrikes", totalKey: "totalStrikes", label: "Significant strikes" },
+  { key: "takedowns", totalKey: "takedownsAttempted", label: "Takedowns" },
   {
     key: "controlTimeSeconds",
     label: "Control time",
@@ -30,6 +34,7 @@ function totals(
     significantStrikes: 0,
     totalStrikes: 0,
     takedowns: 0,
+    takedownsAttempted: 0,
     controlTimeSeconds: 0,
     knockdowns: 0,
   };
@@ -39,6 +44,9 @@ function totals(
     if (!s) continue;
     for (const row of STAT_ROWS) {
       sums[row.key] += s[row.key] ?? 0;
+      if (row.totalKey) {
+        sums[row.totalKey] += s[row.totalKey] ?? 0;
+      }
     }
   }
   return sums;
@@ -92,13 +100,15 @@ export function RoundStatsPanel({
         </span>
       </div>
       <div className="stats">
-        {STAT_ROWS.map(({ key, label, fmt }) => {
+        {STAT_ROWS.map(({ key, totalKey, label, fmt }) => {
           const r = red[key];
           const b = blue[key];
           const max = Math.max(r, b, 1);
+          const rDisplay = fmt ? fmt(r) : totalKey ? `${r}/${red[totalKey]}` : r;
+          const bDisplay = fmt ? fmt(b) : totalKey ? `${b}/${blue[totalKey]}` : b;
           return (
             <div key={key} className="stat-row">
-              <span className="stat-val num">{fmt ? fmt(r) : r}</span>
+              <span className="stat-val num">{rDisplay}</span>
               <span className="stat-bar stat-bar-red">
                 <span style={{ width: `${(r / max) * 100}%` }} />
               </span>
@@ -106,7 +116,7 @@ export function RoundStatsPanel({
               <span className="stat-bar stat-bar-blue">
                 <span style={{ width: `${(b / max) * 100}%` }} />
               </span>
-              <span className="stat-val stat-val-blue num">{fmt ? fmt(b) : b}</span>
+              <span className="stat-val stat-val-blue num">{bDisplay}</span>
             </div>
           );
         })}

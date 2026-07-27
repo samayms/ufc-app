@@ -93,9 +93,9 @@ function parseRoundUpdates(html: string, bout: Bout): RoundUpdate[] {
       const scoreText = paragraphs.find((paragraph) =>
         SCORE_LINE.test(paragraph),
       );
-      const summary = paragraphs
-        .filter((paragraph) => !SCORE_LINE.test(paragraph))
-        .join(" ");
+      const summary = paragraphs.find(
+        (paragraph) => !SCORE_LINE.test(paragraph),
+      );
       const score = scoreText ? scoreForBout(scoreText, bout) : undefined;
       const update: RoundUpdate = {
         boutId: bout.id,

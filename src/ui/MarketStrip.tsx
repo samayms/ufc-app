@@ -35,11 +35,10 @@ export function MarketStrip({
     >
       <span className="market-strip-side">
         <strong className="num">{red == null ? "—" : fmtPct(red)}</strong>
-        <span>{view.bout.fighters.red.name.split(" ").at(-1)}</span>
       </span>
-      <span className="market-strip-side market-strip-side-blue">
+      <span className="market-strip-divider" aria-hidden="true" />
+      <span className="market-strip-side">
         <strong className="num">{blue == null ? "—" : fmtPct(blue)}</strong>
-        <span>{view.bout.fighters.blue.name.split(" ").at(-1)}</span>
       </span>
     </button>
   );

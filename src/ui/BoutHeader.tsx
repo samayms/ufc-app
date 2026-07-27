@@ -55,7 +55,9 @@ function CenterStatus({ bout }: { bout: Bout }) {
   if (bout.status === "between-rounds" || bout.status === "in-round") {
     return (
       <>
-        <span className="tot-live-label">
+        <span
+          className={`tot-live-label${bout.status === "between-rounds" ? " tot-between" : ""}`}
+        >
           <span className="live-dot" aria-hidden="true" />
           {bout.status === "in-round" ? "Live" : "Between rds"}
         </span>
