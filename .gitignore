@@ -2,9 +2,31 @@ node_modules/
 dist/
 .env
 .env.*
-.claude/settings.local.json
-.claude/skills/
 .DS_Store
 .npm-cache/
 tsconfig.tsbuildinfo
 __pycache__/
+
+# Local AI-agent tooling and configuration
+/.agents/
+/.claude/
+/.codex/
+/.impeccable/
+/CLAUDE.md
+/AGENTS.md
+/skills-lock.json
+
+# Local planning, research, notes, and implementation handoffs
+/BUILD_PLAN.md
+/DESIGN.md
+/PRODUCT.md
+/PROGRESS.md
+/*PLAN*.md
+/*HANDOFF*.md
+/*NOTES*.md
+/*RESEARCH*.md
+
+# Local browser/UI test artifacts
+/playwright-report/
+/test-results/
+/coverage/
