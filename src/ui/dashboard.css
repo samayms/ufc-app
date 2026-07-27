@@ -165,6 +165,15 @@
   white-space: nowrap;
 }
 
+.topbar-wordmark {
+  display: inline-block;
+  width: auto;
+  height: 0.7em;
+  margin-right: 0.3em;
+  vertical-align: baseline;
+  transform: translateY(0.02em);
+}
+
 .fixture-label {
   flex: none;
   font-family: var(--font-data);
