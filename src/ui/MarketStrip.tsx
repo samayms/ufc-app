@@ -25,12 +25,6 @@ export function MarketStrip({
   const blue = snapshot
     ? averageImpliedProbability(snapshot, "blue")
     : null;
-  const label =
-    snapshot?.market === "sportsbook"
-      ? "Sportsbooks"
-      : snapshot?.market === "polymarket"
-        ? "Polymarket"
-        : "Kalshi";
 
   return (
     <button
@@ -42,16 +36,6 @@ export function MarketStrip({
       <span className="market-strip-side">
         <strong className="num">{red == null ? "—" : fmtPct(red)}</strong>
         <span>{view.bout.fighters.red.name.split(" ").at(-1)}</span>
-      </span>
-      <span className="market-strip-center">
-        <b>{label}</b>
-        <span>
-          {snapshot
-            ? snapshot.provenance.synthetic
-              ? "fixture market"
-              : "latest market"
-            : "no market"}
-        </span>
       </span>
       <span className="market-strip-side market-strip-side-blue">
         <strong className="num">{blue == null ? "—" : fmtPct(blue)}</strong>
