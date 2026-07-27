@@ -1,4 +1,5 @@
 import type { BoutView, Corner, RoundStats } from "../schema/types.ts";
+import type { RoundSelection } from "./RoundSelector.tsx";
 import { fmtTime } from "./format.ts";
 
 /**
@@ -20,7 +21,11 @@ const STAT_ROWS: { key: StatKey; label: string; fmt?: (n: number) => string }[] 
   { key: "knockdowns", label: "Knockdowns" },
 ];
 
-function totals(view: BoutView, corner: Corner): Required<RoundStats> {
+function totals(
+  view: BoutView,
+  corner: Corner,
+  selection: RoundSelection,
+): Required<RoundStats> {
   const sums: Required<RoundStats> = {
     significantStrikes: 0,
     totalStrikes: 0,
@@ -29,6 +34,7 @@ function totals(view: BoutView, corner: Corner): Required<RoundStats> {
     knockdowns: 0,
   };
   for (const update of view.rounds.cito ?? []) {
+    if (selection !== "total" && update.round !== selection) continue;
     const s = update.stats?.[corner];
     if (!s) continue;
     for (const row of STAT_ROWS) {
@@ -38,20 +44,50 @@ function totals(view: BoutView, corner: Corner): Required<RoundStats> {
   return sums;
 }
 
-export function RoundStatsPanel({ view }: { view: BoutView }) {
+export function RoundStatsPanel({
+  view,
+  selection = "total",
+}: {
+  view: BoutView;
+  selection?: RoundSelection;
+}) {
   const citoRounds = view.rounds.cito ?? [];
-  if (!citoRounds.some((u) => u.stats)) return null;
+  const selectedUpdates =
+    selection === "total"
+      ? citoRounds
+      : citoRounds.filter((update) => update.round === selection);
+  const heading =
+    selection === "total" ? "Fight totals" : `Round ${selection} stats`;
 
-  const red = totals(view, "red");
-  const blue = totals(view, "blue");
-  const through = citoRounds.at(-1);
+  if (!selectedUpdates.some((update) => update.stats)) {
+    return (
+      <section className="panel" aria-label={heading}>
+        <div className="panel-head">
+          <h2>{heading}</h2>
+        </div>
+        <p className="empty">
+          {view.bout.status === "upcoming"
+            ? "Detailed statistics unlock after a completed round."
+            : "This source did not provide statistics for the selected round."}
+        </p>
+      </section>
+    );
+  }
+
+  const red = totals(view, "red", selection);
+  const blue = totals(view, "blue", selection);
+  const through = selectedUpdates.at(-1);
 
   return (
     <section className="panel" aria-label="Fight stats">
       <div className="panel-head">
-        <h2>Fight stats</h2>
+        <h2>{heading}</h2>
         <span className="freshness">
-          Cito · through R{through?.round} ·{" "}
+          Cito ·{" "}
+          {selection === "total"
+            ? `through R${through?.round}`
+            : `R${through?.round}`}{" "}
+          ·{" "}
           <span className="num">{fmtTime(through?.provenance.fetchedAt ?? "")}</span>
         </span>
       </div>

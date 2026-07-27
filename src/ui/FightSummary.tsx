@@ -79,27 +79,32 @@ function scoreConsensus(view: BoutView, selection: RoundSelection) {
     );
   if (scored.length === 0) return null;
 
-  const totals = scored.reduce(
-    (sum, update) => ({
-      red: sum.red + (update.score?.red ?? 0),
-      blue: sum.blue + (update.score?.blue ?? 0),
-    }),
-    { red: 0, blue: 0 },
-  );
   const redEdges = scored.filter(
     (update) => (update.score?.red ?? 0) > (update.score?.blue ?? 0),
   ).length;
   const blueEdges = scored.filter(
     (update) => (update.score?.blue ?? 0) > (update.score?.red ?? 0),
   ).length;
-  const sourceScores = new Set(
-    scored.map((update) => `${update.score?.red}-${update.score?.blue}`),
-  );
-
   if (selection === "total") {
+    const sourceCards = new Map<SourceId, { red: number; blue: number }>();
+    for (const update of scored) {
+      const card = sourceCards.get(update.provenance.source) ?? {
+        red: 0,
+        blue: 0,
+      };
+      card.red += update.score?.red ?? 0;
+      card.blue += update.score?.blue ?? 0;
+      sourceCards.set(update.provenance.source, card);
+    }
+    const cards = [...sourceCards.values()];
+    const representative = cards[0];
+    if (!representative) return null;
+    const sourceScores = new Set(
+      cards.map((card) => `${card.red}-${card.blue}`),
+    );
     return {
-      line: `Unofficial ${totals.red}-${totals.blue}`,
-      meta: `${scored.length} source rounds`,
+      line: `Unofficial ${representative.red}-${representative.blue}`,
+      meta: `${cards.length} source card${cards.length === 1 ? "" : "s"}`,
       disagreement: sourceScores.size > 1,
     };
   }
@@ -182,7 +187,10 @@ export function FightSummary({
           </div>
         ) : (
           <p className="empty">
-            {view.bout.status === "upcoming"
+            {view.bout.status === "canceled" ||
+            view.bout.status === "postponed"
+              ? `This bout was ${view.bout.status}; no round statistics are expected.`
+              : view.bout.status === "upcoming"
               ? "Stats lock in after each completed round."
               : "The latest valid snapshot is temporarily unavailable."}
           </p>
@@ -215,7 +223,10 @@ export function FightSummary({
         </div>
         <p>
           {summary?.summary ??
-            (view.bout.status === "upcoming"
+            (view.bout.status === "canceled" ||
+            view.bout.status === "postponed"
+              ? `This bout was ${view.bout.status}; no round summary is expected.`
+              : view.bout.status === "upcoming"
               ? "A grounded summary will appear after the round is complete."
               : "No narrative source has published this round yet.")}
         </p>

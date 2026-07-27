@@ -23,6 +23,15 @@ function FighterBlock({ fighter, corner }: { fighter: Fighter; corner: Corner })
 }
 
 function CenterStatus({ bout }: { bout: Bout }) {
+  if (bout.status === "canceled" || bout.status === "postponed") {
+    return (
+      <>
+        <span className="tot-live-label tot-canceled">{bout.status}</span>
+        <span className="tot-round-label">—</span>
+        <span className="tot-substate">bout unavailable</span>
+      </>
+    );
+  }
   if (bout.status === "final" && bout.result) {
     const { winner, method, round, time } = bout.result;
     const name =

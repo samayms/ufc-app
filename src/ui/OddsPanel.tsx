@@ -127,7 +127,11 @@ function BookRows({ snapshot }: { snapshot: OddsSnapshot }) {
 export function OddsPanel({ view }: { view: BoutView }) {
   const { latestOdds, bout } = view;
   const finalText =
-    bout.status === "final" ? "Market settled — bout is final." : "No market for this bout yet.";
+    bout.status === "final"
+      ? "Market settled — bout is final."
+      : bout.status === "canceled" || bout.status === "postponed"
+        ? `Market unavailable — bout ${bout.status}.`
+        : "No market for this bout yet.";
   const agg = consensus(Object.values(latestOdds));
   const sportsbook = latestOdds.sportsbook ?? null;
   return (

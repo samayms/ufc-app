@@ -52,10 +52,10 @@ export function SourceStatus({
         {SOURCES.map((source) => {
           const fetchedAt = sourceTimes(state, source.id);
           const unavailable = fetchedAt == null;
-          const status = stale
-            ? "Stale"
-            : unavailable
-              ? "Unavailable"
+          const status = unavailable
+            ? "Unavailable"
+            : stale
+              ? "Stale"
               : "Fixture";
           return (
             <div className="source-row" key={source.id}>

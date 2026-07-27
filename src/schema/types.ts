@@ -124,7 +124,9 @@ export type BoutStatus =
   | "upcoming"
   | "in-round"
   | "between-rounds"
-  | "final";
+  | "final"
+  | "canceled"
+  | "postponed";
 
 export interface BoutResult {
   winner: Corner | "draw" | "nc";

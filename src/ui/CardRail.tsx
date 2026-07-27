@@ -21,6 +21,13 @@ function StatusChip({ bout }: { bout: Bout }) {
         </span>
       );
     }
+    case "canceled":
+    case "postponed":
+      return (
+        <span className="chip chip-canceled">
+          {bout.status.toUpperCase()}
+        </span>
+      );
     default:
       return <span className="chip chip-upcoming">UPCOMING</span>;
   }

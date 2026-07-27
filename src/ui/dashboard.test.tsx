@@ -10,6 +10,7 @@ import {
   defaultRoundSelection,
   RoundSelector,
 } from "./RoundSelector.tsx";
+import { RoundStatsPanel } from "./RoundStatsPanel.tsx";
 import { SourceStatus } from "./SourceStatus.tsx";
 
 describe("dashboard state surfaces", () => {
@@ -39,6 +40,18 @@ describe("dashboard state surfaces", () => {
     expect(roundOne).toContain(">R3</button>");
     expect(roundOne).toContain("disabled");
     expect(totals).toContain("round-tab-total is-active");
+
+    const firstRoundStats = renderToStaticMarkup(
+      <RoundStatsPanel view={view} selection={1} />,
+    );
+    expect(firstRoundStats).toContain("Round 1 stats");
+    expect(firstRoundStats).toContain(">24<");
+
+    const totalSummary = renderToStaticMarkup(
+      <FightSummary view={view} selection="total" />,
+    );
+    expect(totalSummary).toContain("Unofficial 19-19");
+    expect(totalSummary).not.toContain("Unofficial 38-38");
   });
 
   it("renders honest missing-round and stale-source states", async () => {

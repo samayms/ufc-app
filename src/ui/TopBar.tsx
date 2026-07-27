@@ -11,7 +11,7 @@ export function TopBar({
   return (
     <header className="topbar">
       <div className="topbar-title">
-        <h1>{event.name}</h1>
+        <h1 title={event.name}>{event.name}</h1>
         {event.provenance.synthetic && (
           <span
             className="fixture-label"

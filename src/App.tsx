@@ -131,7 +131,7 @@ export default function App() {
                 )}
                 {section === "stats" && (
                   <>
-                    <RoundStatsPanel view={view} />
+                    <RoundStatsPanel view={view} selection={round} />
                     <RoundGrid view={view} />
                   </>
                 )}
