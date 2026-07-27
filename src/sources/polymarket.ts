@@ -63,7 +63,9 @@ function parseMarket(bout: Bout, market: GammaMarket): OddsSnapshot | null {
   }
 
   const corners: Corner[] = ["red", "blue"];
-  const quotes = corners.map((corner, index): OddsQuote | null => {
+  const quotes: OddsQuote[] = [];
+
+  for (const [index, corner] of corners.entries()) {
     const tokenId = tokenIds[index];
     if (!tokenId) {
       return null;
@@ -74,24 +76,21 @@ function parseMarket(bout: Bout, market: GammaMarket): OddsSnapshot | null {
       tokenId,
       fallbackPrices[index],
     );
+    if (price === null) {
+      return null;
+    }
 
-    return price === null
-      ? null
-      : {
-          corner,
-          native: { kind: "polymarket-price", price },
-          impliedProbability: price,
-        };
-  });
-
-  if (quotes.some((quote) => quote === null)) {
-    return null;
+    quotes.push({
+      corner,
+      native: { kind: "polymarket-price", price },
+      impliedProbability: price,
+    });
   }
 
   return {
     boutId: bout.id,
     market: "polymarket",
-    quotes: quotes as OddsQuote[],
+    quotes,
     marketUpdatedAt: market.updatedAt,
     provenance: {
       source: "polymarket",

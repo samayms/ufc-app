@@ -1,5 +1,5 @@
-import type { BoutView, OddsQuote, OddsSnapshot } from "../schema/types.ts";
-import { consensus } from "../lib/oddsMath.ts";
+import type { BoutView, OddsSnapshot } from "../schema/types.ts";
+import { averageImpliedProbability, consensus } from "../lib/oddsMath.ts";
 import { fmtMoneyline, fmtNative, fmtPct, fmtTime } from "./format.ts";
 
 /**
@@ -17,12 +17,6 @@ function SplitBar({ red, blue }: { red: number; blue: number }) {
       <span className="split-blue" style={{ width: `calc(${100 - redShare}% - 1px)` }} />
     </div>
   );
-}
-
-function cornerProb(quotes: OddsQuote[], corner: "red" | "blue"): number | null {
-  const q = quotes.filter((x) => x.corner === corner);
-  if (q.length === 0) return null;
-  return q.reduce((s, x) => s + x.impliedProbability, 0) / q.length;
 }
 
 function MarketBlock({
@@ -62,8 +56,8 @@ function MarketBlock({
 }
 
 function MarketBar({ snapshot }: { snapshot: OddsSnapshot }) {
-  const red = cornerProb(snapshot.quotes, "red");
-  const blue = cornerProb(snapshot.quotes, "blue");
+  const red = averageImpliedProbability(snapshot, "red");
+  const blue = averageImpliedProbability(snapshot, "blue");
   if (red == null || blue == null) return <p className="empty">Incomplete quotes.</p>;
   const singleBook = snapshot.market !== "sportsbook";
   const redQuote = snapshot.quotes.find((q) => q.corner === "red");
@@ -135,6 +129,7 @@ export function OddsPanel({ view }: { view: BoutView }) {
   const finalText =
     bout.status === "final" ? "Market settled — bout is final." : "No market for this bout yet.";
   const agg = consensus(Object.values(latestOdds));
+  const sportsbook = latestOdds.sportsbook ?? null;
   return (
     <section className="panel" aria-label="Odds comparison">
       <div className="panel-head">
@@ -175,10 +170,10 @@ export function OddsPanel({ view }: { view: BoutView }) {
       <MarketBlock
         title="Sportsbooks"
         note="Averaged across books; vig included, so sides sum past 100%."
-        snapshot={latestOdds.sportsbook ?? null}
+        snapshot={sportsbook}
         emptyText={finalText}
       >
-        <BookRows snapshot={latestOdds.sportsbook!} />
+        {sportsbook && <BookRows snapshot={sportsbook} />}
       </MarketBlock>
     </section>
   );

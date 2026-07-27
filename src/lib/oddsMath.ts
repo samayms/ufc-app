@@ -53,7 +53,11 @@ export function devigPair(
   return { red: redProb / sum, blue: blueProb / sum };
 }
 
-function averageImpliedProbability(
+/**
+ * Mean raw (still vigged) implied probability across every quote a snapshot
+ * carries for one corner. Null when the corner has no quotes.
+ */
+export function averageImpliedProbability(
   snapshot: OddsSnapshot,
   corner: Corner,
 ): number | null {

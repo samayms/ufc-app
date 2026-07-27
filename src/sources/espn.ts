@@ -143,10 +143,6 @@ function espnRef(id: string): ExternalRef {
   return { source: "espn", id };
 }
 
-function findEspnRef(refs: ExternalRef[]): ExternalRef | undefined {
-  return refs.find((ref) => ref.source === "espn");
-}
-
 function parseRecord(summary: string | undefined): FightRecord {
   const match = summary?.match(
     /^(\d+)-(\d+)-(\d+)(?:\s*\((\d+)\s*NC\))?$/i,
@@ -175,23 +171,29 @@ function parseMethod(method: string | undefined): FinishMethod {
   return "other";
 }
 
+function parsePastBoutResult(
+  outcome: string | undefined,
+): PastBout["result"] | null {
+  switch (outcome?.toLowerCase()) {
+    case "w":
+      return "win";
+    case "l":
+      return "loss";
+    case "d":
+      return "draw";
+    case "nc":
+      return "nc";
+    default:
+      return null;
+  }
+}
+
 function parsePastBout(
   rawBout: NonNullable<EspnAthleteProfile["recentBouts"]>[number],
 ): PastBout | null {
   if (!rawBout.opponent) return null;
 
-  const outcome = rawBout.outcome?.toLowerCase();
-  const result =
-    outcome === "w"
-      ? "win"
-      : outcome === "l"
-        ? "loss"
-        : outcome === "d"
-          ? "draw"
-          : outcome === "nc"
-            ? "nc"
-            : null;
-
+  const result = parsePastBoutResult(rawBout.outcome);
   if (!result) return null;
 
   return {
@@ -279,6 +281,32 @@ function cornerForCompetitor(competitor: EspnCompetitor): Corner {
   return competitor.order === 2 ? "blue" : "red";
 }
 
+function parseSegment(slug: string | undefined): Bout["segment"] {
+  switch (slug) {
+    case "early-prelims":
+      return "early-prelims";
+    case "prelims":
+      return "prelims";
+    default:
+      return "main-card";
+  }
+}
+
+function fighterForCorner(
+  raw: EspnRawPayload,
+  competition: EspnCompetition,
+  corner: Corner,
+): Fighter | null {
+  const competitor = competition.competitors?.find(
+    (candidate) => cornerForCompetitor(candidate) === corner,
+  );
+  const profile = raw.athletes?.find(
+    (candidate) => candidate.id === (competitor?.athlete?.id ?? competitor?.id),
+  );
+
+  return profile ? parseFighter(raw, profile) : null;
+}
+
 function parseResult(competition: EspnCompetition): BoutResult | undefined {
   if (parseStatus(competition) !== "final") return undefined;
 
@@ -312,21 +340,8 @@ function parseBout(
 
   const canonicalId = raw.canonicalIds?.bouts?.[competition.id];
   const weightClass = parseWeightClass(competition.type?.slug);
-  const redCompetitor = competition.competitors?.find(
-    (competitor) => cornerForCompetitor(competitor) === "red",
-  );
-  const blueCompetitor = competition.competitors?.find(
-    (competitor) => cornerForCompetitor(competitor) === "blue",
-  );
-  const redProfile = raw.athletes?.find(
-    (profile) => profile.id === (redCompetitor?.athlete?.id ?? redCompetitor?.id),
-  );
-  const blueProfile = raw.athletes?.find(
-    (profile) =>
-      profile.id === (blueCompetitor?.athlete?.id ?? blueCompetitor?.id),
-  );
-  const redFighter = redProfile ? parseFighter(raw, redProfile) : null;
-  const blueFighter = blueProfile ? parseFighter(raw, blueProfile) : null;
+  const redFighter = fighterForCorner(raw, competition, "red");
+  const blueFighter = fighterForCorner(raw, competition, "blue");
   const scheduledPeriods = competition.format?.regulation?.periods;
 
   if (
@@ -343,19 +358,13 @@ function parseBout(
   const status = parseStatus(competition);
   const result = parseResult(competition);
   const currentRound = competition.status?.period;
-  const segment =
-    competition.segment?.slug === "early-prelims"
-      ? "early-prelims"
-      : competition.segment?.slug === "prelims"
-        ? "prelims"
-        : "main-card";
 
   return {
     id: canonicalId,
     externalRefs: [espnRef(competition.id)],
     eventId,
     cardPosition: competition.cardPosition,
-    segment,
+    segment: parseSegment(competition.segment?.slug),
     weightClass,
     scheduledRounds: scheduledPeriods,
     titleFight: competition.titleFight ?? false,
@@ -404,7 +413,7 @@ function parseEvent(raw: EspnRawPayload, ref: ExternalRef): UfcEvent | null {
 }
 
 function parseRoundUpdates(raw: EspnRawPayload, bout: Bout): RoundUpdate[] {
-  const ref = findEspnRef(bout.externalRefs);
+  const ref = bout.externalRefs.find(({ source }) => source === "espn");
   if (!ref) return [];
 
   const knownCompetition = raw.event?.header?.competitions?.some(
@@ -413,18 +422,24 @@ function parseRoundUpdates(raw: EspnRawPayload, bout: Bout): RoundUpdate[] {
   if (!knownCompetition) return [];
 
   return (raw.rounds ?? [])
-    .filter(
-      (round) =>
-        round.competitionId === ref.id &&
-        round.status?.type?.completed === true &&
-        round.period !== undefined,
-    )
-    .map((round) => ({
-      boutId: bout.id,
-      round: round.period as number,
-      ...(round.summary === undefined ? {} : { summary: round.summary }),
-      provenance: provenance(raw),
-    }))
+    .flatMap((round): RoundUpdate[] => {
+      if (
+        round.competitionId !== ref.id ||
+        round.status?.type?.completed !== true ||
+        round.period === undefined
+      ) {
+        return [];
+      }
+
+      return [
+        {
+          boutId: bout.id,
+          round: round.period,
+          ...(round.summary === undefined ? {} : { summary: round.summary }),
+          provenance: provenance(raw),
+        },
+      ];
+    })
     .sort((left, right) => left.round - right.round);
 }
 

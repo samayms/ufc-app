@@ -12,38 +12,45 @@ interface LiveBlogEntry {
 const boutEntries: Record<string, LiveBlogEntry> =
   liveBlogFixture.boutEntries;
 
-const decodeEntities = (value: string): string =>
-  value
+/** The live blog's own score line: read for the score, excluded from prose. */
+const SCORE_LINE = /Sherdog scores the round/i;
+
+function decodeEntities(value: string): string {
+  return value
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
     .replace(/&#(?:39|x27);/gi, "'");
+}
 
-const stripTags = (html: string): string =>
-  decodeEntities(
+function stripTags(html: string): string {
+  return decodeEntities(
     html
       .replace(/<br\s*\/?>/gi, " ")
       .replace(/<[^>]*>/g, " "),
   )
     .replace(/\s+/g, " ")
     .trim();
+}
 
-const lastName = (name: string): string =>
-  name.trim().split(/\s+/).at(-1) ?? "";
+function lastName(name: string): string {
+  return name.trim().split(/\s+/).at(-1) ?? "";
+}
 
-const normalizeName = (name: string): string =>
-  name
+function normalizeName(name: string): string {
+  return name
     .normalize("NFKD")
     .replace(/\p{Diacritic}/gu, "")
     .replace(/[^\p{Letter}\p{Number}]/gu, "")
     .toLocaleLowerCase("en");
+}
 
-const scoreForBout = (
+function scoreForBout(
   scoreText: string,
   bout: Bout,
-): Record<Corner, number> | undefined => {
+): Record<Corner, number> | undefined {
   const scoreMatch =
     /Sherdog scores the round\s+(\d+)\s*-\s*(\d+)\s+([^\s.,;:!?]+)/i.exec(
       scoreText,
@@ -65,14 +72,12 @@ const scoreForBout = (
     return undefined;
   }
 
-  const otherCorner: Corner = scoredCorner === "red" ? "blue" : "red";
-  return {
-    [scoredCorner]: highScore,
-    [otherCorner]: lowScore,
-  } as Record<Corner, number>;
-};
+  return scoredCorner === "red"
+    ? { red: highScore, blue: lowScore }
+    : { red: lowScore, blue: highScore };
+}
 
-const parseRoundUpdates = (html: string, bout: Bout): RoundUpdate[] => {
+function parseRoundUpdates(html: string, bout: Bout): RoundUpdate[] {
   const headingPattern = /<h[1-6][^>]*>\s*Round\s+(\d+)\s*<\/h[1-6]>/gi;
   const headings = [...html.matchAll(headingPattern)];
 
@@ -86,14 +91,12 @@ const parseRoundUpdates = (html: string, bout: Bout): RoundUpdate[] => {
         .map((match) => stripTags(match[1] ?? ""))
         .filter(Boolean);
       const scoreText = paragraphs.find((paragraph) =>
-        /Sherdog scores the round/i.test(paragraph),
+        SCORE_LINE.test(paragraph),
       );
       const summary = paragraphs
-        .filter((paragraph) => !/Sherdog scores the round/i.test(paragraph))
+        .filter((paragraph) => !SCORE_LINE.test(paragraph))
         .join(" ");
-      const score = scoreText
-        ? scoreForBout(scoreText, bout)
-        : undefined;
+      const score = scoreText ? scoreForBout(scoreText, bout) : undefined;
       const update: RoundUpdate = {
         boutId: bout.id,
         round,
@@ -115,11 +118,11 @@ const parseRoundUpdates = (html: string, bout: Bout): RoundUpdate[] => {
       return update;
     })
     .sort((left, right) => left.round - right.round);
-};
+}
 
-export const createSherdogSource = (
+export function createSherdogSource(
   config: SourceConfig,
-): RoundCommentarySource => {
+): RoundCommentarySource {
   if (config.mode === "live") {
     throw new Error("sherdog live mode not available yet");
   }
@@ -130,4 +133,4 @@ export const createSherdogSource = (
       return entry ? parseRoundUpdates(entry.html, bout) : [];
     },
   };
-};
+}

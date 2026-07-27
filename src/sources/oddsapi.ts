@@ -1,4 +1,5 @@
 import rawOdds from "../fixtures/oddsapi/raw.json";
+import { americanToImpliedProb } from "../lib/oddsMath.ts";
 import type {
   Bout,
   Corner,
@@ -31,12 +32,6 @@ interface OddsApiEvent {
 }
 
 const oddsEvents = rawOdds as OddsApiEvent[];
-
-function impliedProbability(moneyline: number): number {
-  return moneyline < 0
-    ? -moneyline / (-moneyline + 100)
-    : 100 / (moneyline + 100);
-}
 
 function findCorner(bout: Bout, fighterName: string): Corner | null {
   if (bout.fighters.red.name === fighterName) {
@@ -88,7 +83,7 @@ function parseSnapshot(bout: Bout): OddsSnapshot | null {
           moneyline: outcome.price,
           book: bookmaker.key,
         },
-        impliedProbability: impliedProbability(outcome.price),
+        impliedProbability: americanToImpliedProb(outcome.price),
       });
     }
   }

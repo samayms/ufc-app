@@ -196,6 +196,10 @@ function parsePastBout(raw: CitoPastBout): PastBout {
   };
 }
 
+function findFighter(id: string): CitoFighter | undefined {
+  return fixture.fighter_responses.find(({ data }) => data.id === id)?.data;
+}
+
 function parseFighter(raw: CitoFighter): Fighter | null {
   const canonicalId = fixture.canonical_ids.fighters[raw.id];
   if (canonicalId === undefined) {
@@ -234,16 +238,23 @@ function parseBoutResult(raw: CitoBoutResult): BoutResult {
   };
 }
 
+function parseSegment(cardSegment: string): Bout["segment"] {
+  switch (cardSegment) {
+    case "main_card":
+      return "main-card";
+    case "early_prelims":
+      return "early-prelims";
+    default:
+      return "prelims";
+  }
+}
+
 function parseBout(raw: CitoBout, eventId: string): Bout | null {
   const id = fixture.canonical_ids.bouts[raw.id];
   const weightClass = weightClasses[raw.weight_class];
   const status = statuses[raw.status];
-  const redRaw = fixture.fighter_responses.find(
-    ({ data }) => data.id === raw.red_fighter_id,
-  )?.data;
-  const blueRaw = fixture.fighter_responses.find(
-    ({ data }) => data.id === raw.blue_fighter_id,
-  )?.data;
+  const redRaw = findFighter(raw.red_fighter_id);
+  const blueRaw = findFighter(raw.blue_fighter_id);
   const red = redRaw === undefined ? null : parseFighter(redRaw);
   const blue = blueRaw === undefined ? null : parseFighter(blueRaw);
 
@@ -262,12 +273,7 @@ function parseBout(raw: CitoBout, eventId: string): Bout | null {
     externalRefs: [{ source: "cito", id: raw.id }],
     eventId,
     cardPosition: raw.card_order,
-    segment:
-      raw.card_segment === "main_card"
-        ? "main-card"
-        : raw.card_segment === "early_prelims"
-          ? "early-prelims"
-          : "prelims",
+    segment: parseSegment(raw.card_segment),
     weightClass,
     scheduledRounds: raw.scheduled_rounds === 5 ? 5 : 3,
     titleFight: raw.title_fight,
@@ -368,9 +374,7 @@ export function createCitoSource(
         return null;
       }
 
-      const raw = fixture.fighter_responses.find(
-        ({ data }) => data.id === ref.id,
-      )?.data;
+      const raw = findFighter(ref.id);
       return raw === undefined ? null : parseFighter(raw);
     },
   };

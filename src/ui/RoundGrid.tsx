@@ -48,8 +48,13 @@ export function RoundGrid({ view }: { view: BoutView }) {
     );
   }
 
-  // Prose: the latest-round summary, preferring Sherdog's live blog.
-  const latest = (["sherdog", ...sources] as SourceId[])
+  // Prose: the latest-round summary from any source (including summary-only
+  // ones excluded from the table), preferring Sherdog's live blog.
+  const proseSources = [
+    "sherdog",
+    ...(Object.keys(rounds) as SourceId[]).filter((s) => s !== "sherdog"),
+  ] as SourceId[];
+  const latest = proseSources
     .flatMap((s) => rounds[s] ?? [])
     .filter((u) => u.summary)
     .sort((a, b) => b.round - a.round)[0];

@@ -20,7 +20,7 @@ const STAT_ROWS: { key: StatKey; label: string; fmt?: (n: number) => string }[] 
   { key: "knockdowns", label: "Knockdowns" },
 ];
 
-function totals(view: BoutView, corner: Corner): RoundStats {
+function totals(view: BoutView, corner: Corner): Required<RoundStats> {
   const sums: Required<RoundStats> = {
     significantStrikes: 0,
     totalStrikes: 0,
@@ -57,8 +57,8 @@ export function RoundStatsPanel({ view }: { view: BoutView }) {
       </div>
       <div className="stats">
         {STAT_ROWS.map(({ key, label, fmt }) => {
-          const r = red[key] ?? 0;
-          const b = blue[key] ?? 0;
+          const r = red[key];
+          const b = blue[key];
           const max = Math.max(r, b, 1);
           return (
             <div key={key} className="stat-row">
