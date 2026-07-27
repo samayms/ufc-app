@@ -2,6 +2,20 @@ import type { BoutView } from "../schema/types.ts";
 
 export type RoundSelection = number | "total";
 
+export function completedRounds(view: BoutView): number[] {
+  return [
+    ...new Set(
+      Object.values(view.rounds)
+        .flat()
+        .map((round) => round.round),
+    ),
+  ].sort((a, b) => a - b);
+}
+
+export function defaultRoundSelection(view: BoutView): RoundSelection {
+  return completedRounds(view).at(-1) ?? 1;
+}
+
 export function RoundSelector({
   view,
   value,
@@ -11,11 +25,7 @@ export function RoundSelector({
   value: RoundSelection;
   onChange: (round: RoundSelection) => void;
 }) {
-  const completed = new Set(
-    Object.values(view.rounds)
-      .flat()
-      .map((round) => round.round),
-  );
+  const completed = new Set(completedRounds(view));
 
   return (
     <div className="round-tabs" role="tablist" aria-label="Round">

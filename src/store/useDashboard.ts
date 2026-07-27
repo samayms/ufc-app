@@ -22,6 +22,21 @@ import { loadFixtureEvent } from "./fixtureEvent.ts";
 
 const config: SourceConfig = { mode: "fixture" };
 
+export type DashboardDemoState =
+  | "default"
+  | "loading"
+  | "error"
+  | "stale"
+  | "live";
+
+export interface DashboardLoadState {
+  status: "loading" | "ready" | "error";
+  data: DashboardState | null;
+  stale: boolean;
+  message?: string;
+  reload: () => void;
+}
+
 /** Journalists whose scorecards we embed; trimmed once activity is confirmed. */
 const SCORECARD_ACCOUNTS: ScorecardAccount[] = [
   { handle: "arielhelwani", displayName: "Ariel Helwani", active: true },
@@ -31,7 +46,7 @@ const SCORECARD_ACCOUNTS: ScorecardAccount[] = [
   { handle: "MMAJunkie", displayName: "MMA Junkie", active: true },
 ];
 
-async function assemble(): Promise<DashboardState> {
+export async function assembleDashboard(): Promise<DashboardState> {
   const event = loadFixtureEvent();
   const polymarket = createPolymarketSource(config);
   const oddsApi = createOddsApiSource(config);
@@ -81,16 +96,110 @@ async function assemble(): Promise<DashboardState> {
   return { event, boutViews, scorecardAccounts: SCORECARD_ACCOUNTS };
 }
 
-export function useDashboard(): DashboardState | null {
-  const [state, setState] = useState<DashboardState | null>(null);
+export function dashboardDemoState(search: string): DashboardDemoState {
+  const requested = new URLSearchParams(search).get("demo");
+  return requested === "loading" ||
+    requested === "error" ||
+    requested === "stale" ||
+    requested === "live"
+    ? requested
+    : "default";
+}
+
+function applyLiveDemo(state: DashboardState): DashboardState {
+  const liveBout =
+    state.event.bouts.find((bout) => bout.status === "between-rounds") ??
+    state.event.bouts[0];
+  if (!liveBout) return state;
+  const baseView = state.boutViews[liveBout.id];
+  if (!baseView) return state;
+
+  const replacement = {
+    ...liveBout,
+    status: "in-round" as const,
+    currentRound: Math.min(
+      (liveBout.currentRound ?? 1) + 1,
+      liveBout.scheduledRounds,
+    ),
+  };
+  return {
+    ...state,
+    event: {
+      ...state.event,
+      bouts: state.event.bouts.map((bout) =>
+        bout.id === replacement.id ? replacement : bout,
+      ),
+    },
+    boutViews: {
+      ...state.boutViews,
+      [replacement.id]: {
+        ...baseView,
+        bout: replacement,
+      },
+    },
+  };
+}
+
+export function useDashboard(): DashboardLoadState {
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useState<Omit<DashboardLoadState, "reload">>({
+    status: "loading",
+    data: null,
+    stale: false,
+  });
+
   useEffect(() => {
     let cancelled = false;
-    assemble().then((s) => {
-      if (!cancelled) setState(s);
-    });
+    const demo = dashboardDemoState(window.location.search);
+    setState({ status: "loading", data: null, stale: false });
+
+    if (demo === "loading") {
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (demo === "error") {
+      setState({
+        status: "error",
+        data: null,
+        stale: false,
+        message:
+          "The event snapshot could not be assembled. No cached fight data was replaced.",
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    assembleDashboard()
+      .then((next) => {
+        if (cancelled) return;
+        setState({
+          status: "ready",
+          data: demo === "live" ? applyLiveDemo(next) : next,
+          stale: demo === "stale",
+        });
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setState({
+          status: "error",
+          data: null,
+          stale: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : "The event snapshot could not be assembled.",
+        });
+      });
+
     return () => {
       cancelled = true;
     };
-  }, []);
-  return state;
+  }, [attempt]);
+
+  return {
+    ...state,
+    reload: () => setAttempt((current) => current + 1),
+  };
 }

@@ -10,6 +10,7 @@ import { OddsPanel } from "./ui/OddsPanel.tsx";
 import { RecentForm } from "./ui/RecentForm.tsx";
 import { RoundGrid } from "./ui/RoundGrid.tsx";
 import {
+  defaultRoundSelection,
   RoundSelector,
   type RoundSelection,
 } from "./ui/RoundSelector.tsx";
@@ -23,15 +24,9 @@ import { SourceStatus } from "./ui/SourceStatus.tsx";
 import { TopBar } from "./ui/TopBar.tsx";
 import "./ui/dashboard.css";
 
-function latestRound(view: NonNullable<ReturnType<typeof useDashboard>>["boutViews"][string]) {
-  const completed = Object.values(view.rounds)
-    .flat()
-    .map((round) => round.round);
-  return completed.length ? Math.max(...completed) : 1;
-}
-
 export default function App() {
-  const state = useDashboard();
+  const dashboard = useDashboard();
+  const state = dashboard.data;
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<AppTab>("fight");
   const [section, setSection] = useState<FightSection>("summary");
@@ -45,15 +40,31 @@ export default function App() {
     );
     const id = selected ?? active?.id ?? state.event.bouts[0]?.id;
     const nextView = id ? state.boutViews[id] : undefined;
-    if (nextView) setRound(latestRound(nextView));
+    if (nextView) setRound(defaultRoundSelection(nextView));
   }, [selected, state]);
 
-  if (!state) {
+  if (dashboard.status === "loading") {
     return (
       <div className="app-state loading" role="status" aria-live="polite">
         <span className="loading-mark" aria-hidden="true" />
         <strong>Loading fight data</strong>
         <span>Assembling the latest valid source snapshots…</span>
+      </div>
+    );
+  }
+
+  if (dashboard.status === "error" || !state) {
+    return (
+      <div className="app-state error-state" role="alert">
+        <span className="error-code num">SOURCE ERROR</span>
+        <strong>Fight data is temporarily unavailable</strong>
+        <span>
+          {dashboard.message ??
+            "The latest snapshot could not be loaded. Existing completed-round data was not cleared."}
+        </span>
+        <button type="button" className="retry-button" onClick={dashboard.reload}>
+          Retry snapshot
+        </button>
       </div>
     );
   }
@@ -73,7 +84,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar event={event} />
+      <TopBar event={event} stale={dashboard.stale} />
       <div className="desktop-tabs">
         <BottomNav active={tab} onChange={setTab} />
       </div>
@@ -92,6 +103,14 @@ export default function App() {
             (view ? (
               <div className="fight-screen">
                 <BoutHeader bout={view.bout} />
+                {dashboard.stale && (
+                  <div className="state-notice" role="status">
+                    <strong>Stale snapshot</strong>
+                    <span>
+                      Showing the last valid completed-round data while sources reconnect.
+                    </span>
+                  </div>
+                )}
                 <MarketStrip view={view} onOpen={() => setSection("odds")} />
                 <SectionTabs active={section} onChange={setSection} />
                 {(section === "summary" || section === "stats") && (
@@ -146,7 +165,9 @@ export default function App() {
               />
             </section>
           )}
-          {tab === "sources" && <SourceStatus state={state} />}
+          {tab === "sources" && (
+            <SourceStatus state={state} stale={dashboard.stale} />
+          )}
         </main>
       </div>
       <div className="mobile-nav">

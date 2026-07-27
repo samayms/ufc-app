@@ -189,6 +189,11 @@
   animation: pulse 1.6s ease-in-out infinite;
 }
 
+.sync-dot.is-stale {
+  background: var(--market);
+  animation: none;
+}
+
 .freshness {
   color: var(--text-faint);
   font-family: var(--font-data);
@@ -517,6 +522,56 @@
 }
 
 .round-tab-total {
+  text-transform: uppercase;
+}
+
+/* Resiliency states ------------------------------------------------------ */
+
+.state-notice {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--market) 34%, transparent);
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: var(--market-dim);
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+.state-notice strong {
+  flex: none;
+  color: var(--market);
+  font-family: var(--font-data);
+  font-size: 0.52rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.error-state {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.error-code {
+  color: var(--red-corner-strong);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+}
+
+.retry-button {
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--surface-3);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
