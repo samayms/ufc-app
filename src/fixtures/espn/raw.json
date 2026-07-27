@@ -1,0 +1,761 @@
+{
+  "_comment": "SYNTHETIC fixture shaped like ESPN MMA site API summary and athlete responses. canonicalIds is fixture-only reconciliation metadata and is not part of an ESPN response.",
+  "fetchedAt": "2026-07-26T02:41:00Z",
+  "canonicalIds": {
+    "events": {
+      "600051234": "evt-fixture-001"
+    },
+    "bouts": {
+      "401770001": "bout-main",
+      "401770002": "bout-comain",
+      "401770003": "bout-3",
+      "401770004": "bout-4",
+      "401770005": "bout-5"
+    },
+    "fighters": {
+      "5088801": "ftr-reyes",
+      "5088802": "ftr-volkov",
+      "5088803": "ftr-castillo",
+      "5088804": "ftr-okafor",
+      "5088805": "ftr-hendricks",
+      "5088806": "ftr-saito",
+      "5088807": "ftr-mbeki",
+      "5088808": "ftr-carvalho",
+      "5088809": "ftr-novak",
+      "5088810": "ftr-tuivasa"
+    }
+  },
+  "event": {
+    "header": {
+      "id": "600051234",
+      "uid": "s:3301~l:3321~e:600051234",
+      "name": "UFC Fight Night: Reyes vs. Volkov",
+      "shortName": "Reyes vs. Volkov",
+      "date": "2026-07-25T23:00:00Z",
+      "venue": {
+        "id": "1231",
+        "fullName": "UFC Apex",
+        "address": {
+          "city": "Las Vegas",
+          "state": "Nevada",
+          "country": "USA"
+        }
+      },
+      "competitions": [
+        {
+          "id": "401770001",
+          "uid": "s:3301~l:3321~e:600051234~c:401770001",
+          "date": "2026-07-26T02:30:00Z",
+          "cardPosition": 1,
+          "segment": {
+            "slug": "main-card",
+            "displayName": "Main Card"
+          },
+          "type": {
+            "slug": "lightweight",
+            "text": "Lightweight"
+          },
+          "format": {
+            "regulation": {
+              "periods": 5,
+              "displayName": "Round"
+            }
+          },
+          "titleFight": false,
+          "status": {
+            "period": 2,
+            "displayClock": "0:00",
+            "type": {
+              "id": "24",
+              "name": "STATUS_HALFTIME",
+              "state": "in",
+              "completed": false,
+              "description": "Between Rounds",
+              "detail": "End of Round 2"
+            }
+          },
+          "competitors": [
+            {
+              "id": "5088801",
+              "uid": "s:3301~a:5088801",
+              "order": 1,
+              "homeAway": "home",
+              "winner": false,
+              "athlete": {
+                "id": "5088801",
+                "displayName": "Danilo Reyes",
+                "shortName": "D. Reyes"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "17-3-0 (0 NC)"
+                }
+              ]
+            },
+            {
+              "id": "5088802",
+              "uid": "s:3301~a:5088802",
+              "order": 2,
+              "homeAway": "away",
+              "winner": false,
+              "athlete": {
+                "id": "5088802",
+                "displayName": "Artem Volkov",
+                "shortName": "A. Volkov"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "21-5-1 (0 NC)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "401770002",
+          "uid": "s:3301~l:3321~e:600051234~c:401770002",
+          "date": "2026-07-26T02:00:00Z",
+          "cardPosition": 2,
+          "segment": {
+            "slug": "main-card",
+            "displayName": "Main Card"
+          },
+          "type": {
+            "slug": "womens-flyweight",
+            "text": "Women's Flyweight"
+          },
+          "format": {
+            "regulation": {
+              "periods": 3,
+              "displayName": "Round"
+            }
+          },
+          "titleFight": false,
+          "status": {
+            "period": 2,
+            "displayClock": "3:17",
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true,
+              "description": "Final",
+              "detail": "R2, 3:17 - Submission"
+            }
+          },
+          "result": {
+            "method": {
+              "id": "2",
+              "name": "SUBMISSION",
+              "displayName": "Submission"
+            }
+          },
+          "competitors": [
+            {
+              "id": "5088803",
+              "uid": "s:3301~a:5088803",
+              "order": 1,
+              "homeAway": "home",
+              "winner": false,
+              "athlete": {
+                "id": "5088803",
+                "displayName": "Marisol Castillo",
+                "shortName": "M. Castillo"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "12-2-0 (0 NC)"
+                }
+              ]
+            },
+            {
+              "id": "5088804",
+              "uid": "s:3301~a:5088804",
+              "order": 2,
+              "homeAway": "away",
+              "winner": true,
+              "athlete": {
+                "id": "5088804",
+                "displayName": "Adaeze Okafor",
+                "shortName": "A. Okafor"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "14-1-0 (1 NC)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "401770003",
+          "uid": "s:3301~l:3321~e:600051234~c:401770003",
+          "date": "2026-07-26T01:30:00Z",
+          "cardPosition": 3,
+          "segment": {
+            "slug": "main-card",
+            "displayName": "Main Card"
+          },
+          "type": {
+            "slug": "middleweight",
+            "text": "Middleweight"
+          },
+          "format": {
+            "regulation": {
+              "periods": 3,
+              "displayName": "Round"
+            }
+          },
+          "titleFight": false,
+          "status": {
+            "period": 0,
+            "displayClock": "5:00",
+            "type": {
+              "id": "1",
+              "name": "STATUS_SCHEDULED",
+              "state": "pre",
+              "completed": false,
+              "description": "Scheduled",
+              "detail": "Upcoming"
+            }
+          },
+          "competitors": [
+            {
+              "id": "5088805",
+              "uid": "s:3301~a:5088805",
+              "order": 1,
+              "homeAway": "home",
+              "winner": false,
+              "athlete": {
+                "id": "5088805",
+                "displayName": "Cole Hendricks",
+                "shortName": "C. Hendricks"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "10-4-0 (0 NC)"
+                }
+              ]
+            },
+            {
+              "id": "5088806",
+              "uid": "s:3301~a:5088806",
+              "order": 2,
+              "homeAway": "away",
+              "winner": false,
+              "athlete": {
+                "id": "5088806",
+                "displayName": "Kenji Saito",
+                "shortName": "K. Saito"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "15-6-2 (0 NC)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "401770004",
+          "uid": "s:3301~l:3321~e:600051234~c:401770004",
+          "date": "2026-07-26T00:30:00Z",
+          "cardPosition": 4,
+          "segment": {
+            "slug": "prelims",
+            "displayName": "Prelims"
+          },
+          "type": {
+            "slug": "bantamweight",
+            "text": "Bantamweight"
+          },
+          "format": {
+            "regulation": {
+              "periods": 3,
+              "displayName": "Round"
+            }
+          },
+          "titleFight": false,
+          "status": {
+            "period": 0,
+            "displayClock": "5:00",
+            "type": {
+              "id": "1",
+              "name": "STATUS_SCHEDULED",
+              "state": "pre",
+              "completed": false,
+              "description": "Scheduled",
+              "detail": "Upcoming"
+            }
+          },
+          "competitors": [
+            {
+              "id": "5088807",
+              "uid": "s:3301~a:5088807",
+              "order": 1,
+              "homeAway": "home",
+              "winner": false,
+              "athlete": {
+                "id": "5088807",
+                "displayName": "Sipho Mbeki",
+                "shortName": "S. Mbeki"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "8-1-0 (0 NC)"
+                }
+              ]
+            },
+            {
+              "id": "5088808",
+              "uid": "s:3301~a:5088808",
+              "order": 2,
+              "homeAway": "away",
+              "winner": false,
+              "athlete": {
+                "id": "5088808",
+                "displayName": "Rafael Carvalho",
+                "shortName": "R. Carvalho"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "11-3-0 (0 NC)"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "401770005",
+          "uid": "s:3301~l:3321~e:600051234~c:401770005",
+          "date": "2026-07-25T23:30:00Z",
+          "cardPosition": 5,
+          "segment": {
+            "slug": "prelims",
+            "displayName": "Prelims"
+          },
+          "type": {
+            "slug": "heavyweight",
+            "text": "Heavyweight"
+          },
+          "format": {
+            "regulation": {
+              "periods": 3,
+              "displayName": "Round"
+            }
+          },
+          "titleFight": false,
+          "status": {
+            "period": 1,
+            "displayClock": "0:48",
+            "type": {
+              "id": "3",
+              "name": "STATUS_FINAL",
+              "state": "post",
+              "completed": true,
+              "description": "Final",
+              "detail": "R1, 0:48 - TKO"
+            }
+          },
+          "result": {
+            "method": {
+              "id": "1",
+              "name": "TKO",
+              "displayName": "TKO"
+            }
+          },
+          "competitors": [
+            {
+              "id": "5088809",
+              "uid": "s:3301~a:5088809",
+              "order": 1,
+              "homeAway": "home",
+              "winner": true,
+              "athlete": {
+                "id": "5088809",
+                "displayName": "Petr Novak",
+                "shortName": "P. Novak"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "13-7-0 (0 NC)"
+                }
+              ]
+            },
+            {
+              "id": "5088810",
+              "uid": "s:3301~a:5088810",
+              "order": 2,
+              "homeAway": "away",
+              "winner": false,
+              "athlete": {
+                "id": "5088810",
+                "displayName": "Manaia Tuivasa",
+                "shortName": "M. Tuivasa"
+              },
+              "records": [
+                {
+                  "type": "total",
+                  "summary": "9-5-1 (0 NC)"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "rounds": [
+    {
+      "competitionId": "401770001",
+      "period": 1,
+      "status": {
+        "type": {
+          "name": "STATUS_END_PERIOD",
+          "completed": true
+        }
+      },
+      "summary": "Reyes controlled the center and repeatedly found a home for his left hand, while Volkov answered with body kicks and a late takedown."
+    },
+    {
+      "competitionId": "401770001",
+      "period": 2,
+      "status": {
+        "type": {
+          "name": "STATUS_END_PERIOD",
+          "completed": true
+        }
+      },
+      "summary": "Volkov pressed forward behind combinations, but Reyes finished the round strongly with counters along the fence."
+    },
+    {
+      "competitionId": "401770002",
+      "period": 1,
+      "status": {
+        "type": {
+          "name": "STATUS_END_PERIOD",
+          "completed": true
+        }
+      },
+      "summary": "Castillo started quickly on the feet before Okafor changed levels and spent the final two minutes threatening from top position."
+    },
+    {
+      "competitionId": "401770002",
+      "period": 2,
+      "status": {
+        "type": {
+          "name": "STATUS_FINAL",
+          "completed": true
+        }
+      },
+      "summary": "Okafor secured the back during a scramble and forced the tap with a rear-naked choke at 3:17 of Round 2."
+    },
+    {
+      "competitionId": "401770005",
+      "period": 1,
+      "status": {
+        "type": {
+          "name": "STATUS_FINAL",
+          "completed": true
+        }
+      },
+      "summary": "Novak dropped Tuivasa with a right hand and closed the show with punches at 0:48 of the opening round."
+    }
+  ],
+  "athletes": [
+    {
+      "id": "5088801",
+      "uid": "s:3301~a:5088801",
+      "firstName": "Danilo",
+      "lastName": "Reyes",
+      "displayName": "Danilo Reyes",
+      "nickname": "El Rayo",
+      "age": 29,
+      "height": 70.0787,
+      "reach": 72.0472,
+      "stance": {
+        "id": "2",
+        "text": "southpaw"
+      },
+      "citizenship": "Mexico",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "17-3-0 (0 NC)"
+          }
+        ]
+      },
+      "recentBouts": [
+        {
+          "opponent": "Kai Anderson",
+          "outcome": "W",
+          "method": "TKO",
+          "period": 2,
+          "date": "2026-03-14",
+          "event": "UFC 314"
+        },
+        {
+          "opponent": "Yusuf Demir",
+          "outcome": "W",
+          "method": "Unanimous Decision",
+          "date": "2025-11-02",
+          "event": "UFC Fight Night"
+        },
+        {
+          "opponent": "Blake Corrigan",
+          "outcome": "L",
+          "method": "Split Decision",
+          "date": "2025-06-21",
+          "event": "UFC 309"
+        }
+      ]
+    },
+    {
+      "id": "5088802",
+      "uid": "s:3301~a:5088802",
+      "firstName": "Artem",
+      "lastName": "Volkov",
+      "displayName": "Artem Volkov",
+      "nickname": "The Icebreaker",
+      "age": 32,
+      "height": 72.0472,
+      "reach": 74.0157,
+      "stance": {
+        "id": "1",
+        "text": "orthodox"
+      },
+      "citizenship": "Kazakhstan",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "21-5-1 (0 NC)"
+          }
+        ]
+      },
+      "recentBouts": [
+        {
+          "opponent": "Marcus Hale",
+          "outcome": "W",
+          "method": "Submission",
+          "period": 3,
+          "date": "2026-02-07",
+          "event": "UFC Fight Night"
+        },
+        {
+          "opponent": "Diego Fontes",
+          "outcome": "W",
+          "method": "KO",
+          "period": 1,
+          "date": "2025-09-13",
+          "event": "UFC 311"
+        },
+        {
+          "opponent": "Tomas Lindgren",
+          "outcome": "L",
+          "method": "Unanimous Decision",
+          "date": "2025-04-26",
+          "event": "UFC 307"
+        }
+      ]
+    },
+    {
+      "id": "5088803",
+      "uid": "s:3301~a:5088803",
+      "firstName": "Marisol",
+      "lastName": "Castillo",
+      "displayName": "Marisol Castillo",
+      "nickname": "La Serpiente",
+      "age": 27,
+      "height": 64.9606,
+      "reach": 66.1417,
+      "stance": {
+        "id": "1",
+        "text": "orthodox"
+      },
+      "citizenship": "Peru",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "12-2-0 (0 NC)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "5088804",
+      "uid": "s:3301~a:5088804",
+      "firstName": "Adaeze",
+      "lastName": "Okafor",
+      "displayName": "Adaeze Okafor",
+      "age": 30,
+      "height": 66.1417,
+      "reach": 66.9291,
+      "stance": {
+        "id": "3",
+        "text": "switch"
+      },
+      "citizenship": "Nigeria",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "14-1-0 (1 NC)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "5088805",
+      "uid": "s:3301~a:5088805",
+      "firstName": "Cole",
+      "lastName": "Hendricks",
+      "displayName": "Cole Hendricks",
+      "age": 31,
+      "height": 72.8346,
+      "reach": 74.8031,
+      "stance": {
+        "id": "1",
+        "text": "orthodox"
+      },
+      "citizenship": "United States",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "10-4-0 (0 NC)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "5088806",
+      "uid": "s:3301~a:5088806",
+      "firstName": "Kenji",
+      "lastName": "Saito",
+      "displayName": "Kenji Saito",
+      "nickname": "Typhoon",
+      "age": 34,
+      "height": 74.0157,
+      "reach": 75.9843,
+      "stance": {
+        "id": "2",
+        "text": "southpaw"
+      },
+      "citizenship": "Japan",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "15-6-2 (0 NC)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "5088807",
+      "uid": "s:3301~a:5088807",
+      "firstName": "Sipho",
+      "lastName": "Mbeki",
+      "displayName": "Sipho Mbeki",
+      "age": 25,
+      "height": 66.9291,
+      "reach": 68.8976,
+      "stance": {
+        "id": "1",
+        "text": "orthodox"
+      },
+      "citizenship": "South Africa",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "8-1-0 (0 NC)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "5088808",
+      "uid": "s:3301~a:5088808",
+      "firstName": "Rafael",
+      "lastName": "Carvalho",
+      "displayName": "Rafael Carvalho",
+      "nickname": "Foguete",
+      "age": 28,
+      "height": 68.1102,
+      "reach": 70.0787,
+      "stance": {
+        "id": "1",
+        "text": "orthodox"
+      },
+      "citizenship": "Brazil",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "11-3-0 (0 NC)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "5088809",
+      "uid": "s:3301~a:5088809",
+      "firstName": "Petr",
+      "lastName": "Novak",
+      "displayName": "Petr Novak",
+      "nickname": "The Anvil",
+      "age": 35,
+      "height": 75.9843,
+      "reach": 77.9528,
+      "stance": {
+        "id": "1",
+        "text": "orthodox"
+      },
+      "citizenship": "Czech Republic",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "13-7-0 (0 NC)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "5088810",
+      "uid": "s:3301~a:5088810",
+      "firstName": "Manaia",
+      "lastName": "Tuivasa",
+      "displayName": "Manaia Tuivasa",
+      "age": 33,
+      "height": 74.8031,
+      "reach": 75.5906,
+      "stance": {
+        "id": "1",
+        "text": "orthodox"
+      },
+      "citizenship": "New Zealand",
+      "records": {
+        "items": [
+          {
+            "type": "total",
+            "summary": "9-5-1 (0 NC)"
+          }
+        ]
+      }
+    }
+  ]
+}
