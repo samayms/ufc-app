@@ -5,24 +5,76 @@ const SOURCES: {
   id: SourceId;
   name: string;
   detail: string;
+  cadence: string;
 }[] = [
-  { id: "espn", name: "ESPN FightCenter", detail: "fight state and round snapshots" },
-  { id: "sherdog", name: "Sherdog live blog", detail: "round narrative and scores" },
-  { id: "cito", name: "Cito", detail: "completed-round statistics" },
-  { id: "kalshi", name: "Kalshi", detail: "prediction market contracts" },
-  { id: "polymarket", name: "Polymarket", detail: "prediction market prices" },
-  { id: "odds-api", name: "The Odds API", detail: "sportsbook moneylines" },
-  { id: "x-embed", name: "Media embeds", detail: "optional scorecard posts" },
+  {
+    id: "espn",
+    name: "ESPN FightCenter",
+    detail: "Fight state and round snapshots",
+    cadence: "On dashboard refresh",
+  },
+  {
+    id: "sherdog",
+    name: "Sherdog live blog",
+    detail: "Round narrative and scores",
+    cadence: "On dashboard refresh",
+  },
+  {
+    id: "cito",
+    name: "Cito",
+    detail: "Completed-round statistics",
+    cadence: "On dashboard refresh",
+  },
+  {
+    id: "kalshi",
+    name: "Kalshi",
+    detail: "Prediction market contracts",
+    cadence: "On dashboard refresh",
+  },
+  {
+    id: "polymarket",
+    name: "Polymarket",
+    detail: "Prediction market prices",
+    cadence: "On dashboard refresh",
+  },
+  {
+    id: "odds-api",
+    name: "The Odds API",
+    detail: "Sportsbook moneylines",
+    cadence: "On dashboard refresh",
+  },
+  {
+    id: "x-embed",
+    name: "Media embeds",
+    detail: "Optional scorecard posts",
+    cadence: "Loaded on demand",
+  },
 ];
 
 function sourceTimes(state: DashboardState, source: SourceId) {
   const times: string[] = [];
+  if (state.event.provenance.source === source) {
+    times.push(state.event.provenance.fetchedAt);
+  }
   for (const view of Object.values(state.boutViews)) {
+    if (view.bout.provenance.source === source) {
+      times.push(view.bout.provenance.fetchedAt);
+    }
+    for (const fighter of Object.values(view.bout.fighters)) {
+      if (fighter.provenance.source === source) {
+        times.push(fighter.provenance.fetchedAt);
+      }
+    }
     for (const round of view.rounds[source] ?? []) {
       times.push(round.provenance.fetchedAt);
     }
     for (const odds of Object.values(view.latestOdds)) {
       if (odds.provenance.source === source) times.push(odds.provenance.fetchedAt);
+    }
+    for (const scorecard of view.scorecards) {
+      if (scorecard.provenance.source === source) {
+        times.push(scorecard.provenance.fetchedAt);
+      }
     }
   }
   return times.sort().at(-1);
@@ -35,36 +87,68 @@ export function SourceStatus({
   state: DashboardState;
   stale?: boolean;
 }) {
+  const sourceUpdates = SOURCES.map((source) => sourceTimes(state, source.id));
+  const lastSyncedAt = [
+    state.event.provenance.fetchedAt,
+    ...sourceUpdates.filter((time): time is string => time != null),
+  ]
+    .sort()
+    .at(-1);
+  const fixtureMode = state.event.provenance.synthetic;
+
   return (
     <section className="source-panel" aria-labelledby="source-title">
       <div className="page-heading">
         <div>
-          <span className="page-kicker">Data health</span>
-          <h2 id="source-title">Sources</h2>
+          <span className="page-kicker">Connection health</span>
+          <h2 id="source-title">Data feeds</h2>
         </div>
-        <span className="badge badge-synthetic">Fixture mode</span>
+      </div>
+      <div className="data-overview" aria-label="Overall data status">
+        <div className="data-overview-item">
+          <span>Mode</span>
+          <strong>{fixtureMode ? "Fixture data" : "Live data"}</strong>
+        </div>
+        <div className="data-overview-item">
+          <span>Connection</span>
+          <strong className={stale ? "is-stale" : "is-synced"}>
+            <span className="data-state-dot" aria-hidden="true" />
+            {stale ? "Stale" : "Synced"}
+          </strong>
+        </div>
+        <div className="data-overview-item">
+          <span>Last synced</span>
+          <strong className="num">
+            {lastSyncedAt ? fmtTime(lastSyncedAt) : "No snapshot"}
+          </strong>
+        </div>
       </div>
       <p className="source-intro">
-        Every adapter is isolated behind the normalized store. Missing data in one
-        source does not clear the last valid completed-round snapshot.
+        Feeds load independently. If one falls behind, completed-round data stays
+        visible until its next valid snapshot.
       </p>
       <div className="source-list">
-        {SOURCES.map((source) => {
-          const fetchedAt = sourceTimes(state, source.id);
+        {SOURCES.map((source, index) => {
+          const fetchedAt = sourceUpdates[index];
           const unavailable = fetchedAt == null;
           const status = unavailable
-            ? "Unavailable"
+            ? "Waiting"
             : stale
               ? "Stale"
-              : "Fixture";
+              : "Loaded";
           return (
             <div className="source-row" key={source.id}>
-              <div>
+              <div className="source-row-copy">
                 <strong>{source.name}</strong>
                 <span>{source.detail}</span>
-                <span className="source-time num">
-                  {fetchedAt ? `as of ${fmtTime(fetchedAt)}` : "no snapshot for selected card"}
-                </span>
+                <div className="source-meta">
+                  <span>{source.cadence}</span>
+                  <span className="source-time num">
+                    {fetchedAt
+                      ? `Updated ${fmtTime(fetchedAt)}`
+                      : "No snapshot for this card"}
+                  </span>
+                </div>
               </div>
               <span
                 className={`source-state source-state-${status.toLowerCase()}`}
@@ -76,7 +160,7 @@ export function SourceStatus({
         })}
       </div>
       <p className="privacy-note">
-        Personal, non-commercial use only. No source data is shared or published.
+        Personal, non-commercial use only. Feed data is never shared or published.
       </p>
     </section>
   );

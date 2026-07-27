@@ -3,7 +3,7 @@ export type AppTab = "fight" | "card" | "sources";
 const ITEMS: { id: AppTab; label: string; shortLabel: string }[] = [
   { id: "fight", label: "Live fight", shortLabel: "Fight" },
   { id: "card", label: "Event card", shortLabel: "Card" },
-  { id: "sources", label: "Source status", shortLabel: "Sources" },
+  { id: "sources", label: "Data health", shortLabel: "Data" },
 ];
 
 export function BottomNav({

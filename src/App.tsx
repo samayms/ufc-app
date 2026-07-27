@@ -21,7 +21,7 @@ import {
   type FightSection,
 } from "./ui/SectionTabs.tsx";
 import { SourceStatus } from "./ui/SourceStatus.tsx";
-import { TopBar } from "./ui/TopBar.tsx";
+import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
 import "./ui/dashboard.css";
 
 export default function App() {
@@ -84,11 +84,12 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar event={event} stale={dashboard.stale} />
+      <TopBar />
+      <EventSubheader event={event} />
       <div className="desktop-tabs">
         <BottomNav active={tab} onChange={setTab} />
       </div>
-      <div className="app-body">
+      <div className={`app-body${tab === "fight" ? " has-rail" : ""}`}>
         {tab === "fight" && (
           <aside className="desktop-rail">
             <CardRail

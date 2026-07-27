@@ -12,6 +12,7 @@ import {
 } from "./RoundSelector.tsx";
 import { RoundStatsPanel } from "./RoundStatsPanel.tsx";
 import { SourceStatus } from "./SourceStatus.tsx";
+import { EventSubheader, TopBar } from "./TopBar.tsx";
 
 describe("dashboard state surfaces", () => {
   it("parses only supported visual demo states", () => {
@@ -72,6 +73,30 @@ describe("dashboard state surfaces", () => {
       <SourceStatus state={state} stale />,
     );
     expect(stale).toContain("Stale");
-    expect(stale).toContain("last valid completed-round snapshot");
+    expect(stale).toContain("Fixture data");
+    expect(stale).toContain("Last synced");
+    expect(stale).toContain("On dashboard refresh");
+    expect(stale).toContain("completed-round data stays");
+  });
+
+  it("keeps diagnostics in Data and the UFC masthead clear", async () => {
+    const state = await assembleDashboard();
+    const topBar = renderToStaticMarkup(<TopBar />);
+    const eventSubheader = renderToStaticMarkup(
+      <EventSubheader event={state.event} />,
+    );
+    const sources = renderToStaticMarkup(<SourceStatus state={state} />);
+
+    expect(topBar).toContain("topbar-wordmark");
+    expect(topBar).not.toContain("<h1");
+    expect(topBar).not.toContain("Fight Night");
+    expect(topBar).not.toContain("Fixture data");
+    expect(topBar).not.toContain("synced");
+    expect(eventSubheader).toContain("Fight Night: Reyes vs. Volkov");
+    expect(eventSubheader).toContain(
+      'aria-label="UFC Fight Night: Reyes vs. Volkov"',
+    );
+    expect(sources).toContain("Data feeds");
+    expect(sources).toContain("Fixture data");
   });
 });
