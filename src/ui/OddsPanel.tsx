@@ -1,4 +1,5 @@
 import type { BoutView, OddsQuote, OddsSnapshot } from "../schema/types.ts";
+import { consensus } from "../lib/oddsMath.ts";
 import { fmtMoneyline, fmtNative, fmtPct, fmtTime } from "./format.ts";
 
 /**
@@ -133,12 +134,33 @@ export function OddsPanel({ view }: { view: BoutView }) {
   const { latestOdds, bout } = view;
   const finalText =
     bout.status === "final" ? "Market settled — bout is final." : "No market for this bout yet.";
+  const agg = consensus(Object.values(latestOdds));
   return (
     <section className="panel" aria-label="Odds comparison">
       <div className="panel-head">
         <h2>Markets</h2>
         <span className="freshness">implied win probability, red vs blue</span>
       </div>
+      {agg && agg.markets > 1 && (
+        <div className="consensus">
+          <span className="market-side">
+            <span className="market-pct num">{fmtPct(agg.red)}</span>
+            <span className="market-native num">
+              {fmtPct(agg.spread.red[0])}–{fmtPct(agg.spread.red[1])}
+            </span>
+          </span>
+          <SplitBar red={agg.red} blue={agg.blue} />
+          <span className="market-side market-side-blue">
+            <span className="market-pct num">{fmtPct(agg.blue)}</span>
+            <span className="market-native num">
+              {fmtPct(agg.spread.blue[0])}–{fmtPct(agg.spread.blue[1])}
+            </span>
+          </span>
+          <p className="market-note consensus-note">
+            Vig-free consensus across {agg.markets} markets · range shown below each side
+          </p>
+        </div>
+      )}
       <MarketBlock
         title="Kalshi"
         note="Mid of bid/ask, in contract cents."
