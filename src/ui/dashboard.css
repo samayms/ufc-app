@@ -133,12 +133,12 @@
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding:
-    max(9px, env(safe-area-inset-top))
-    max(15px, env(safe-area-inset-right))
+    calc(9px + env(safe-area-inset-top))
+    calc(15px + env(safe-area-inset-right))
     6px
-    max(15px, env(safe-area-inset-left));
+    calc(15px + env(safe-area-inset-left));
   background: color-mix(in srgb, var(--surface) 95%, transparent);
 }
 
@@ -1501,7 +1501,7 @@
 
 @media (min-width: 768px) {
   .topbar {
-    padding-top: 11px;
+    padding-top: calc(11px + env(safe-area-inset-top));
   }
 
   .event-subheader h1 {
@@ -1540,7 +1540,10 @@
   }
 
   .app-content {
-    padding: 18px 22px 26px;
+    padding:
+      18px max(22px, env(safe-area-inset-right))
+      calc(26px + env(safe-area-inset-bottom))
+      max(22px, env(safe-area-inset-left));
   }
 
   .fight-screen {
