@@ -5,3 +5,4 @@ dist/
 .claude/settings.local.json
 .claude/skills/
 .DS_Store
+.npm-cache/
