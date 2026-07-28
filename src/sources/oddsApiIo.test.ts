@@ -145,4 +145,35 @@ describe("Odds-API.io source", () => {
       kind: "unavailable",
     });
   });
+
+  it("fails closed for getTickHistory in live mode without an installed hook", async () => {
+    const source = createOddsApiIoSource({
+      mode: "live",
+      credentials: { ODDS_API_IO_KEY: "server-only" },
+    });
+    await expect(source.getTickHistory("bout-main")).rejects.toMatchObject({
+      kind: "unavailable",
+    });
+  });
+
+  it("returns the canonical bout-main tick history derived from the DraftKings snapshots", async () => {
+    const source = createOddsApiIoSource({ mode: "fixture" });
+    const ticks = await source.getTickHistory("bout-main");
+
+    expect(ticks.length).toBeGreaterThanOrEqual(4);
+    expect(ticks.every((t) => t.boutId === "bout-main")).toBe(true);
+    expect(ticks.every((t) => t.source === "odds-api-io")).toBe(true);
+  });
+
+  it("returns an empty history for a bout with no ticks", async () => {
+    const source = createOddsApiIoSource({ mode: "fixture" });
+    expect(await source.getTickHistory("bout-comain")).toEqual([]);
+  });
+
+  it("returns an empty history when asked for a different source", async () => {
+    const source = createOddsApiIoSource({ mode: "fixture" });
+    expect(
+      await source.getTickHistory("bout-main", "the-odds-api"),
+    ).toEqual([]);
+  });
 });

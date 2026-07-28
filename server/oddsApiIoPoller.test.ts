@@ -229,6 +229,8 @@ describe("Odds-API.io adaptive polling", () => {
     const source: OddsApiIoSource = {
       discoverEvents: () => fixture.discoverEvents(),
       getBoutOdds,
+      getTickHistory: (boutId, marketSource) =>
+        fixture.getTickHistory(boutId, marketSource),
     };
     const { eventBus, poller, time } = await createPoller({ source });
 
@@ -256,6 +258,7 @@ describe("Odds-API.io adaptive polling", () => {
     const source: OddsApiIoSource = {
       discoverEvents: async () => [],
       getBoutOdds,
+      getTickHistory: async () => [],
     };
     const { eventBus, poller, time } = await createPoller({ source });
     eventBus.emit({

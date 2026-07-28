@@ -136,6 +136,18 @@ export interface TickHistorySource {
   ): Promise<MarketSnapshot[]>;
 }
 
+/**
+ * The slice of TickHistorySource the fixture-mode odds clients (kalshi,
+ * polymarket, oddsapi, odds-api-io) implement directly, so the UI can
+ * compute market-movement deltas from the same seam it already calls for
+ * `getOddsSnapshot` — no network, no separate collector connection needed.
+ * Round-boundary snapshots stay server-side only, owned by the collector's
+ * MarketTickStore (see server/tickStore.ts), which is why this is a Pick
+ * rather than the full TickHistorySource.
+ */
+export type OddsSourceWithHistory = OddsSource &
+  Pick<TickHistorySource, "getTickHistory">;
+
 /** ESPN/Cito fighter profiles — fetch once, cache, don't re-poll. */
 export interface FighterRecordSource {
   getFighter(ref: ExternalRef): Promise<Fighter | null>;

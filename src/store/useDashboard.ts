@@ -11,6 +11,7 @@ import type {
   OddsSnapshot,
   ScorecardAccount,
 } from "../schema.ts";
+import { marketMovesForBout } from "../lib/oddsMath.ts";
 import type { SourceConfig } from "../sources/contract.ts";
 import { createCitoSource } from "../sources/cito.ts";
 import { createEspnSource } from "../sources/espn.ts";
@@ -65,13 +66,26 @@ export async function assembleDashboard(): Promise<DashboardState> {
   const boutViews: Record<string, BoutView> = {};
   await Promise.all(
     event.bouts.map(async (bout) => {
-      const [pm, book, kalshiSnap, sherdogRounds, espnRounds, citoRounds] = await Promise.all([
+      const [
+        pm,
+        book,
+        kalshiSnap,
+        sherdogRounds,
+        espnRounds,
+        citoRounds,
+        kalshiTicks,
+        pmTicks,
+        bookTicks,
+      ] = await Promise.all([
         polymarket.getOddsSnapshot(bout),
         oddsApi.getOddsSnapshot(bout),
         kalshi.getOddsSnapshot(bout),
         sherdog.getRoundUpdates(bout),
         espn.getRoundUpdates(bout),
         cito.getRoundUpdates(bout),
+        kalshi.getTickHistory(bout.id),
+        polymarket.getTickHistory(bout.id),
+        oddsApi.getTickHistory(bout.id),
       ]);
 
       const latestOdds: BoutView["latestOdds"] = {};
@@ -85,6 +99,18 @@ export async function assembleDashboard(): Promise<DashboardState> {
       record("polymarket", pm);
       record("sportsbook", book);
 
+      const marketMoves: BoutView["marketMoves"] = {};
+      const recordMoves = (
+        market: OddsSnapshot["market"],
+        ticks: Awaited<ReturnType<typeof kalshi.getTickHistory>>,
+      ) => {
+        const moves = marketMovesForBout(bout, ticks);
+        if (Object.keys(moves).length > 0) marketMoves[market] = moves;
+      };
+      recordMoves("kalshi", kalshiTicks);
+      recordMoves("polymarket", pmTicks);
+      recordMoves("sportsbook", bookTicks);
+
       const rounds: BoutView["rounds"] = {};
       if (sherdogRounds.length) rounds.sherdog = sherdogRounds;
       if (espnRounds.length) rounds.espn = espnRounds;
@@ -95,6 +121,7 @@ export async function assembleDashboard(): Promise<DashboardState> {
         rounds,
         latestOdds,
         oddsHistory,
+        marketMoves,
         scorecards: x.configuredEmbeds(bout.id),
       };
     }),

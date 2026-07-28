@@ -28,7 +28,8 @@
  *   disagree, not just a single blended number.
  */
 
-import type { Corner, OddsSnapshot } from "../schema.ts";
+import type { Bout, Corner, MarketMove, OddsSnapshot } from "../schema.ts";
+import type { MarketTick } from "../sources/contract.ts";
 
 /** American moneyline -> implied probability, vig included. */
 export function americanToImpliedProb(moneyline: number): number {
@@ -125,4 +126,92 @@ export function consensus(snapshots: OddsSnapshot[]): {
     },
     markets: perMarket.length,
   };
+}
+
+/**
+ * Mid of bid/ask, falling back to the last trade. Same shape of fallback
+ * `midCents`/CLOB-average logic each snapshot client already applies to its
+ * own native payload, generalized to a MarketTick.
+ */
+function tickMid(tick: MarketTick): number | null {
+  if (tick.bid !== undefined && tick.ask !== undefined) {
+    return (tick.bid + tick.ask) / 2;
+  }
+  if (tick.lastTrade !== undefined) {
+    return tick.lastTrade;
+  }
+  return null;
+}
+
+/**
+ * Implied probability for a single tick, source-aware: sportsbook ticks
+ * (odds-api-io, the-odds-api) already carry `impliedProbability` computed
+ * from the American moneyline at ingest (see oddsApiIo.ts); Kalshi's mid is
+ * in cents (0-100) so it divides by 100; Polymarket's mid is already a 0-1
+ * token price. Null when a tick has neither field to work with.
+ */
+export function tickImpliedProbability(tick: MarketTick): number | null {
+  if (tick.impliedProbability !== undefined) {
+    return tick.impliedProbability;
+  }
+  const mid = tickMid(tick);
+  if (mid === null) {
+    return null;
+  }
+  return tick.source === "kalshi" ? mid / 100 : mid;
+}
+
+/**
+ * Movement between the two most recent ticks for one outcome, ordered
+ * oldest-to-newest by `receivedAt`. Null — not a zero-valued MarketMove —
+ * when there's no prior tick to compare against (empty or single-tick
+ * history), so the UI can render an honest neutral state rather than
+ * inventing a delta.
+ */
+export function marketMove(ticks: readonly MarketTick[]): MarketMove | null {
+  if (ticks.length < 2) {
+    return null;
+  }
+
+  const ordered = [...ticks].sort((a, b) =>
+    a.receivedAt.localeCompare(b.receivedAt),
+  );
+  const previous = ordered.at(-2);
+  const current = ordered.at(-1);
+  if (previous === undefined || current === undefined) {
+    return null;
+  }
+
+  const previousProbability = tickImpliedProbability(previous);
+  const currentProbability = tickImpliedProbability(current);
+  if (previousProbability === null || currentProbability === null) {
+    return null;
+  }
+
+  const deltaProbability = currentProbability - previousProbability;
+  const direction =
+    deltaProbability > 0 ? "up" : deltaProbability < 0 ? "down" : "flat";
+
+  return { direction, deltaProbability, previousProbability, currentProbability };
+}
+
+/**
+ * `marketMove` per corner for one bout's tick history on one market,
+ * splitting the mixed red/blue tick list by outcome name the same way the
+ * snapshot clients match a fighter name to a corner. Corners with fewer
+ * than two ticks are simply absent from the result.
+ */
+export function marketMovesForBout(
+  bout: Bout,
+  ticks: readonly MarketTick[],
+): Partial<Record<Corner, MarketMove>> {
+  const moves: Partial<Record<Corner, MarketMove>> = {};
+  (["red", "blue"] as const).forEach((corner) => {
+    const name = bout.fighters[corner].name;
+    const move = marketMove(ticks.filter((tick) => tick.outcome === name));
+    if (move !== null) {
+      moves[corner] = move;
+    }
+  });
+  return moves;
 }

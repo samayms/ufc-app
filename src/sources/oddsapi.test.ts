@@ -95,3 +95,28 @@ describe("createOddsApiSource", () => {
     ).resolves.toBeNull();
   });
 });
+
+describe("createOddsApiSource getTickHistory", () => {
+  const source = createOddsApiSource({ mode: "fixture" });
+
+  it("returns bout-main's DraftKings h2h tick history, agreeing with the current snapshot", async () => {
+    const ticks = await source.getTickHistory("bout-main");
+    expect(ticks.length).toBeGreaterThanOrEqual(4);
+    expect(ticks.every((t) => t.boutId === "bout-main")).toBe(true);
+    expect(ticks.every((t) => t.source === "the-odds-api")).toBe(true);
+
+    const last = [...ticks]
+      .filter((t) => t.outcome === "Danilo Reyes")
+      .sort((a, b) => a.receivedAt.localeCompare(b.receivedAt))
+      .at(-1);
+    expect(last?.rawOdds).toBe(-185);
+  });
+
+  it("returns an empty history for a bout with no ticks", async () => {
+    expect(await source.getTickHistory("bout-comain")).toEqual([]);
+  });
+
+  it("returns an empty history when asked for a different source", async () => {
+    expect(await source.getTickHistory("bout-main", "odds-api-io")).toEqual([]);
+  });
+});

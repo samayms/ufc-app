@@ -1,4 +1,5 @@
 import rawOdds from "../fixtures/oddsapi.json" with { type: "json" };
+import rawTicks from "../fixtures/oddsapiTicks.json" with { type: "json" };
 import { americanToImpliedProb } from "../lib/oddsMath.ts";
 import type {
   Bout,
@@ -6,7 +7,12 @@ import type {
   OddsQuote,
   OddsSnapshot,
 } from "../schema.ts";
-import type { OddsSource, SourceConfig } from "./contract.ts";
+import type {
+  MarketSource,
+  MarketTick,
+  OddsSource,
+  SourceConfig,
+} from "./contract.ts";
 
 export const THE_ODDS_API_H2H_REQUEST = {
   sport: "mma_mixed_martial_arts",
@@ -25,6 +31,10 @@ export interface TheOddsApiSource extends OddsSource {
     bout: Bout,
     request: TheOddsApiH2hRequest,
   ): Promise<OddsSnapshot | null>;
+  getTickHistory(
+    boutId: string,
+    source?: MarketSource,
+  ): Promise<MarketTick[]>;
 }
 
 interface OddsApiOutcome {
@@ -51,6 +61,7 @@ interface OddsApiEvent {
 }
 
 const oddsEvents = rawOdds as OddsApiEvent[];
+const oddsTicks = rawTicks.ticks as MarketTick[];
 
 function findCorner(bout: Bout, fighterName: string): Corner | null {
   if (bout.fighters.red.name === fighterName) {
@@ -148,6 +159,13 @@ export function createOddsApiSource(config: SourceConfig): TheOddsApiSource {
     getH2hSnapshot,
     async getOddsSnapshot(bout: Bout): Promise<OddsSnapshot | null> {
       return getH2hSnapshot(bout, THE_ODDS_API_H2H_REQUEST);
+    },
+    async getTickHistory(
+      boutId: string,
+      source?: MarketSource,
+    ): Promise<MarketTick[]> {
+      if (source !== undefined && source !== "the-odds-api") return [];
+      return oddsTicks.filter((tick) => tick.boutId === boutId);
     },
   };
 }

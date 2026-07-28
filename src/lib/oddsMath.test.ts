@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { OddsSnapshot } from "../schema.ts";
+import type { Bout, OddsSnapshot } from "../schema.ts";
+import type { MarketTick } from "../sources/contract.ts";
 import {
   americanToImpliedProb,
   consensus,
   devigPair,
+  marketMove,
+  marketMovesForBout,
   marketProbabilities,
+  tickImpliedProbability,
 } from "./oddsMath.ts";
 
 const provenance = {
@@ -222,5 +226,125 @@ describe("consensus", () => {
 
     expect(consensus([incomplete])).toBeNull();
     expect(consensus([])).toBeNull();
+  });
+});
+
+function tick(values: Partial<MarketTick>): MarketTick {
+  return {
+    source: "kalshi",
+    boutId: "bout-main",
+    marketType: "fight-winner",
+    outcome: "Danilo Reyes",
+    receivedAt: "2026-07-26T02:40:00Z",
+    stale: false,
+    ...values,
+  };
+}
+
+describe("tickImpliedProbability", () => {
+  it("prefers an explicit impliedProbability (sportsbook ticks)", () => {
+    expect(
+      tickImpliedProbability(
+        tick({ source: "the-odds-api", impliedProbability: 0.65, bid: 1, ask: 99 }),
+      ),
+    ).toBe(0.65);
+  });
+
+  it("divides a kalshi cents mid by 100", () => {
+    expect(tickImpliedProbability(tick({ bid: 59, ask: 62 }))).toBeCloseTo(0.605, 9);
+  });
+
+  it("takes a polymarket price mid as-is", () => {
+    expect(
+      tickImpliedProbability(tick({ source: "polymarket", bid: 0.61, ask: 0.63 })),
+    ).toBeCloseTo(0.62, 9);
+  });
+
+  it("falls back to lastTrade when there's no bid/ask", () => {
+    expect(tickImpliedProbability(tick({ lastTrade: 60 }))).toBeCloseTo(0.6, 9);
+  });
+
+  it("returns null when a tick has no price fields at all", () => {
+    expect(tickImpliedProbability(tick({}))).toBeNull();
+  });
+});
+
+describe("marketMove", () => {
+  it("returns null for no history", () => {
+    expect(marketMove([])).toBeNull();
+  });
+
+  it("returns null for a single tick — never a fabricated zero delta", () => {
+    expect(marketMove([tick({ bid: 59, ask: 62, receivedAt: "2026-07-26T02:39:51Z" })])).toBeNull();
+  });
+
+  it("computes an upward move between the two most recent ticks", () => {
+    const move = marketMove([
+      tick({ bid: 57, ask: 61, receivedAt: "2026-07-26T02:39:51Z" }),
+      tick({ bid: 59, ask: 62, receivedAt: "2026-07-26T02:40:29Z" }),
+      tick({ bid: 63, ask: 66, receivedAt: "2026-07-26T02:40:36Z" }),
+    ]);
+
+    expect(move).not.toBeNull();
+    expect(move?.direction).toBe("up");
+    // (59+62)/2/100 = 0.605, (63+66)/2/100 = 0.645
+    expect(move?.previousProbability).toBeCloseTo(0.605, 9);
+    expect(move?.currentProbability).toBeCloseTo(0.645, 9);
+    expect(move?.deltaProbability).toBeCloseTo(0.04, 9);
+  });
+
+  it("computes a downward move and is order-independent (sorts by receivedAt)", () => {
+    const move = marketMove([
+      tick({ bid: 63, ask: 66, receivedAt: "2026-07-26T02:40:36Z" }),
+      tick({ bid: 59, ask: 62, receivedAt: "2026-07-26T02:40:29Z" }),
+    ]);
+
+    expect(move?.direction).toBe("up");
+    expect(move?.deltaProbability).toBeCloseTo(0.04, 9);
+  });
+
+  it("reports flat when the two most recent ticks agree exactly", () => {
+    const move = marketMove([
+      tick({ bid: 59, ask: 62, receivedAt: "2026-07-26T02:39:51Z" }),
+      tick({ bid: 59, ask: 62, receivedAt: "2026-07-26T02:40:29Z" }),
+    ]);
+
+    expect(move?.direction).toBe("flat");
+    expect(move?.deltaProbability).toBe(0);
+  });
+});
+
+describe("marketMovesForBout", () => {
+  const bout = {
+    fighters: {
+      red: { name: "Danilo Reyes" },
+      blue: { name: "Artem Volkov" },
+    },
+  } as Bout;
+
+  it("splits mixed red/blue ticks by outcome name and computes each corner's move", () => {
+    const ticks: MarketTick[] = [
+      tick({ outcome: "Danilo Reyes", bid: 57, ask: 61, receivedAt: "2026-07-26T02:39:51Z" }),
+      tick({ outcome: "Artem Volkov", bid: 39, ask: 43, receivedAt: "2026-07-26T02:39:51Z" }),
+      tick({ outcome: "Danilo Reyes", bid: 63, ask: 66, receivedAt: "2026-07-26T02:40:36Z" }),
+      tick({ outcome: "Artem Volkov", bid: 34, ask: 37, receivedAt: "2026-07-26T02:40:36Z" }),
+    ];
+
+    const moves = marketMovesForBout(bout, ticks);
+
+    expect(moves.red?.direction).toBe("up");
+    expect(moves.blue?.direction).toBe("down");
+  });
+
+  it("omits a corner entirely when it has no prior tick to compare against", () => {
+    const ticks: MarketTick[] = [
+      tick({ outcome: "Danilo Reyes", bid: 57, ask: 61, receivedAt: "2026-07-26T02:39:51Z" }),
+    ];
+
+    expect(marketMovesForBout(bout, ticks)).toEqual({});
+  });
+
+  it("returns an empty object for a bout with no tick history at all", () => {
+    expect(marketMovesForBout(bout, [])).toEqual({});
   });
 });

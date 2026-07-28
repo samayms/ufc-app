@@ -36,6 +36,7 @@ import {
   type XApiFetcher,
   type XScoreSource,
 } from "../src/sources/x.ts";
+import { marketMovesForBout } from "../src/lib/oddsMath.ts";
 import { loadFixtureEvent } from "../src/store/fixtureEvent.ts";
 import {
   credentialValues,
@@ -371,6 +372,9 @@ export async function loadFixtureState(
     const sherdogRounds = await sherdog.getRoundUpdates(bout);
     const espnRounds = await espn.getRoundUpdates(bout);
     const citoRounds = await cito.getRoundUpdates(bout);
+    const kalshiTicks = await kalshi.getTickHistory(bout.id);
+    const polymarketTicks = await polymarket.getTickHistory(bout.id);
+    const sportsbookTicks = await oddsApi.getTickHistory(bout.id);
     const latestOdds: BoutView["latestOdds"] = {};
     const oddsHistory: BoutView["oddsHistory"] = {};
 
@@ -387,6 +391,18 @@ export async function loadFixtureState(
     recordOdds("polymarket", polymarketSnapshot);
     recordOdds("sportsbook", sportsbookSnapshot);
 
+    const marketMoves: BoutView["marketMoves"] = {};
+    const recordMoves = (
+      market: OddsSnapshot["market"],
+      ticks: Awaited<ReturnType<typeof kalshi.getTickHistory>>,
+    ): void => {
+      const moves = marketMovesForBout(bout, ticks);
+      if (Object.keys(moves).length > 0) marketMoves[market] = moves;
+    };
+    recordMoves("kalshi", kalshiTicks);
+    recordMoves("polymarket", polymarketTicks);
+    recordMoves("sportsbook", sportsbookTicks);
+
     const rounds: BoutView["rounds"] = {};
     if (sherdogRounds.length > 0) rounds.sherdog = sherdogRounds;
     if (espnRounds.length > 0) rounds.espn = espnRounds;
@@ -397,6 +413,7 @@ export async function loadFixtureState(
       rounds,
       latestOdds,
       oddsHistory,
+      marketMoves,
       scorecards: x.configuredEmbeds(bout.id),
     };
   }

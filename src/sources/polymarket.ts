@@ -1,6 +1,12 @@
 import rawFixture from "../fixtures/polymarket.json" with { type: "json" };
+import rawTicksFixture from "../fixtures/polymarketTicks.json" with { type: "json" };
 import type { Bout, Corner, OddsQuote, OddsSnapshot } from "../schema.ts";
-import type { OddsSource, SourceConfig } from "./contract.ts";
+import type {
+  MarketSource,
+  MarketTick,
+  OddsSourceWithHistory,
+  SourceConfig,
+} from "./contract.ts";
 
 interface GammaMarket {
   conditionId: string;
@@ -100,7 +106,11 @@ function parseMarket(bout: Bout, market: GammaMarket): OddsSnapshot | null {
   };
 }
 
-export function createPolymarketSource(config: SourceConfig): OddsSource {
+const ticks = rawTicksFixture.ticks as MarketTick[];
+
+export function createPolymarketSource(
+  config: SourceConfig,
+): OddsSourceWithHistory {
   if (config.mode === "live") {
     throw new Error("polymarket live mode not available yet");
   }
@@ -118,6 +128,14 @@ export function createPolymarketSource(config: SourceConfig): OddsSource {
       );
 
       return market ? parseMarket(bout, market) : null;
+    },
+
+    async getTickHistory(
+      boutId: string,
+      source?: MarketSource,
+    ): Promise<MarketTick[]> {
+      if (source !== undefined && source !== "polymarket") return [];
+      return ticks.filter((tick) => tick.boutId === boutId);
     },
   };
 }

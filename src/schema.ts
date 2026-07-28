@@ -290,6 +290,27 @@ export interface OddsSnapshot {
 }
 
 // ---------------------------------------------------------------------------
+// Market movement — deltas between ticks, not a new market kind
+// ---------------------------------------------------------------------------
+
+export type MarketMoveDirection = "up" | "down" | "flat";
+
+/**
+ * Movement between the two most recent ticks a market client has for one
+ * outcome, expressed in implied-probability terms so Kalshi cents,
+ * Polymarket prices, and sportsbook moneylines are comparable on the same
+ * scale. Absent — never a zero-valued object — when there isn't a prior
+ * tick to compare against; the UI renders that absence as an honest
+ * neutral state instead of a fabricated delta.
+ */
+export interface MarketMove {
+  direction: MarketMoveDirection;
+  deltaProbability: number;
+  previousProbability: number;
+  currentProbability: number;
+}
+
+// ---------------------------------------------------------------------------
 // Journalist scorecards (X embeds, not paid API search)
 // ---------------------------------------------------------------------------
 
@@ -329,6 +350,8 @@ export interface BoutView {
   latestOdds: Partial<Record<OddsSnapshot["market"], OddsSnapshot>>;
   /** Full append-only history per market kind, for the odds timeline. */
   oddsHistory: Partial<Record<OddsSnapshot["market"], OddsSnapshot[]>>;
+  /** Per-corner movement since the prior tick, per market kind. Missing entries mean no prior tick, not zero movement. */
+  marketMoves: Partial<Record<OddsSnapshot["market"], Partial<Record<Corner, MarketMove>>>>;
   scorecards: ScorecardEmbed[];
 }
 

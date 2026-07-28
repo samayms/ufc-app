@@ -40,6 +40,25 @@ describe("createKalshiSource", () => {
   });
 });
 
+describe("createKalshiSource getTickHistory", () => {
+  const source = createKalshiSource({ mode: "fixture" });
+
+  it("returns bout-main's tick history in fixture order", async () => {
+    const ticks = await source.getTickHistory("bout-main");
+    expect(ticks.length).toBeGreaterThanOrEqual(4);
+    expect(ticks.every((t) => t.boutId === "bout-main")).toBe(true);
+    expect(ticks.every((t) => t.source === "kalshi")).toBe(true);
+  });
+
+  it("returns an empty history for a bout with no ticks", async () => {
+    expect(await source.getTickHistory("bout-comain")).toEqual([]);
+  });
+
+  it("returns an empty history when asked for a different source", async () => {
+    expect(await source.getTickHistory("bout-main", "polymarket")).toEqual([]);
+  });
+});
+
 describe("kalshi RSA-PSS signing", () => {
   it("builds the timestamp+METHOD+path message", () => {
     expect(kalshiMessage(1753500000000, "get", "/trade-api/v2/portfolio/balance")).toBe(

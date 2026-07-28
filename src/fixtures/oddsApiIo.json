@@ -78,5 +78,104 @@
         { "key": "fanduel", "outcomes": [{ "name": "Petr Novak", "price": -110 }, { "name": "Manaia Tuivasa", "price": -110 }] }
       ]
     }
+  ],
+  "_ticksComment": "SYNTHETIC normalized Odds-API.io ticks for bout-main, derived from the DraftKings line across the four oddsSnapshots above. Uses the canonical bout id directly (getTickHistory is keyed by canonical boutId, not the oai-* discovery id).",
+  "ticks": [
+    {
+      "source": "odds-api-io",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Danilo Reyes",
+      "rawOdds": -172,
+      "impliedProbability": 0.6323529411764706,
+      "sourceUpdatedAt": "2026-07-26T02:34:45Z",
+      "receivedAt": "2026-07-26T02:34:46Z",
+      "stale": false
+    },
+    {
+      "source": "odds-api-io",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Artem Volkov",
+      "rawOdds": 142,
+      "impliedProbability": 0.4132231404958678,
+      "sourceUpdatedAt": "2026-07-26T02:34:45Z",
+      "receivedAt": "2026-07-26T02:34:46Z",
+      "stale": false
+    },
+    {
+      "source": "odds-api-io",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Danilo Reyes",
+      "rawOdds": -205,
+      "impliedProbability": 0.6721311475409836,
+      "sourceUpdatedAt": "2026-07-26T02:39:56Z",
+      "receivedAt": "2026-07-26T02:39:57Z",
+      "stale": false
+    },
+    {
+      "source": "odds-api-io",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Artem Volkov",
+      "rawOdds": 168,
+      "impliedProbability": 0.373134328358209,
+      "sourceUpdatedAt": "2026-07-26T02:39:56Z",
+      "receivedAt": "2026-07-26T02:39:57Z",
+      "stale": false
+    },
+    {
+      "source": "odds-api-io",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Danilo Reyes",
+      "rawOdds": -220,
+      "impliedProbability": 0.6875,
+      "sourceUpdatedAt": "2026-07-26T02:40:14Z",
+      "receivedAt": "2026-07-26T02:40:15Z",
+      "stale": false
+    },
+    {
+      "source": "odds-api-io",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Artem Volkov",
+      "rawOdds": 180,
+      "impliedProbability": 0.35714285714285715,
+      "sourceUpdatedAt": "2026-07-26T02:40:14Z",
+      "receivedAt": "2026-07-26T02:40:15Z",
+      "stale": false
+    },
+    {
+      "source": "odds-api-io",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Danilo Reyes",
+      "rawOdds": -190,
+      "impliedProbability": 0.6551724137931034,
+      "sourceUpdatedAt": "2026-07-26T02:44:58Z",
+      "receivedAt": "2026-07-26T02:44:59Z",
+      "stale": false
+    },
+    {
+      "source": "odds-api-io",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Artem Volkov",
+      "rawOdds": 158,
+      "impliedProbability": 0.3875968992248062,
+      "sourceUpdatedAt": "2026-07-26T02:44:58Z",
+      "receivedAt": "2026-07-26T02:44:59Z",
+      "stale": false
+    }
   ]
 }

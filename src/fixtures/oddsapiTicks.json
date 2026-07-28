@@ -1,0 +1,77 @@
+{
+  "_comment": "SYNTHETIC normalized The Odds API ticks for bout-main's DraftKings h2h line, spanning a round boundary for fixture replay. Mirrors kalshiTicks.json/polymarketTicks.json's shape; the final tick matches oddsapi.json's DraftKings entry exactly so the two fixtures agree.",
+  "ticks": [
+    {
+      "source": "the-odds-api",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Danilo Reyes",
+      "rawOdds": -150,
+      "impliedProbability": 0.6,
+      "sourceUpdatedAt": "2026-07-26T02:39:00Z",
+      "receivedAt": "2026-07-26T02:39:01Z",
+      "stale": false
+    },
+    {
+      "source": "the-odds-api",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Artem Volkov",
+      "rawOdds": 130,
+      "impliedProbability": 0.4347826086956522,
+      "sourceUpdatedAt": "2026-07-26T02:39:00Z",
+      "receivedAt": "2026-07-26T02:39:01Z",
+      "stale": false
+    },
+    {
+      "source": "the-odds-api",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Danilo Reyes",
+      "rawOdds": -168,
+      "impliedProbability": 0.6268656716417911,
+      "sourceUpdatedAt": "2026-07-26T02:39:40Z",
+      "receivedAt": "2026-07-26T02:39:41Z",
+      "stale": false
+    },
+    {
+      "source": "the-odds-api",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Artem Volkov",
+      "rawOdds": 140,
+      "impliedProbability": 0.4166666666666667,
+      "sourceUpdatedAt": "2026-07-26T02:39:40Z",
+      "receivedAt": "2026-07-26T02:39:41Z",
+      "stale": false
+    },
+    {
+      "source": "the-odds-api",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Danilo Reyes",
+      "rawOdds": -185,
+      "impliedProbability": 0.6491228070175439,
+      "sourceUpdatedAt": "2026-07-26T02:40:12Z",
+      "receivedAt": "2026-07-26T02:40:13Z",
+      "stale": false
+    },
+    {
+      "source": "the-odds-api",
+      "boutId": "bout-main",
+      "bookmaker": "draftkings",
+      "marketType": "h2h",
+      "outcome": "Artem Volkov",
+      "rawOdds": 150,
+      "impliedProbability": 0.4,
+      "sourceUpdatedAt": "2026-07-26T02:40:12Z",
+      "receivedAt": "2026-07-26T02:40:13Z",
+      "stale": false
+    }
+  ]
+}

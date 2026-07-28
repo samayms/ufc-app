@@ -48,6 +48,7 @@ interface FixtureDiscoveredEvent {
 interface OddsApiIoFixture {
   eventDiscovery: FixtureDiscoveredEvent[];
   oddsSnapshots: FixtureSnapshot[];
+  ticks: MarketTick[];
 }
 
 export interface OddsApiIoDiscoveredBout {
@@ -101,6 +102,10 @@ export interface OddsApiIoLiveHook {
 export interface OddsApiIoSource {
   discoverEvents(): Promise<OddsApiIoDiscoveredEvent[]>;
   getBoutOdds(query: OddsApiIoBoutQuery): Promise<OddsSnapshot | null>;
+  getTickHistory(
+    boutId: string,
+    source?: MarketSource,
+  ): Promise<MarketTick[]>;
 }
 
 const fixture = rawFixture as OddsApiIoFixture;
@@ -213,11 +218,22 @@ export function createOddsApiIoSource(
         async getBoutOdds() {
           return failClosed();
         },
+        async getTickHistory() {
+          return failClosed();
+        },
       };
     }
     return {
       discoverEvents: () => liveHook.discoverEvents(apiKey),
       getBoutOdds: (query) => liveHook.getBoutOdds(apiKey, query),
+      // No live tick-history hook exists yet; fail closed rather than
+      // silently returning an empty (and misleadingly "no movement") history.
+      async getTickHistory() {
+        throw new OddsApiIoRequestError(
+          "unavailable",
+          "Odds-API.io live tick history is not implemented yet",
+        );
+      },
     };
   }
 
@@ -230,6 +246,13 @@ export function createOddsApiIoSource(
       query: OddsApiIoBoutQuery,
     ): Promise<OddsSnapshot | null> {
       return fixtureSnapshot(query, cursor);
+    },
+    async getTickHistory(
+      boutId: string,
+      source?: MarketSource,
+    ): Promise<MarketTick[]> {
+      if (source !== undefined && source !== "odds-api-io") return [];
+      return fixture.ticks.filter((tick) => tick.boutId === boutId);
     },
   };
 }

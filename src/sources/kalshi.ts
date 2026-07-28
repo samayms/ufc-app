@@ -9,8 +9,14 @@
  */
 
 import type { Corner, OddsQuote, OddsSnapshot } from "../schema.ts";
-import type { OddsSource, SourceConfig } from "./contract.ts";
+import type {
+  MarketSource,
+  MarketTick,
+  OddsSourceWithHistory,
+  SourceConfig,
+} from "./contract.ts";
 import fixture from "../fixtures/kalshi.json" with { type: "json" };
+import ticksFixture from "../fixtures/kalshiTicks.json" with { type: "json" };
 
 interface KalshiMarket {
   ticker: string;
@@ -43,7 +49,9 @@ function toQuote(market: KalshiMarket, corner: Corner): OddsQuote {
   };
 }
 
-export function createKalshiSource(config: SourceConfig): OddsSource {
+const ticks = ticksFixture.ticks as MarketTick[];
+
+export function createKalshiSource(config: SourceConfig): OddsSourceWithHistory {
   if (config.mode === "live") {
     throw new Error("kalshi live mode not available yet");
   }
@@ -75,6 +83,14 @@ export function createKalshiSource(config: SourceConfig): OddsSource {
           synthetic: true,
         },
       };
+    },
+
+    async getTickHistory(
+      boutId: string,
+      source?: MarketSource,
+    ): Promise<MarketTick[]> {
+      if (source !== undefined && source !== "kalshi") return [];
+      return ticks.filter((tick) => tick.boutId === boutId);
     },
   };
 }
