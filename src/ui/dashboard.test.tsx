@@ -205,6 +205,35 @@ describe("dashboard state surfaces", () => {
     expect(panel).not.toContain("delivery-freshness");
   });
 
+  it("surfaces per-market movement deltas from tick history in amber", async () => {
+    const state = await assembleDashboard();
+    const view = state.boutViews["bout-main"];
+    expect(view).toBeDefined();
+    if (!view) return;
+
+    expect(view.marketMoves.kalshi?.red?.direction).toBe("up");
+    expect(view.marketMoves.kalshi?.blue?.direction).toBe("down");
+
+    const panel = renderToStaticMarkup(<OddsPanel view={view} />);
+    expect(panel).toContain("market-move-up");
+    expect(panel).toContain("market-move-down");
+    expect(panel).toContain("pp");
+  });
+
+  it("renders an honest no-history state instead of a fabricated delta when a market has no ticks", async () => {
+    const state = await assembleDashboard();
+    const view = state.boutViews["bout-3"];
+    expect(view).toBeDefined();
+    if (!view) return;
+
+    // bout-3 has kalshi/polymarket odds snapshots but no tick history fixture.
+    expect(view.marketMoves.kalshi).toBeUndefined();
+
+    const panel = renderToStaticMarkup(<OddsPanel view={view} />);
+    expect(panel).toContain("market-move-empty");
+    expect(panel).toContain("no history yet");
+  });
+
   it("surfaces collector delivery freshness (source, receipt time, stale) on live odds", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];

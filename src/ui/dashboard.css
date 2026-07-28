@@ -1126,6 +1126,29 @@
   font-size: 0.55rem;
 }
 
+/*
+ * Market movement — the amber reservation from DESIGN.md's Amber-Is-Money
+ * rule, exercised here for the first time. Amber marks the delta itself,
+ * never the fighter side it sits next to (.market-pct/.market-native stay
+ * neutral text color either way).
+ */
+.market-move {
+  margin-top: 2px;
+  font-size: 0.58rem;
+  font-weight: 600;
+}
+
+.market-move-up,
+.market-move-down {
+  color: var(--market);
+}
+
+.market-move-flat,
+.market-move-empty {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
 .split {
   height: 9px;
   flex: 1;

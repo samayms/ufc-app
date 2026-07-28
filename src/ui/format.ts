@@ -13,6 +13,11 @@ export function fmtPct(p: number): string {
   return `${Math.round(p * 100)}%`;
 }
 
+/** Magnitude of an implied-probability delta, in percentage points. Direction is rendered separately (arrow, color) — this is never signed. */
+export function fmtMove(deltaProbability: number): string {
+  return `${(Math.abs(deltaProbability) * 100).toFixed(1)}pp`;
+}
+
 export function fmtNative(price: NativePrice): string {
   switch (price.kind) {
     case "kalshi-cents":

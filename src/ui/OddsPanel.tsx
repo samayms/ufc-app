@@ -1,8 +1,29 @@
-import type { BoutView, OddsSnapshot } from "../schema.ts";
+import type { BoutView, Corner, MarketMove, OddsSnapshot } from "../schema.ts";
 import { averageImpliedProbability, consensus } from "../lib/oddsMath.ts";
 import type { CollectorValueDelivery } from "../store/collectorClient.ts";
 import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
-import { fmtMoneyline, fmtNative, fmtPct, fmtTime } from "./format.ts";
+import { fmtMoneyline, fmtMove, fmtNative, fmtPct, fmtTime } from "./format.ts";
+
+/**
+ * One corner's movement since the prior tick — the market-amber reservation
+ * (DESIGN.md's Amber-Is-Money rule) exercised for the first time. Renders an
+ * honest "no history yet" dash rather than a fabricated zero when there's no
+ * prior tick to compare against.
+ */
+function MarketMoveTag({ move }: { move?: MarketMove }) {
+  if (!move) {
+    return <span className="market-move market-move-empty">no history yet</span>;
+  }
+  if (move.direction === "flat") {
+    return <span className="market-move market-move-flat">flat</span>;
+  }
+  const arrow = move.direction === "up" ? "▲" : "▼";
+  return (
+    <span className={`market-move market-move-${move.direction} num`}>
+      {arrow} {fmtMove(move.deltaProbability)}
+    </span>
+  );
+}
 
 /**
  * Two-sided implied-probability bar. Red fills from the left, blue from the
@@ -27,6 +48,7 @@ function MarketBlock({
   snapshot,
   emptyText,
   delivery,
+  moves,
   children,
 }: {
   title: string;
@@ -34,6 +56,7 @@ function MarketBlock({
   snapshot: OddsSnapshot | null;
   emptyText: string;
   delivery?: CollectorValueDelivery;
+  moves?: Partial<Record<Corner, MarketMove>>;
   children?: React.ReactNode;
 }) {
   return (
@@ -51,7 +74,7 @@ function MarketBlock({
       </div>
       {snapshot ? (
         <>
-          <MarketBar snapshot={snapshot} />
+          <MarketBar snapshot={snapshot} moves={moves} />
           {note && <p className="market-note">{note}</p>}
           {children}
         </>
@@ -62,7 +85,13 @@ function MarketBlock({
   );
 }
 
-function MarketBar({ snapshot }: { snapshot: OddsSnapshot }) {
+function MarketBar({
+  snapshot,
+  moves,
+}: {
+  snapshot: OddsSnapshot;
+  moves?: Partial<Record<Corner, MarketMove>>;
+}) {
   const red = averageImpliedProbability(snapshot, "red");
   const blue = averageImpliedProbability(snapshot, "blue");
   if (red == null || blue == null) return <p className="empty">Incomplete quotes.</p>;
@@ -76,6 +105,7 @@ function MarketBar({ snapshot }: { snapshot: OddsSnapshot }) {
         {singleBook && redQuote && (
           <span className="market-native num">{fmtNative(redQuote.native)}</span>
         )}
+        <MarketMoveTag move={moves?.red} />
       </span>
       <SplitBar red={red} blue={blue} />
       <span className="market-side market-side-blue">
@@ -83,6 +113,7 @@ function MarketBar({ snapshot }: { snapshot: OddsSnapshot }) {
         {singleBook && blueQuote && (
           <span className="market-native num">{fmtNative(blueQuote.native)}</span>
         )}
+        <MarketMoveTag move={moves?.blue} />
       </span>
     </div>
   );
@@ -138,7 +169,7 @@ export function OddsPanel({
   view: BoutView;
   deliveries?: Partial<Record<OddsSnapshot["market"], CollectorValueDelivery>>;
 }) {
-  const { latestOdds, bout } = view;
+  const { latestOdds, marketMoves, bout } = view;
   const finalText =
     bout.status === "final"
       ? "Market settled — bout is final."
@@ -179,12 +210,14 @@ export function OddsPanel({
         snapshot={latestOdds.kalshi ?? null}
         emptyText={finalText}
         delivery={deliveries?.kalshi}
+        moves={marketMoves.kalshi}
       />
       <MarketBlock
         title="Polymarket"
         snapshot={latestOdds.polymarket ?? null}
         emptyText={finalText}
         delivery={deliveries?.polymarket}
+        moves={marketMoves.polymarket}
       />
       <MarketBlock
         title="Sportsbooks"
@@ -192,6 +225,7 @@ export function OddsPanel({
         snapshot={sportsbook}
         emptyText={finalText}
         delivery={deliveries?.sportsbook}
+        moves={marketMoves.sportsbook}
       >
         {sportsbook && <BookRows snapshot={sportsbook} />}
       </MarketBlock>
