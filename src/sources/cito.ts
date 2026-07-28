@@ -92,6 +92,31 @@ interface CitoRoundStats {
   knockdowns: number;
 }
 
+export interface CitoFighterRoundStats {
+  significantStrikes?: number;
+  totalStrikes?: number;
+  takedowns?: number;
+  takedownsAttempted?: number;
+  controlTimeSeconds?: number;
+  knockdowns?: number;
+}
+
+export interface CitoRoundStatsPayload {
+  boutId: string;
+  round: number;
+  fighterA?: CitoFighterRoundStats;
+  fighterB?: CitoFighterRoundStats;
+  sourceUpdatedAt?: string;
+}
+
+export interface CitoRoundStatsFetcher {
+  fetchRound(
+    boutId: string,
+    round: number,
+  ): Promise<CitoRoundStatsPayload | null>;
+  fetchAllRounds(boutId: string): Promise<CitoRoundStatsPayload[]>;
+}
+
 interface CitoRoundResult {
   round: number;
   status: string;
@@ -321,6 +346,70 @@ function parseRoundStats(raw: CitoRoundStats): RoundStats {
     takedownsAttempted: raw.takedowns_attempted,
     controlTimeSeconds: raw.control_time_seconds,
     knockdowns: raw.knockdowns,
+  };
+}
+
+function parsePipelineRoundStats(
+  raw: CitoRoundStats,
+): CitoFighterRoundStats {
+  return {
+    significantStrikes: raw.significant_strikes,
+    totalStrikes: raw.total_strikes,
+    takedowns: raw.takedowns,
+    takedownsAttempted: raw.takedowns_attempted,
+    controlTimeSeconds: raw.control_time_seconds,
+    knockdowns: raw.knockdowns,
+  };
+}
+
+function fixtureRoundPayloads(
+  boutId: string,
+): CitoRoundStatsPayload[] {
+  const externalBoutId = Object.entries(
+    fixture.canonical_ids.bouts,
+  ).find(([, canonicalId]) => canonicalId === boutId)?.[0];
+  if (externalBoutId === undefined) return [];
+
+  const response = fixture.round_results_responses.find(
+    ({ bout_id }) => bout_id === externalBoutId,
+  );
+  if (response === undefined) return [];
+
+  return response.data
+    .filter(({ status }) => status === "completed")
+    .map((round) => ({
+      boutId,
+      round: round.round,
+      fighterA: parsePipelineRoundStats(round.stats.red),
+      fighterB: parsePipelineRoundStats(round.stats.blue),
+      sourceUpdatedAt: fixture.meta.fetched_at,
+    }))
+    .sort((left, right) => left.round - right.round);
+}
+
+export function createFixtureCitoRoundStatsFetcher(): CitoRoundStatsFetcher {
+  return {
+    async fetchRound(boutId, round) {
+      return (
+        fixtureRoundPayloads(boutId).find(
+          (payload) => payload.round === round,
+        ) ?? null
+      );
+    },
+    async fetchAllRounds(boutId) {
+      return fixtureRoundPayloads(boutId);
+    },
+  };
+}
+
+export function createLiveCitoRoundStatsFetcher(): CitoRoundStatsFetcher {
+  return {
+    async fetchRound() {
+      throw new Error("Cito live round-stats transport is not installed");
+    },
+    async fetchAllRounds() {
+      throw new Error("Cito live round-stats transport is not installed");
+    },
   };
 }
 

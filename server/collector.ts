@@ -12,7 +12,12 @@ import type {
   ScorecardAccount,
   SourceId,
 } from "../src/schema.ts";
-import { createCitoSource } from "../src/sources/cito.ts";
+import {
+  createCitoSource,
+  createFixtureCitoRoundStatsFetcher,
+  createLiveCitoRoundStatsFetcher,
+  type CitoRoundStatsFetcher,
+} from "../src/sources/cito.ts";
 import type { SourceConfig } from "../src/sources/contract.ts";
 import { createEspnSource } from "../src/sources/espn.ts";
 import { createKalshiSource } from "../src/sources/kalshi.ts";
@@ -41,6 +46,15 @@ import {
   SsePush,
   type SsePushOptions,
 } from "./push.ts";
+import type { QuotaPolicy } from "./quota.ts";
+import type {
+  RoundJobClock,
+  RoundJobTimer,
+} from "./roundJobs.ts";
+import {
+  RoundStatsPipeline,
+  type UnifiedRoundRecord,
+} from "./roundStats.ts";
 import {
   JsonlStorage,
   type Storage,
@@ -68,6 +82,16 @@ export interface CollectorBootstrap {
   state: DashboardState | null;
   boutMappings: BoutMapping[];
   health: Readonly<Record<string, SourceHealth>>;
+  unifiedRounds: readonly UnifiedRoundRecord[];
+}
+
+export interface CollectorRoundStatsOptions {
+  fetcher?: CitoRoundStatsFetcher;
+  clock?: RoundJobClock;
+  timer?: RoundJobTimer;
+  initialDelayMs?: number;
+  retryDelayMs?: number;
+  quotaPolicy?: QuotaPolicy;
 }
 
 export type NormalizedStateLoader = (
@@ -84,6 +108,7 @@ export interface CreateCollectorOptions {
     SsePushOptions,
     "bufferSize" | "heartbeatMs" | "now"
   >;
+  roundStats?: CollectorRoundStatsOptions;
 }
 
 export interface Collector {
@@ -91,6 +116,7 @@ export interface Collector {
   readonly eventBus: CollectorEventBus;
   readonly boutMappings: BoutMappingRegistry;
   readonly push: SsePush;
+  readonly roundStats: RoundStatsPipeline;
   readonly server: Server;
   start(): Promise<number>;
   close(): Promise<void>;
@@ -403,6 +429,7 @@ export async function createCollector(
     .at(-1)?.state;
   let state: DashboardState | null = restoredState ?? null;
   let boutMappings: BoutMappingRegistry | undefined;
+  let roundStats: RoundStatsPipeline | undefined;
 
   const healthRecords =
     await storage.read<unknown>(COLLECTOR_HEALTH_STREAM);
@@ -421,6 +448,7 @@ export async function createCollector(
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([source, value]) => [source, copyHealth(value)]),
     ),
+    unifiedRounds: roundStats?.getUnifiedRounds() ?? [],
   });
   const push = new SsePush({
     storage,
@@ -448,6 +476,38 @@ export async function createCollector(
         .catch(() => undefined);
     }),
   );
+  const roundStatsOptions = options.roundStats;
+  const initializedRoundStats = await RoundStatsPipeline.create({
+    eventBus,
+    storage,
+    fetcher:
+      roundStatsOptions?.fetcher ??
+      (config.dataMode === "fixture"
+        ? createFixtureCitoRoundStatsFetcher()
+        : createLiveCitoRoundStatsFetcher()),
+    publish: async (record) => {
+      await push.publish("update", {
+        kind: "round",
+        record,
+      });
+    },
+    ...(roundStatsOptions?.clock === undefined
+      ? {}
+      : { clock: roundStatsOptions.clock }),
+    ...(roundStatsOptions?.timer === undefined
+      ? {}
+      : { timer: roundStatsOptions.timer }),
+    ...(roundStatsOptions?.initialDelayMs === undefined
+      ? {}
+      : { initialDelayMs: roundStatsOptions.initialDelayMs }),
+    ...(roundStatsOptions?.retryDelayMs === undefined
+      ? {}
+      : { retryDelayMs: roundStatsOptions.retryDelayMs }),
+    ...(roundStatsOptions?.quotaPolicy === undefined
+      ? {}
+      : { quotaPolicy: roundStatsOptions.quotaPolicy }),
+  });
+  roundStats = initializedRoundStats;
 
   const loaded = await (options.stateLoader ?? defaultStateLoader)(config);
   if (
@@ -553,6 +613,7 @@ export async function createCollector(
     eventBus,
     boutMappings: initializedBoutMappings,
     push,
+    roundStats: initializedRoundStats,
     server,
     async start() {
       startPromise ??= listen(server, config.port, host);
@@ -560,6 +621,7 @@ export async function createCollector(
     },
     async close() {
       for (const unsubscribe of unsubscribers) unsubscribe();
+      await initializedRoundStats.close();
       await push.close();
       await closeServer(server);
     },

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import canonicalFixture from "../fixtures/event.json";
-import { createCitoSource } from "./cito.ts";
+import {
+  createCitoSource,
+  createFixtureCitoRoundStatsFetcher,
+  createLiveCitoRoundStatsFetcher,
+} from "./cito.ts";
 
 describe("createCitoSource", () => {
   it("returns the fixture event with five bouts", async () => {
@@ -104,6 +108,40 @@ describe("createCitoSource", () => {
   it("rejects live mode at the factory boundary", () => {
     expect(() => createCitoSource({ mode: "live" })).toThrow(
       "cito live mode not available yet",
+    );
+  });
+
+  it("provides exact fixture-backed round fetches for the collector pipeline", async () => {
+    const fetcher = createFixtureCitoRoundStatsFetcher();
+
+    await expect(fetcher.fetchRound("bout-main", 1)).resolves.toMatchObject({
+      boutId: "bout-main",
+      round: 1,
+      fighterA: {
+        significantStrikes: 24,
+        controlTimeSeconds: 72,
+      },
+      fighterB: {
+        significantStrikes: 19,
+        controlTimeSeconds: 18,
+      },
+    });
+    await expect(
+      fetcher.fetchAllRounds("bout-main"),
+    ).resolves.toHaveLength(2);
+    await expect(
+      fetcher.fetchRound("unknown-bout", 1),
+    ).resolves.toBeNull();
+  });
+
+  it("leaves live round fetching as a typed fail-closed hook", async () => {
+    const fetcher = createLiveCitoRoundStatsFetcher();
+
+    await expect(fetcher.fetchRound("bout-main", 1)).rejects.toThrow(
+      "not installed",
+    );
+    await expect(fetcher.fetchAllRounds("bout-main")).rejects.toThrow(
+      "not installed",
     );
   });
 });

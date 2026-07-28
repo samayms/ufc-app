@@ -87,6 +87,15 @@ declare module "node:url" {
   export function pathToFileURL(path: string): URL;
 }
 
+declare module "node:crypto" {
+  export interface Hash {
+    update(data: string): Hash;
+    digest(encoding: "hex"): string;
+  }
+
+  export function createHash(algorithm: string): Hash;
+}
+
 declare const process: {
   env: Readonly<Record<string, string | undefined>>;
   argv: string[];

@@ -418,4 +418,59 @@ describe("fixture collector loading", () => {
       ]),
     );
   });
+
+  it("wires lifecycle round updates into persisted collector bootstrap state", async () => {
+    const storage = new MemoryStorage();
+    const first = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage,
+    });
+    collectors.push(first);
+
+    first.eventBus.emit({
+      type: "PROVISIONAL_ROUND_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: "2026-07-28T01:00:00Z",
+    });
+    await first.roundStats.idle();
+
+    expect(first.getBootstrap().unifiedRounds).toEqual([
+      expect.objectContaining({
+        boutId: "bout-main",
+        round: 1,
+        endingSignal: "clock_zero_provisional",
+        provisional: true,
+      }),
+    ]);
+    await expect(storage.read("sse-events")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "update",
+          data: {
+            kind: "round",
+            record: expect.objectContaining({
+              boutId: "bout-main",
+              round: 1,
+              provisional: true,
+            }),
+          },
+        }),
+      ]),
+    );
+    await first.close();
+
+    const restored = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage,
+    });
+    collectors.push(restored);
+    expect(restored.getBootstrap().unifiedRounds).toEqual([
+      expect.objectContaining({
+        boutId: "bout-main",
+        round: 1,
+        endingSignal: "clock_zero_provisional",
+      }),
+    ]);
+  });
 });
