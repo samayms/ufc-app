@@ -1,5 +1,71 @@
 {
   "_comment": "SYNTHETIC normalized Polymarket ticks spanning a round boundary for fixture replay.",
+  "sampleMessages": {
+    "book": {
+      "event_type": "book",
+      "asset_id": "10488201673418507703957484917278688764049206352911886332818699846300512815635",
+      "market": "0x7b35d24a906ce8173bb6cfda94c80c819b47dd8e153bcc0d2722c3385619e4af",
+      "bids": [
+        { "price": "0.57", "size": "180" },
+        { "price": "0.59", "size": "95" }
+      ],
+      "asks": [
+        { "price": "0.61", "size": "120" },
+        { "price": "0.63", "size": "210" }
+      ],
+      "timestamp": "1785033628000",
+      "hash": "0xsynthetic-book"
+    },
+    "priceChange": {
+      "market": "0x7b35d24a906ce8173bb6cfda94c80c819b47dd8e153bcc0d2722c3385619e4af",
+      "price_changes": [
+        {
+          "asset_id": "10488201673418507703957484917278688764049206352911886332818699846300512815635",
+          "price": "0.60",
+          "size": "200",
+          "side": "BUY",
+          "best_bid": "0.60",
+          "best_ask": "0.62"
+        }
+      ],
+      "timestamp": "1785033629000",
+      "event_type": "price_change"
+    },
+    "bestBidAsk": {
+      "event_type": "best_bid_ask",
+      "market": "0x7b35d24a906ce8173bb6cfda94c80c819b47dd8e153bcc0d2722c3385619e4af",
+      "asset_id": "10488201673418507703957484917278688764049206352911886332818699846300512815635",
+      "best_bid": "0.61",
+      "best_ask": "0.63",
+      "spread": "0.02",
+      "timestamp": "1785033630000"
+    },
+    "lastTradePrice": {
+      "event_type": "last_trade_price",
+      "asset_id": "10488201673418507703957484917278688764049206352911886332818699846300512815635",
+      "market": "0x7b35d24a906ce8173bb6cfda94c80c819b47dd8e153bcc0d2722c3385619e4af",
+      "price": "0.625",
+      "side": "BUY",
+      "size": "25",
+      "timestamp": "1785033631000"
+    },
+    "tickSizeChange": {
+      "event_type": "tick_size_change",
+      "asset_id": "10488201673418507703957484917278688764049206352911886332818699846300512815635",
+      "market": "0x7b35d24a906ce8173bb6cfda94c80c819b47dd8e153bcc0d2722c3385619e4af",
+      "old_tick_size": "0.01",
+      "new_tick_size": "0.001",
+      "timestamp": "1785033632000"
+    },
+    "lifecycle": {
+      "event_type": "market_resolved",
+      "asset_id": "10488201673418507703957484917278688764049206352911886332818699846300512815635",
+      "market": "0x7b35d24a906ce8173bb6cfda94c80c819b47dd8e153bcc0d2722c3385619e4af",
+      "winning_asset_id": "10488201673418507703957484917278688764049206352911886332818699846300512815635",
+      "winning_outcome": "Danilo Reyes",
+      "timestamp": "1785037200000"
+    }
+  },
   "ticks": [
     {
       "source": "polymarket",

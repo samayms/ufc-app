@@ -43,6 +43,19 @@ import {
   type ManualBoutMappingOverride,
 } from "./mapping.ts";
 import {
+  type MarketTransport,
+  type ReplayMarketTransport,
+  resolveMarketSubscriptions,
+} from "./marketTransport.ts";
+import {
+  createKalshiLiveTransport,
+  KalshiFixtureTransport,
+} from "./kalshiTransport.ts";
+import {
+  createPolymarketLiveTransport,
+  PolymarketFixtureTransport,
+} from "./polymarketTransport.ts";
+import {
   sanitizeClientPayload,
   SsePush,
   type SsePushOptions,
@@ -106,6 +119,7 @@ export interface CollectorRoundStatsOptions {
 export interface CollectorMarketOptions {
   clock?: TickStoreClock;
   staleAfterMs?: number;
+  transports?: readonly MarketTransport[];
 }
 
 export type NormalizedStateLoader = (
@@ -133,10 +147,12 @@ export interface Collector {
   readonly push: SsePush;
   readonly roundStats: RoundStatsPipeline;
   readonly tickStore: MarketTickStore;
+  readonly marketTransports: readonly MarketTransport[];
   readonly lifecycle: FightLifecycleMachine;
   readonly server: Server;
   start(): Promise<number>;
   close(): Promise<void>;
+  replayMarkets(): Promise<void>;
   getBootstrap(): CollectorBootstrap;
   publishHealth(health: SourceHealth): Promise<boolean>;
 }
@@ -448,6 +464,7 @@ export async function createCollector(
   let boutMappings: BoutMappingRegistry | undefined;
   let roundStats: RoundStatsPipeline | undefined;
   let tickStore: MarketTickStore | undefined;
+  let marketTransports: MarketTransport[] = [];
 
   const healthRecords =
     await storage.read<unknown>(COLLECTOR_HEALTH_STREAM);
@@ -588,6 +605,66 @@ export async function createCollector(
   });
   boutMappings = initializedBoutMappings;
 
+  const kalshiSubscriptions = resolveMarketSubscriptions(
+    initializedBoutMappings.getAll(),
+    "kalshi",
+  );
+  const polymarketSubscriptions = resolveMarketSubscriptions(
+    initializedBoutMappings.getAll(),
+    "polymarket",
+  );
+  marketTransports = options.market?.transports
+    ? [...options.market.transports]
+    : config.dataMode === "fixture"
+      ? [
+          new KalshiFixtureTransport({
+            tickStore: initializedTickStore,
+            subscriptions: kalshiSubscriptions,
+          }),
+          new PolymarketFixtureTransport({
+            tickStore: initializedTickStore,
+            subscriptions: polymarketSubscriptions,
+          }),
+        ]
+      : [
+          createKalshiLiveTransport(config, {
+            tickStore: initializedTickStore,
+            subscriptions: kalshiSubscriptions,
+          }),
+          createPolymarketLiveTransport(config, {
+            tickStore: initializedTickStore,
+            subscriptions: polymarketSubscriptions,
+          }),
+        ];
+
+  // Streams remain connected across round breaks. The simple card policy
+  // closes them once every bout represented by a market subscription has
+  // emitted FIGHT_ENDED.
+  const relevantMarketBouts = new Set(
+    marketTransports.flatMap((transport) =>
+      transport.subscriptions.map(({ boutId }) => boutId),
+    ),
+  );
+  const endedMarketBouts = new Set<string>();
+  unsubscribers.push(
+    eventBus.subscribe("FIGHT_ENDED", (event) => {
+      if (!relevantMarketBouts.has(event.boutId)) return;
+      endedMarketBouts.add(event.boutId);
+      if (
+        relevantMarketBouts.size > 0 &&
+        [...relevantMarketBouts].every((boutId) =>
+          endedMarketBouts.has(boutId),
+        )
+      ) {
+        void Promise.all(
+          marketTransports.map((transport) =>
+            transport.disconnect(),
+          ),
+        ).catch(() => undefined);
+      }
+    }),
+  );
+
   const publishHealth = async (
     nextHealth: SourceHealth,
   ): Promise<boolean> => {
@@ -674,18 +751,38 @@ export async function createCollector(
     push,
     roundStats: initializedRoundStats,
     tickStore: initializedTickStore,
+    marketTransports,
     lifecycle,
     server,
     async start() {
       startPromise ??= listen(server, config.port, host);
-      return startPromise;
+      const port = await startPromise;
+      if (config.dataMode === "live") {
+        await Promise.all(
+          marketTransports.map((transport) => transport.connect()),
+        );
+      }
+      return port;
     },
     async close() {
       for (const unsubscribe of unsubscribers) unsubscribe();
+      await Promise.all(
+        marketTransports.map((transport) => transport.disconnect()),
+      );
       await initializedTickStore.close();
       await initializedRoundStats.close();
       await push.close();
       await closeServer(server);
+    },
+    async replayMarkets() {
+      const replayTransports = marketTransports.filter(
+        (transport): transport is ReplayMarketTransport =>
+          "replay" in transport &&
+          typeof transport.replay === "function",
+      );
+      await Promise.all(
+        replayTransports.map((transport) => transport.replay()),
+      );
     },
     getBootstrap,
     publishHealth,

@@ -70,6 +70,13 @@ export interface MarketTick {
   rawOdds?: number;
   impliedProbability?: number;
   noVigProbability?: number;
+  depth?: {
+    bids: number[];
+    asks: number[];
+  };
+  volume?: number;
+  tickSize?: number;
+  status?: string;
   sourceUpdatedAt?: string;
   receivedAt: string;
   stale: boolean;
@@ -89,6 +96,13 @@ export interface MarketSnapshotOutcome {
   rawOdds?: number;
   impliedProbability?: number;
   noVigProbability?: number;
+  depth?: {
+    bids: number[];
+    asks: number[];
+  };
+  volume?: number;
+  tickSize?: number;
+  status?: string;
   sourceUpdatedAt?: string;
   receivedAt: string;
   stale: boolean;

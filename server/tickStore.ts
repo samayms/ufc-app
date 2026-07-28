@@ -84,6 +84,13 @@ interface BookState {
   lastTrade?: number;
   rawOdds?: number;
   suppliedImpliedProbability?: number;
+  depth?: {
+    bids: number[];
+    asks: number[];
+  };
+  volume?: number;
+  tickSize?: number;
+  status?: string;
   sourceUpdatedAt?: string;
   receivedAt: string;
   tickStale: boolean;
@@ -113,6 +120,10 @@ const TICK_KEYS = new Set([
   "rawOdds",
   "impliedProbability",
   "noVigProbability",
+  "depth",
+  "volume",
+  "tickSize",
+  "status",
   "sourceUpdatedAt",
   "receivedAt",
   "stale",
@@ -216,6 +227,43 @@ function validateTick(value: MarketTick): void {
   }
   validateProbability(value.impliedProbability, "impliedProbability");
   validateProbability(value.noVigProbability, "noVigProbability");
+  if (value.depth !== undefined) {
+    if (
+      !isRecord(value.depth) ||
+      !Array.isArray(value.depth.bids) ||
+      !Array.isArray(value.depth.asks)
+    ) {
+      throw new TypeError("depth must contain bid and ask arrays");
+    }
+    for (const [field, levels] of [
+      ["depth.bids", value.depth.bids],
+      ["depth.asks", value.depth.asks],
+    ] as const) {
+      for (const level of levels) {
+        validateFinite(level, field);
+        if (level < 0 || level > exchangeLimit) {
+          throw new TypeError(
+            `${field} values must be between 0 and ${exchangeLimit}`,
+          );
+        }
+      }
+    }
+  }
+  validateFinite(value.volume, "volume");
+  if (value.volume !== undefined && value.volume < 0) {
+    throw new TypeError("volume must not be negative");
+  }
+  validateFinite(value.tickSize, "tickSize");
+  if (value.tickSize !== undefined && value.tickSize <= 0) {
+    throw new TypeError("tickSize must be positive");
+  }
+  if (
+    value.status !== undefined &&
+    (typeof value.status !== "string" ||
+      value.status.trim().length === 0)
+  ) {
+    throw new TypeError("status must not be empty");
+  }
   if (typeof value.stale !== "boolean") {
     throw new TypeError("stale must be a boolean");
   }
@@ -228,9 +276,10 @@ function validateTick(value: MarketTick): void {
     value.ask === undefined &&
     value.lastTrade === undefined &&
     value.rawOdds === undefined &&
-    value.impliedProbability === undefined
+    value.impliedProbability === undefined &&
+    value.status === undefined
   ) {
-    throw new TypeError("tick must contain at least one price");
+    throw new TypeError("tick must contain a price or lifecycle status");
   }
 }
 
@@ -299,11 +348,31 @@ function isFreshnessRecord(
 }
 
 function copyTick(tick: MarketTick): MarketTick {
-  return { ...tick };
+  return {
+    ...tick,
+    ...(tick.depth === undefined
+      ? {}
+      : {
+          depth: {
+            bids: [...tick.depth.bids],
+            asks: [...tick.depth.asks],
+          },
+        }),
+  };
 }
 
 function copyOutcome(outcome: MarketSnapshotOutcome): MarketSnapshotOutcome {
-  return { ...outcome };
+  return {
+    ...outcome,
+    ...(outcome.depth === undefined
+      ? {}
+      : {
+          depth: {
+            bids: [...outcome.depth.bids],
+            asks: [...outcome.depth.asks],
+          },
+        }),
+  };
 }
 
 function copySnapshot(snapshot: MarketSnapshot): MarketSnapshot {
@@ -358,7 +427,17 @@ function snapshotKey(snapshot: {
 }
 
 function copyBook(state: BookState): BookState {
-  return { ...state };
+  return {
+    ...state,
+    ...(state.depth === undefined
+      ? {}
+      : {
+          depth: {
+            bids: [...state.depth.bids],
+            asks: [...state.depth.asks],
+          },
+        }),
+  };
 }
 
 function shouldReplace(previous: BookState, tick: MarketTick): boolean {
@@ -436,6 +515,36 @@ function applyTick(
               previous.suppliedImpliedProbability,
           }
       : { suppliedImpliedProbability: tick.impliedProbability }),
+    ...(tick.depth === undefined
+      ? previous?.depth === undefined
+        ? {}
+        : {
+            depth: {
+              bids: [...previous.depth.bids],
+              asks: [...previous.depth.asks],
+            },
+          }
+      : {
+          depth: {
+            bids: [...tick.depth.bids],
+            asks: [...tick.depth.asks],
+          },
+        }),
+    ...(tick.volume === undefined
+      ? previous?.volume === undefined
+        ? {}
+        : { volume: previous.volume }
+      : { volume: tick.volume }),
+    ...(tick.tickSize === undefined
+      ? previous?.tickSize === undefined
+        ? {}
+        : { tickSize: previous.tickSize }
+      : { tickSize: tick.tickSize }),
+    ...(tick.status === undefined
+      ? previous?.status === undefined
+        ? {}
+        : { status: previous.status }
+      : { status: tick.status }),
     ...(tick.sourceUpdatedAt === undefined
       ? previous?.sourceUpdatedAt === undefined
         ? {}
@@ -535,6 +644,19 @@ function outcomeFromState(
     ...(impliedProbability === undefined
       ? {}
       : { impliedProbability }),
+    ...(state.depth === undefined
+      ? {}
+      : {
+          depth: {
+            bids: [...state.depth.bids],
+            asks: [...state.depth.asks],
+          },
+        }),
+    ...(state.volume === undefined ? {} : { volume: state.volume }),
+    ...(state.tickSize === undefined
+      ? {}
+      : { tickSize: state.tickSize }),
+    ...(state.status === undefined ? {} : { status: state.status }),
     ...(state.sourceUpdatedAt === undefined
       ? {}
       : { sourceUpdatedAt: state.sourceUpdatedAt }),
@@ -908,8 +1030,18 @@ export class MarketTickStore implements TickHistorySource {
       ...outcome,
       fresh: !stale,
       depth: {
-        bids: state.bid === undefined ? [] : [state.bid],
-        asks: state.ask === undefined ? [] : [state.ask],
+        bids:
+          state.depth === undefined
+            ? state.bid === undefined
+              ? []
+              : [state.bid]
+            : [...state.depth.bids],
+        asks:
+          state.depth === undefined
+            ? state.ask === undefined
+              ? []
+              : [state.ask]
+            : [...state.depth.asks],
       },
     };
   }

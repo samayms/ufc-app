@@ -24,6 +24,26 @@ describe("BoutMappingRegistry", () => {
       externalRefs: [
         { source: "espn", id: "401770001" },
         { source: "cito", id: "cito-bout-9001" },
+        {
+          source: "kalshi",
+          id: "KXUFCFIGHT-26JUL25REYVOL-REY",
+        },
+        {
+          source: "kalshi",
+          id: "KXUFCFIGHT-26JUL25REYVOL-VOL",
+        },
+        {
+          source: "polymarket",
+          id: "0x7b35d24a906ce8173bb6cfda94c80c819b47dd8e153bcc0d2722c3385619e4af",
+        },
+        {
+          source: "polymarket",
+          id: "10488201673418507703957484917278688764049206352911886332818699846300512815635",
+        },
+        {
+          source: "polymarket",
+          id: "92713044581400595800357835853269232303150605770758104904550685326314229170572",
+        },
       ],
       redFighter: "Danilo Reyes",
       blueFighter: "Artem Volkov",

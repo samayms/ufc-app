@@ -1,5 +1,65 @@
 {
   "_comment": "SYNTHETIC normalized Kalshi ticks spanning a round boundary for fixture replay.",
+  "sampleMessages": {
+    "orderbookSnapshot": {
+      "type": "orderbook_snapshot",
+      "sid": 2,
+      "seq": 20,
+      "msg": {
+        "market_ticker": "KXUFCFIGHT-26JUL25REYVOL-REY",
+        "market_id": "synthetic-market-reyes",
+        "yes_dollars_fp": [["0.5700", "180.00"], ["0.5900", "95.00"]],
+        "no_dollars_fp": [["0.6100", "120.00"], ["0.6300", "210.00"]]
+      }
+    },
+    "orderbookDelta": {
+      "type": "orderbook_delta",
+      "sid": 2,
+      "seq": 21,
+      "msg": {
+        "market_ticker": "KXUFCFIGHT-26JUL25REYVOL-REY",
+        "market_id": "synthetic-market-reyes",
+        "price_dollars": "0.6000",
+        "delta_fp": "40.00",
+        "side": "yes",
+        "ts_ms": 1785033628000
+      }
+    },
+    "ticker": {
+      "type": "ticker",
+      "sid": 3,
+      "seq": 31,
+      "msg": {
+        "market_ticker": "KXUFCFIGHT-26JUL25REYVOL-REY",
+        "yes_bid_dollars": "0.6000",
+        "yes_ask_dollars": "0.6200",
+        "price_dollars": "0.6100",
+        "volume": 48210,
+        "ts_ms": 1785033629000
+      }
+    },
+    "trade": {
+      "type": "trade",
+      "sid": 4,
+      "seq": 41,
+      "msg": {
+        "market_ticker": "KXUFCFIGHT-26JUL25REYVOL-REY",
+        "yes_price_dollars": "0.6150",
+        "count": 25,
+        "ts_ms": 1785033630000
+      }
+    },
+    "lifecycle": {
+      "type": "market_lifecycle_v2",
+      "sid": 5,
+      "seq": 51,
+      "msg": {
+        "market_ticker": "KXUFCFIGHT-26JUL25REYVOL-REY",
+        "status": "closed",
+        "ts_ms": 1785037200000
+      }
+    }
+  },
   "ticks": [
     {
       "source": "kalshi",
