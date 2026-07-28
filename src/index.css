@@ -18,12 +18,12 @@
   --text-ghost: rgba(245, 241, 236, 0.24);
 
   /* Corner grammar — the identity. Red corner vs blue corner. */
-  --red-corner: #e2603f;
-  --red-corner-strong: #f08a6e;
-  --red-corner-dim: rgba(226, 96, 63, 0.16);
-  --blue-corner: #4c8ce0;
-  --blue-corner-strong: #7fb0ee;
-  --blue-corner-dim: rgba(76, 140, 224, 0.16);
+  --red-corner: #9c1f28;
+  --red-corner-strong: #cf5049;
+  --red-corner-dim: rgba(156, 31, 40, 0.16);
+  --blue-corner: #427ac3;
+  --blue-corner-strong: #6e99cf;
+  --blue-corner-dim: rgba(66, 122, 195, 0.16);
 
   /* Market accent — amber, reserved for money movement and market labels */
   --market: #e0b341;
@@ -38,6 +38,7 @@
   --font-ui: "Schibsted Grotesk", system-ui, sans-serif;
   --font-display: "Asap Condensed", "Arial Narrow", sans-serif;
   --font-data: "Schibsted Grotesk", system-ui, sans-serif;
+  --font-stat-label: "Barlow Semi Condensed", system-ui, sans-serif;
 
   --fs-xs: 0.6875rem; /* 11px labels */
   --fs-sm: 0.8125rem; /* 13px dense body */
