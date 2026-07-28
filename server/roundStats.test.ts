@@ -3,6 +3,10 @@ import type {
   CitoRoundStatsFetcher,
   CitoRoundStatsPayload,
 } from "../src/sources/cito.ts";
+import type {
+  MarketSnapshot,
+  MarketSource,
+} from "../src/sources/contract.ts";
 import { CollectorEventBus } from "./eventBus.ts";
 import type {
   RoundJobClock,
@@ -168,6 +172,33 @@ function emitConfirmed(bus: CollectorEventBus, round = 1): void {
   });
 }
 
+function marketSnapshot(source: MarketSource): MarketSnapshot {
+  return {
+    source,
+    boutId: BOUT_ID,
+    round: 1,
+    boundaryType: "provisional",
+    takenAt: new Date(BASE_TIME).toISOString(),
+    fresh: true,
+    outcomes: [
+      {
+        marketType: "fight-winner",
+        outcome: "red",
+        impliedProbability: 0.6,
+        receivedAt: new Date(BASE_TIME).toISOString(),
+        stale: false,
+      },
+      {
+        marketType: "fight-winner",
+        outcome: "blue",
+        impliedProbability: 0.4,
+        receivedAt: new Date(BASE_TIME).toISOString(),
+        stale: false,
+      },
+    ],
+  };
+}
+
 describe("RoundStatsPipeline", () => {
   it("produces provisional then confirmed records in a normal round flow", async () => {
     const cito = fetcher([payload()]);
@@ -216,6 +247,30 @@ describe("RoundStatsPipeline", () => {
       { provisional: true, revision: 1 },
       { provisional: false, revision: 1 },
     ]);
+    await pipeline.close();
+  });
+
+  it("retains every source snapshot through later round-stat updates", async () => {
+    const { bus, time, pipeline } = await setup(fetcher([payload()]));
+    emitProvisional(bus);
+    await pipeline.idle();
+    for (const source of [
+      "kalshi",
+      "polymarket",
+      "odds-api-io",
+      "the-odds-api",
+    ] as const) {
+      await pipeline.setMarketSnapshot(marketSnapshot(source));
+    }
+
+    time.advance(6_000);
+    await pipeline.idle();
+    expect(pipeline.getUnifiedRound(BOUT_ID, 1)?.marketAtEnd).toEqual({
+      kalshi: expect.objectContaining({ source: "kalshi" }),
+      polymarket: expect.objectContaining({ source: "polymarket" }),
+      oddsApiIo: expect.objectContaining({ source: "odds-api-io" }),
+      theOddsApi: expect.objectContaining({ source: "the-odds-api" }),
+    });
     await pipeline.close();
   });
 

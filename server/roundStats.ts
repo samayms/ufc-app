@@ -5,6 +5,11 @@ import type {
   CitoRoundStatsPayload,
 } from "../src/sources/cito.ts";
 import type {
+  MarketBoundaryType,
+  MarketSnapshot,
+  MarketSource,
+} from "../src/sources/contract.ts";
+import type {
   CollectorEvent,
   CollectorEventBus,
 } from "./eventBus.ts";
@@ -68,9 +73,16 @@ export interface UnifiedRoundRecord {
   detectedEndedAt: string;
   endingSignal: RoundEndingSignal;
   citoStats?: RoundStatsRecord;
-  marketAtEnd: Record<string, never>;
+  marketAtEnd: MarketAtEnd;
   provisional: boolean;
   finalizedAt?: string;
+}
+
+export interface MarketAtEnd {
+  kalshi?: MarketSnapshot;
+  polymarket?: MarketSnapshot;
+  oddsApiIo?: MarketSnapshot;
+  theOddsApi?: MarketSnapshot;
 }
 
 export interface RoundStatsPipelineOptions {
@@ -205,8 +217,64 @@ function copyUnified(record: UnifiedRoundRecord): UnifiedRoundRecord {
     ...(record.citoStats === undefined
       ? {}
       : { citoStats: copyRoundStats(record.citoStats) }),
-    marketAtEnd: {},
+    marketAtEnd: copyMarketAtEnd(record.marketAtEnd),
   };
+}
+
+function copyMarketSnapshot(snapshot: MarketSnapshot): MarketSnapshot {
+  return {
+    ...snapshot,
+    outcomes: snapshot.outcomes.map((outcome) => ({ ...outcome })),
+  };
+}
+
+function copyMarketAtEnd(marketAtEnd: MarketAtEnd): MarketAtEnd {
+  return {
+    ...(marketAtEnd.kalshi === undefined
+      ? {}
+      : { kalshi: copyMarketSnapshot(marketAtEnd.kalshi) }),
+    ...(marketAtEnd.polymarket === undefined
+      ? {}
+      : { polymarket: copyMarketSnapshot(marketAtEnd.polymarket) }),
+    ...(marketAtEnd.oddsApiIo === undefined
+      ? {}
+      : { oddsApiIo: copyMarketSnapshot(marketAtEnd.oddsApiIo) }),
+    ...(marketAtEnd.theOddsApi === undefined
+      ? {}
+      : { theOddsApi: copyMarketSnapshot(marketAtEnd.theOddsApi) }),
+  };
+}
+
+function marketField(
+  source: MarketSource,
+): keyof MarketAtEnd {
+  switch (source) {
+    case "kalshi":
+      return "kalshi";
+    case "polymarket":
+      return "polymarket";
+    case "odds-api-io":
+      return "oddsApiIo";
+    case "the-odds-api":
+      return "theOddsApi";
+  }
+}
+
+function boundaryTypeForRecord(
+  record: UnifiedRoundRecord,
+): MarketBoundaryType {
+  return record.endingSignal === "clock_zero_provisional"
+    ? "provisional"
+    : "confirmed";
+}
+
+function marketBoundaryKey(
+  boutId: string,
+  round: number,
+  boundaryType: MarketBoundaryType,
+  source: MarketSource,
+): string {
+  return `${boutId}:${round}:${boundaryType}:${source}`;
 }
 
 function completeFighterStats(
@@ -279,6 +347,8 @@ export class RoundStatsPipeline {
   private readonly unified = new Map<string, UnifiedRoundRecord>();
 
   private readonly confirmedRounds = new Set<string>();
+
+  private readonly marketSnapshots = new Map<string, MarketSnapshot>();
 
   private readonly unsubscribers: Array<() => void> = [];
 
@@ -394,6 +464,69 @@ export class RoundStatsPipeline {
       );
   }
 
+  setMarketSnapshot(snapshot: MarketSnapshot): Promise<void> {
+    return this.enqueueState(async () => {
+      const stored = copyMarketSnapshot(snapshot);
+      this.marketSnapshots.set(
+        marketBoundaryKey(
+          stored.boutId,
+          stored.round,
+          stored.boundaryType,
+          stored.source,
+        ),
+        stored,
+      );
+      const key = roundKey(stored.boutId, stored.round);
+      const previous = this.unified.get(key);
+      if (
+        previous === undefined ||
+        boundaryTypeForRecord(previous) !== stored.boundaryType
+      ) {
+        return;
+      }
+      const field = marketField(stored.source);
+      if (
+        JSON.stringify(previous.marketAtEnd[field]) ===
+        JSON.stringify(stored)
+      ) {
+        return;
+      }
+      const next = copyUnified(previous);
+      next.marketAtEnd[field] = stored;
+      await this.persistUnified(next);
+    });
+  }
+
+  removeMarketSnapshots(
+    boutId: string,
+    round: number,
+    boundaryType: MarketBoundaryType,
+  ): Promise<void> {
+    return this.enqueueState(async () => {
+      for (const source of [
+        "kalshi",
+        "polymarket",
+        "odds-api-io",
+        "the-odds-api",
+      ] as const) {
+        this.marketSnapshots.delete(
+          marketBoundaryKey(boutId, round, boundaryType, source),
+        );
+      }
+      const previous = this.unified.get(roundKey(boutId, round));
+      if (
+        previous === undefined ||
+        boundaryTypeForRecord(previous) !== boundaryType ||
+        Object.keys(previous.marketAtEnd).length === 0
+      ) {
+        return;
+      }
+      const next = copyUnified(previous);
+      next.marketAtEnd = {};
+      await this.persistUnified(next);
+    });
+  }
+
   async idle(): Promise<void> {
     while (true) {
       const eventQueue = this.eventQueue;
@@ -459,6 +592,7 @@ export class RoundStatsPipeline {
 
     this.unified.clear();
     this.confirmedRounds.clear();
+    this.marketSnapshots.clear();
     for (const persisted of unifiedRecords) {
       if (!isPersistedUnifiedRound(persisted)) continue;
       const record = copyUnified(persisted.record);
@@ -466,6 +600,21 @@ export class RoundStatsPipeline {
       this.unified.set(key, record);
       if (record.endingSignal !== "clock_zero_provisional") {
         this.confirmedRounds.add(key);
+      }
+    }
+
+    for (const record of this.unified.values()) {
+      const boundaryType = boundaryTypeForRecord(record);
+      for (const snapshot of Object.values(record.marketAtEnd)) {
+        this.marketSnapshots.set(
+          marketBoundaryKey(
+            snapshot.boutId,
+            snapshot.round,
+            boundaryType,
+            snapshot.source,
+          ),
+          copyMarketSnapshot(snapshot),
+        );
       }
     }
 
@@ -676,7 +825,8 @@ export class RoundStatsPipeline {
       const signal = endingSignal(event);
       if (
         previous !== undefined &&
-        (previous.endingSignal === signal ||
+        ((previous.endingSignal === signal &&
+          previous.detectedEndedAt === event.detectedAt) ||
           (event.type === "PROVISIONAL_ROUND_ENDED" &&
             previous.endingSignal !== "clock_zero_provisional"))
       ) {
@@ -696,7 +846,13 @@ export class RoundStatsPipeline {
         ...(stats === undefined
           ? {}
           : { citoStats: copyRoundStats(stats) }),
-        marketAtEnd: {},
+        marketAtEnd: this.marketAtEndFor(
+          event.boutId,
+          event.round,
+          event.type === "PROVISIONAL_ROUND_ENDED"
+            ? "provisional"
+            : "confirmed",
+        ),
         provisional,
         ...(!provisional
           ? {
@@ -746,5 +902,27 @@ export class RoundStatsPipeline {
     if (this.publish !== undefined) {
       await this.publish(copyUnified(stored)).catch(() => undefined);
     }
+  }
+
+  private marketAtEndFor(
+    boutId: string,
+    round: number,
+    boundaryType: MarketBoundaryType,
+  ): MarketAtEnd {
+    const result: MarketAtEnd = {};
+    for (const source of [
+      "kalshi",
+      "polymarket",
+      "odds-api-io",
+      "the-odds-api",
+    ] as const) {
+      const snapshot = this.marketSnapshots.get(
+        marketBoundaryKey(boutId, round, boundaryType, source),
+      );
+      if (snapshot !== undefined) {
+        result[marketField(source)] = copyMarketSnapshot(snapshot);
+      }
+    }
+    return result;
   }
 }

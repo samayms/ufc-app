@@ -434,12 +434,35 @@ describe("fixture collector loading", () => {
     });
     collectors.push(first);
 
+    await first.tickStore.appendTick({
+      source: "kalshi",
+      boutId: "bout-main",
+      marketType: "fight-winner",
+      outcome: "Danilo Reyes",
+      bid: 58,
+      ask: 60,
+      receivedAt: "2026-07-28T00:59:58Z",
+      sourceUpdatedAt: "2026-07-28T00:59:57Z",
+      stale: false,
+    });
+    await first.tickStore.appendTick({
+      source: "kalshi",
+      boutId: "bout-main",
+      marketType: "fight-winner",
+      outcome: "Artem Volkov",
+      bid: 40,
+      ask: 42,
+      receivedAt: "2026-07-28T00:59:58Z",
+      sourceUpdatedAt: "2026-07-28T00:59:57Z",
+      stale: false,
+    });
     first.eventBus.emit({
       type: "PROVISIONAL_ROUND_ENDED",
       boutId: "bout-main",
       round: 1,
       detectedAt: "2026-07-28T01:00:00Z",
     });
+    await first.tickStore.idle();
     await first.roundStats.idle();
 
     expect(first.getBootstrap().unifiedRounds).toEqual([
@@ -448,8 +471,34 @@ describe("fixture collector loading", () => {
         round: 1,
         endingSignal: "clock_zero_provisional",
         provisional: true,
+        marketAtEnd: {
+          kalshi: expect.objectContaining({
+            source: "kalshi",
+            boundaryType: "provisional",
+            outcomes: expect.arrayContaining([
+              expect.objectContaining({
+                outcome: "Danilo Reyes",
+                midpoint: 59,
+              }),
+            ]),
+          }),
+        },
       }),
     ]);
+    expect(first.getBootstrap()).toMatchObject({
+      latestMarkets: expect.arrayContaining([
+        expect.objectContaining({
+          source: "kalshi",
+          outcome: "Danilo Reyes",
+        }),
+      ]),
+      marketSnapshots: [
+        expect.objectContaining({
+          source: "kalshi",
+          boundaryType: "provisional",
+        }),
+      ],
+    });
     await expect(storage.read("sse-events")).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -460,6 +509,16 @@ describe("fixture collector loading", () => {
               boutId: "bout-main",
               round: 1,
               provisional: true,
+            }),
+          },
+        }),
+        expect.objectContaining({
+          event: "update",
+          data: {
+            kind: "market-snapshot",
+            snapshot: expect.objectContaining({
+              source: "kalshi",
+              boundaryType: "provisional",
             }),
           },
         }),
@@ -477,6 +536,12 @@ describe("fixture collector loading", () => {
         boutId: "bout-main",
         round: 1,
         endingSignal: "clock_zero_provisional",
+        marketAtEnd: {
+          kalshi: expect.objectContaining({
+            source: "kalshi",
+            boundaryType: "provisional",
+          }),
+        },
       }),
     ]);
   });

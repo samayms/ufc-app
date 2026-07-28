@@ -49,6 +49,10 @@ async function expectStorageParity(storage: Storage): Promise<void> {
     first,
     second,
   ]);
+  await storage.replace("rounds", [second]);
+  await expect(storage.read<TestRecord>("rounds")).resolves.toEqual([
+    second,
+  ]);
   await expect(storage.listStreams()).resolves.toEqual(["health", "rounds"]);
 }
 
@@ -61,7 +65,6 @@ describe("JsonlStorage", () => {
 
     const reloaded = new JsonlStorage(directory);
     await expect(reloaded.read<TestRecord>("rounds")).resolves.toEqual([
-      { id: "round-1", round: 1 },
       {
         id: "round-2",
         round: 2,

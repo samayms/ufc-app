@@ -1,0 +1,77 @@
+{
+  "_comment": "SYNTHETIC normalized Polymarket ticks spanning a round boundary for fixture replay.",
+  "ticks": [
+    {
+      "source": "polymarket",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Danilo Reyes",
+      "bid": 0.57,
+      "ask": 0.59,
+      "lastTrade": 0.58,
+      "sourceUpdatedAt": "2026-07-26T02:39:52Z",
+      "receivedAt": "2026-07-26T02:39:53Z",
+      "stale": false
+    },
+    {
+      "source": "polymarket",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Artem Volkov",
+      "bid": 0.41,
+      "ask": 0.43,
+      "lastTrade": 0.42,
+      "sourceUpdatedAt": "2026-07-26T02:39:52Z",
+      "receivedAt": "2026-07-26T02:39:53Z",
+      "stale": false
+    },
+    {
+      "source": "polymarket",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Danilo Reyes",
+      "bid": 0.61,
+      "ask": 0.63,
+      "lastTrade": 0.62,
+      "sourceUpdatedAt": "2026-07-26T02:40:27Z",
+      "receivedAt": "2026-07-26T02:40:28Z",
+      "stale": false
+    },
+    {
+      "source": "polymarket",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Artem Volkov",
+      "bid": 0.38,
+      "ask": 0.4,
+      "lastTrade": 0.39,
+      "sourceUpdatedAt": "2026-07-26T02:40:27Z",
+      "receivedAt": "2026-07-26T02:40:28Z",
+      "stale": false
+    },
+    {
+      "source": "polymarket",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Danilo Reyes",
+      "bid": 0.65,
+      "ask": 0.67,
+      "lastTrade": 0.66,
+      "sourceUpdatedAt": "2026-07-26T02:40:37Z",
+      "receivedAt": "2026-07-26T02:40:38Z",
+      "stale": false
+    },
+    {
+      "source": "polymarket",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Artem Volkov",
+      "bid": 0.33,
+      "ask": 0.35,
+      "lastTrade": 0.34,
+      "sourceUpdatedAt": "2026-07-26T02:40:37Z",
+      "receivedAt": "2026-07-26T02:40:38Z",
+      "stale": false
+    }
+  ]
+}

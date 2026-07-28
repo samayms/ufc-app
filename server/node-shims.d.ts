@@ -30,6 +30,14 @@ declare module "node:fs/promises" {
   ): Promise<void>;
 
   export function truncate(path: string, length: number): Promise<void>;
+
+  export function rename(oldPath: string, newPath: string): Promise<void>;
+
+  export function writeFile(
+    path: string,
+    data: string,
+    encoding: "utf8",
+  ): Promise<void>;
 }
 
 declare module "node:os" {

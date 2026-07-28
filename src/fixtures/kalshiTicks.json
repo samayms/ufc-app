@@ -1,0 +1,77 @@
+{
+  "_comment": "SYNTHETIC normalized Kalshi ticks spanning a round boundary for fixture replay.",
+  "ticks": [
+    {
+      "source": "kalshi",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Danilo Reyes",
+      "bid": 57,
+      "ask": 61,
+      "lastTrade": 59,
+      "sourceUpdatedAt": "2026-07-26T02:39:50Z",
+      "receivedAt": "2026-07-26T02:39:51Z",
+      "stale": false
+    },
+    {
+      "source": "kalshi",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Artem Volkov",
+      "bid": 39,
+      "ask": 43,
+      "lastTrade": 41,
+      "sourceUpdatedAt": "2026-07-26T02:39:50Z",
+      "receivedAt": "2026-07-26T02:39:51Z",
+      "stale": false
+    },
+    {
+      "source": "kalshi",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Danilo Reyes",
+      "bid": 59,
+      "ask": 62,
+      "lastTrade": 60,
+      "sourceUpdatedAt": "2026-07-26T02:40:28Z",
+      "receivedAt": "2026-07-26T02:40:29Z",
+      "stale": false
+    },
+    {
+      "source": "kalshi",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Artem Volkov",
+      "bid": 38,
+      "ask": 41,
+      "lastTrade": 40,
+      "sourceUpdatedAt": "2026-07-26T02:40:28Z",
+      "receivedAt": "2026-07-26T02:40:29Z",
+      "stale": false
+    },
+    {
+      "source": "kalshi",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Danilo Reyes",
+      "bid": 63,
+      "ask": 66,
+      "lastTrade": 65,
+      "sourceUpdatedAt": "2026-07-26T02:40:35Z",
+      "receivedAt": "2026-07-26T02:40:36Z",
+      "stale": false
+    },
+    {
+      "source": "kalshi",
+      "boutId": "bout-main",
+      "marketType": "fight-winner",
+      "outcome": "Artem Volkov",
+      "bid": 34,
+      "ask": 37,
+      "lastTrade": 35,
+      "sourceUpdatedAt": "2026-07-26T02:40:35Z",
+      "receivedAt": "2026-07-26T02:40:36Z",
+      "stale": false
+    }
+  ]
+}

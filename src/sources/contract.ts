@@ -51,6 +51,75 @@ export interface OddsSource {
   getOddsSnapshot(bout: Bout): Promise<OddsSnapshot | null>;
 }
 
+export type MarketSource =
+  | "kalshi"
+  | "polymarket"
+  | "odds-api-io"
+  | "the-odds-api";
+
+/** One normalized source update. History retains every accepted tick. */
+export interface MarketTick {
+  source: MarketSource;
+  boutId: string;
+  bookmaker?: string;
+  marketType: string;
+  outcome: string;
+  bid?: number;
+  ask?: number;
+  lastTrade?: number;
+  rawOdds?: number;
+  impliedProbability?: number;
+  noVigProbability?: number;
+  sourceUpdatedAt?: string;
+  receivedAt: string;
+  stale: boolean;
+}
+
+export type MarketBoundaryType = "provisional" | "confirmed";
+
+export interface MarketSnapshotOutcome {
+  bookmaker?: string;
+  marketType: string;
+  outcome: string;
+  bid?: number;
+  ask?: number;
+  midpoint?: number;
+  spread?: number;
+  lastTrade?: number;
+  rawOdds?: number;
+  impliedProbability?: number;
+  noVigProbability?: number;
+  sourceUpdatedAt?: string;
+  receivedAt: string;
+  stale: boolean;
+}
+
+/** Keyed by (boutId, round, source, boundaryType). */
+export interface MarketSnapshot {
+  source: MarketSource;
+  boutId: string;
+  round: number;
+  boundaryType: MarketBoundaryType;
+  takenAt: string;
+  fresh: boolean;
+  outcomes: MarketSnapshotOutcome[];
+}
+
+/**
+ * Historical companion to OddsSource. Existing current-snapshot clients do
+ * not need to implement it.
+ */
+export interface TickHistorySource {
+  getTickHistory(
+    boutId: string,
+    source?: MarketSource,
+  ): Promise<MarketTick[]>;
+  getRoundBoundarySnapshots(
+    boutId: string,
+    round?: number,
+  ): Promise<MarketSnapshot[]>;
+}
+
 /** ESPN/Cito fighter profiles — fetch once, cache, don't re-poll. */
 export interface FighterRecordSource {
   getFighter(ref: ExternalRef): Promise<Fighter | null>;

@@ -35,6 +35,7 @@ import {
   CollectorEventBus,
   type CollectorEvent,
 } from "./eventBus.ts";
+import { FightLifecycleMachine } from "./lifecycle.ts";
 import {
   createBoutMappingRegistry,
   type BoutMapping,
@@ -59,6 +60,12 @@ import {
   JsonlStorage,
   type Storage,
 } from "./storage.ts";
+import {
+  MarketTickStore,
+  type LocalOrderBookState,
+  type MarketSnapshot,
+  type TickStoreClock,
+} from "./tickStore.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
 export const COLLECTOR_HEALTH_STREAM = "source-health";
@@ -83,6 +90,8 @@ export interface CollectorBootstrap {
   boutMappings: BoutMapping[];
   health: Readonly<Record<string, SourceHealth>>;
   unifiedRounds: readonly UnifiedRoundRecord[];
+  marketSnapshots: readonly MarketSnapshot[];
+  latestMarkets: readonly LocalOrderBookState[];
 }
 
 export interface CollectorRoundStatsOptions {
@@ -92,6 +101,11 @@ export interface CollectorRoundStatsOptions {
   initialDelayMs?: number;
   retryDelayMs?: number;
   quotaPolicy?: QuotaPolicy;
+}
+
+export interface CollectorMarketOptions {
+  clock?: TickStoreClock;
+  staleAfterMs?: number;
 }
 
 export type NormalizedStateLoader = (
@@ -109,6 +123,7 @@ export interface CreateCollectorOptions {
     "bufferSize" | "heartbeatMs" | "now"
   >;
   roundStats?: CollectorRoundStatsOptions;
+  market?: CollectorMarketOptions;
 }
 
 export interface Collector {
@@ -117,6 +132,8 @@ export interface Collector {
   readonly boutMappings: BoutMappingRegistry;
   readonly push: SsePush;
   readonly roundStats: RoundStatsPipeline;
+  readonly tickStore: MarketTickStore;
+  readonly lifecycle: FightLifecycleMachine;
   readonly server: Server;
   start(): Promise<number>;
   close(): Promise<void>;
@@ -430,6 +447,7 @@ export async function createCollector(
   let state: DashboardState | null = restoredState ?? null;
   let boutMappings: BoutMappingRegistry | undefined;
   let roundStats: RoundStatsPipeline | undefined;
+  let tickStore: MarketTickStore | undefined;
 
   const healthRecords =
     await storage.read<unknown>(COLLECTOR_HEALTH_STREAM);
@@ -449,6 +467,8 @@ export async function createCollector(
         .map(([source, value]) => [source, copyHealth(value)]),
     ),
     unifiedRounds: roundStats?.getUnifiedRounds() ?? [],
+    marketSnapshots: tickStore?.getSnapshots() ?? [],
+    latestMarkets: tickStore?.getLatest() ?? [],
   });
   const push = new SsePush({
     storage,
@@ -476,6 +496,33 @@ export async function createCollector(
         .catch(() => undefined);
     }),
   );
+  const initializedTickStore = await MarketTickStore.create({
+    eventBus,
+    storage,
+    publish: async (snapshot) => {
+      await push.publish("update", {
+        kind: "market-snapshot",
+        snapshot,
+      });
+    },
+    onSnapshot: async (snapshot) => {
+      await roundStats?.setMarketSnapshot(snapshot);
+    },
+    onSnapshotsRemoved: async (boutId, round, boundaryType) => {
+      await roundStats?.removeMarketSnapshots(
+        boutId,
+        round,
+        boundaryType,
+      );
+    },
+    ...(options.market?.clock === undefined
+      ? {}
+      : { clock: options.market.clock }),
+    ...(options.market?.staleAfterMs === undefined
+      ? {}
+      : { staleAfterMs: options.market.staleAfterMs }),
+  });
+  tickStore = initializedTickStore;
   const roundStatsOptions = options.roundStats;
   const initializedRoundStats = await RoundStatsPipeline.create({
     eventBus,
@@ -508,6 +555,18 @@ export async function createCollector(
       : { quotaPolicy: roundStatsOptions.quotaPolicy }),
   });
   roundStats = initializedRoundStats;
+  for (const snapshot of initializedTickStore.getSnapshots()) {
+    await initializedRoundStats.setMarketSnapshot(snapshot);
+  }
+  const lifecycle = await FightLifecycleMachine.create({
+    eventBus,
+    storage,
+    onProvisionalSuperseded: (supersession) => {
+      void initializedTickStore
+        .handleProvisionalSupersession(supersession)
+        .catch(() => undefined);
+    },
+  });
 
   const loaded = await (options.stateLoader ?? defaultStateLoader)(config);
   if (
@@ -614,6 +673,8 @@ export async function createCollector(
     boutMappings: initializedBoutMappings,
     push,
     roundStats: initializedRoundStats,
+    tickStore: initializedTickStore,
+    lifecycle,
     server,
     async start() {
       startPromise ??= listen(server, config.port, host);
@@ -621,6 +682,7 @@ export async function createCollector(
     },
     async close() {
       for (const unsubscribe of unsubscribers) unsubscribe();
+      await initializedTickStore.close();
       await initializedRoundStats.close();
       await push.close();
       await closeServer(server);

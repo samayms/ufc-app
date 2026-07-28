@@ -3,7 +3,9 @@ import {
   mkdir,
   readFile,
   readdir,
+  rename,
   truncate,
+  writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -11,6 +13,7 @@ export const DEFAULT_DATA_DIRECTORY = "./data";
 
 export interface Storage {
   append(stream: string, record: unknown): Promise<void>;
+  replace(stream: string, records: readonly unknown[]): Promise<void>;
   read<Record = unknown>(stream: string): Promise<Record[]>;
   listStreams(): Promise<string[]>;
 }
@@ -122,6 +125,28 @@ export class JsonlStorage implements Storage {
     }
   }
 
+  async replace(
+    stream: string,
+    records: readonly unknown[],
+  ): Promise<void> {
+    assertStreamName(stream);
+    const serialized = records.map(serializeRecord);
+    const previousWrite = this.writeQueues.get(stream) ?? Promise.resolve();
+    const write = previousWrite
+      .catch(() => undefined)
+      .then(() => this.replaceSerialized(stream, serialized));
+
+    this.writeQueues.set(stream, write);
+
+    try {
+      await write;
+    } finally {
+      if (this.writeQueues.get(stream) === write) {
+        this.writeQueues.delete(stream);
+      }
+    }
+  }
+
   async read<Record = unknown>(stream: string): Promise<Record[]> {
     assertStreamName(stream);
     await this.writeQueues.get(stream);
@@ -178,6 +203,21 @@ export class JsonlStorage implements Storage {
     await appendFile(path, `${separator}${serialized}\n`, "utf8");
   }
 
+  private async replaceSerialized(
+    stream: string,
+    records: readonly string[],
+  ): Promise<void> {
+    await mkdir(this.directory, { recursive: true });
+    const path = this.streamPath(stream);
+    const temporaryPath = `${path}.replace`;
+    const contents =
+      records.length === 0 ? "" : `${records.join("\n")}\n`;
+
+    await writeFile(temporaryPath, contents, "utf8");
+    await rename(temporaryPath, path);
+    this.recoveredStreams.add(stream);
+  }
+
   private async recoverTrailingLine(
     path: string,
     stream: string,
@@ -216,6 +256,19 @@ export class MemoryStorage implements Storage {
     const records = this.streams.get(stream) ?? [];
     records.push(storedRecord);
     this.streams.set(stream, records);
+  }
+
+  async replace(
+    stream: string,
+    records: readonly unknown[],
+  ): Promise<void> {
+    assertStreamName(stream);
+    this.streams.set(
+      stream,
+      records.map(
+        (record) => JSON.parse(serializeRecord(record)) as unknown,
+      ),
+    );
   }
 
   async read<Record = unknown>(stream: string): Promise<Record[]> {
