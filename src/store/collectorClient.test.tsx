@@ -6,6 +6,7 @@ import { DeliveryFreshness } from "../ui/DeliveryFreshness.tsx";
 import { SourceStatus } from "../ui/SourceStatus.tsx";
 import {
   createCollectorClient,
+  getCollectorMarketDelivery,
   getCollectorRoundDelivery,
 } from "./collectorClient.ts";
 import {
@@ -325,6 +326,202 @@ describe("collector browser client", () => {
     ).toBe(42);
     client.close();
     expect(events?.closed).toBe(true);
+  });
+
+  it("hydrates latestOdds from bootstrap latestMarkets, replacing fixture odds", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [],
+          latestMarkets: [
+            {
+              source: "kalshi",
+              boutId: "bout-main",
+              marketType: "fight-winner",
+              outcome: "Danilo Reyes",
+              bid: 70,
+              ask: 74,
+              midpoint: 72,
+              impliedProbability: 0.72,
+              sourceUpdatedAt: "2026-07-28T01:10:00Z",
+              receivedAt: "2026-07-28T01:10:01Z",
+              stale: false,
+              fresh: true,
+            },
+            {
+              source: "kalshi",
+              boutId: "bout-main",
+              marketType: "fight-winner",
+              outcome: "Artem Volkov",
+              bid: 24,
+              ask: 28,
+              midpoint: 26,
+              impliedProbability: 0.26,
+              sourceUpdatedAt: "2026-07-28T01:10:00Z",
+              receivedAt: "2026-07-28T01:10:01Z",
+              stale: false,
+              fresh: true,
+            },
+          ],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+
+    await client.start();
+    const snapshot = client.getSnapshot();
+    const view = snapshot.dashboard?.boutViews["bout-main"];
+
+    // Fixture-only Kalshi odds mid to ~0.605; the bootstrap entries above
+    // must win, proving the seed replaced fixture odds rather than merging
+    // stale fixture history.
+    expect(view?.latestOdds.kalshi?.quotes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ corner: "red", impliedProbability: 0.72 }),
+        expect.objectContaining({ corner: "blue", impliedProbability: 0.26 }),
+      ]),
+    );
+    expect(view?.latestOdds.kalshi?.provenance).toMatchObject({
+      source: "kalshi",
+      synthetic: false,
+    });
+    expect(view?.oddsHistory.kalshi).toHaveLength(1);
+    expect(
+      getCollectorMarketDelivery(snapshot, "bout-main", "kalshi"),
+    ).toMatchObject({ source: "Kalshi", stale: false });
+    client.close();
+  });
+
+  it("applies a market-tick SSE event to the right latest odds entry, appends history, and propagates staleness", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+
+    await client.start();
+    const events = MockEventSource.latest;
+    events?.open();
+
+    const beforeHistory =
+      client.getSnapshot().dashboard?.boutViews["bout-main"]?.oddsHistory
+        .sportsbook?.length ?? 0;
+
+    events?.emit("update", {
+      kind: "market-tick",
+      tick: {
+        source: "odds-api-io",
+        boutId: "bout-main",
+        bookmaker: "draftkings",
+        marketType: "h2h",
+        outcome: "Danilo Reyes",
+        rawOdds: -150,
+        impliedProbability: 0.6,
+        sourceUpdatedAt: "2026-07-28T01:20:00Z",
+        receivedAt: "2026-07-28T01:20:01Z",
+        stale: true,
+      },
+    });
+
+    const snapshot = client.getSnapshot();
+    const view = snapshot.dashboard?.boutViews["bout-main"];
+    const quote = view?.latestOdds.sportsbook?.quotes.find(
+      (q) =>
+        q.corner === "red" &&
+        q.native.kind === "american-moneyline" &&
+        q.native.book === "draftkings",
+    );
+    expect(quote).toMatchObject({ impliedProbability: 0.6 });
+    expect(quote?.native).toMatchObject({
+      kind: "american-moneyline",
+      moneyline: -150,
+    });
+    expect(view?.oddsHistory.sportsbook).toHaveLength(beforeHistory + 1);
+
+    const delivery = getCollectorMarketDelivery(
+      snapshot,
+      "bout-main",
+      "sportsbook",
+    );
+    expect(delivery).toMatchObject({
+      source: "Odds-API.io",
+      stale: true,
+      provisional: false,
+    });
+    const markup = renderToStaticMarkup(
+      <DeliveryFreshness delivery={delivery!} />,
+    );
+    expect(markup).toContain("Stale");
+    client.close();
+  });
+
+  it("applies a market-snapshot SSE event into the matching unified round's marketAtEnd", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [roundRecord(true, 1)],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+
+    await client.start();
+    const events = MockEventSource.latest;
+    events?.open();
+
+    events?.emit("update", {
+      kind: "market-snapshot",
+      snapshot: {
+        source: "kalshi",
+        boutId: "bout-main",
+        round: 2,
+        boundaryType: "provisional",
+        takenAt: "2026-07-28T01:02:03Z",
+        fresh: true,
+        outcomes: [
+          {
+            marketType: "fight-winner",
+            outcome: "Danilo Reyes",
+            midpoint: 61,
+            impliedProbability: 0.61,
+            receivedAt: "2026-07-28T01:02:02Z",
+            stale: false,
+          },
+        ],
+      },
+    });
+
+    const record = client
+      .getSnapshot()
+      .unifiedRounds.find(
+        (candidate) =>
+          candidate.boutId === "bout-main" && candidate.round === 2,
+      );
+    expect(record?.marketAtEnd.kalshi).toMatchObject({
+      boundaryType: "provisional",
+      outcomes: [
+        expect.objectContaining({ outcome: "Danilo Reyes", midpoint: 61 }),
+      ],
+    });
+    // The lifecycle/round record itself is untouched by the market-snapshot
+    // event other than the patched marketAtEnd field.
+    expect(record).toMatchObject({ round: 2, provisional: true });
+    client.close();
   });
 
   it("contains no server credential environment names in browser entry source", async () => {

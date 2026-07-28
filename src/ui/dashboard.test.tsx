@@ -5,6 +5,7 @@ import {
   dashboardDemoState,
 } from "../store/useDashboard.ts";
 import { FightSummary } from "./FightSummary.tsx";
+import { OddsPanel } from "./OddsPanel.tsx";
 import {
   completedRounds,
   defaultRoundSelection,
@@ -188,5 +189,43 @@ describe("dashboard state surfaces", () => {
     expect(scorecards).toContain("X scorecards");
     expect(scorecards).toContain("official-x-embed");
     expect(scorecards).toContain("Sherdog and X stay separate");
+  });
+
+  it("renders fixture-only odds unchanged when no collector deliveries are supplied", async () => {
+    const state = await assembleDashboard();
+    const view = state.boutViews["bout-main"];
+    expect(view).toBeDefined();
+    if (!view) return;
+
+    const panel = renderToStaticMarkup(<OddsPanel view={view} />);
+    expect(panel).toContain("Kalshi");
+    expect(panel).toContain("Polymarket");
+    expect(panel).toContain("Sportsbooks");
+    expect(panel).toContain("as of");
+    expect(panel).not.toContain("delivery-freshness");
+  });
+
+  it("surfaces collector delivery freshness (source, receipt time, stale) on live odds", async () => {
+    const state = await assembleDashboard();
+    const view = state.boutViews["bout-main"];
+    expect(view).toBeDefined();
+    if (!view) return;
+
+    const panel = renderToStaticMarkup(
+      <OddsPanel
+        view={view}
+        deliveries={{
+          kalshi: {
+            source: "Kalshi",
+            sourceUpdatedAt: "2026-07-28T01:10:00Z",
+            receivedAt: "2026-07-28T01:10:01Z",
+            stale: true,
+            provisional: false,
+          },
+        }}
+      />,
+    );
+    expect(panel).toContain("delivery-freshness");
+    expect(panel).toContain("Stale");
   });
 });

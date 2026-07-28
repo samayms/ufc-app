@@ -1,5 +1,7 @@
 import type { BoutView, OddsSnapshot } from "../schema.ts";
 import { averageImpliedProbability, consensus } from "../lib/oddsMath.ts";
+import type { CollectorValueDelivery } from "../store/collectorClient.ts";
+import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
 import { fmtMoneyline, fmtNative, fmtPct, fmtTime } from "./format.ts";
 
 /**
@@ -24,23 +26,28 @@ function MarketBlock({
   note,
   snapshot,
   emptyText,
+  delivery,
   children,
 }: {
   title: string;
   note?: string;
   snapshot: OddsSnapshot | null;
   emptyText: string;
+  delivery?: CollectorValueDelivery;
   children?: React.ReactNode;
 }) {
   return (
     <section className="market" aria-label={`${title} odds`}>
       <div className="market-head">
         <h3>{title}</h3>
-        {snapshot && (
-          <span className="freshness">
-            as of <span className="num">{fmtTime(snapshot.provenance.fetchedAt)}</span>
-          </span>
-        )}
+        {snapshot &&
+          (delivery ? (
+            <DeliveryFreshness delivery={delivery} />
+          ) : (
+            <span className="freshness">
+              as of <span className="num">{fmtTime(snapshot.provenance.fetchedAt)}</span>
+            </span>
+          ))}
       </div>
       {snapshot ? (
         <>
@@ -124,7 +131,13 @@ function BookRows({ snapshot }: { snapshot: OddsSnapshot }) {
   );
 }
 
-export function OddsPanel({ view }: { view: BoutView }) {
+export function OddsPanel({
+  view,
+  deliveries,
+}: {
+  view: BoutView;
+  deliveries?: Partial<Record<OddsSnapshot["market"], CollectorValueDelivery>>;
+}) {
   const { latestOdds, bout } = view;
   const finalText =
     bout.status === "final"
@@ -165,17 +178,20 @@ export function OddsPanel({ view }: { view: BoutView }) {
         note="Mid of bid/ask, in contract cents."
         snapshot={latestOdds.kalshi ?? null}
         emptyText={finalText}
+        delivery={deliveries?.kalshi}
       />
       <MarketBlock
         title="Polymarket"
         snapshot={latestOdds.polymarket ?? null}
         emptyText={finalText}
+        delivery={deliveries?.polymarket}
       />
       <MarketBlock
         title="Sportsbooks"
         note="Averaged across books; vig included, so sides sum past 100%."
         snapshot={sportsbook}
         emptyText={finalText}
+        delivery={deliveries?.sportsbook}
       >
         {sportsbook && <BookRows snapshot={sportsbook} />}
       </MarketBlock>

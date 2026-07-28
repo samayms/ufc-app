@@ -1,12 +1,24 @@
+import { americanToImpliedProb } from "../lib/oddsMath.ts";
 import type {
   Bout,
+  Corner,
   DashboardState,
   ExpertConsensus,
+  NativePrice,
+  OddsQuote,
+  OddsSnapshot,
   RoundStats,
   RoundUpdate,
   SherdogRoundObservation,
+  SourceId,
 } from "../schema.ts";
-import type { MarketSnapshot } from "../sources/contract.ts";
+import type {
+  MarketBoundaryType,
+  MarketSnapshot,
+  MarketSnapshotOutcome,
+  MarketSource,
+  MarketTick,
+} from "../sources/contract.ts";
 import type { ParsedExpertScore } from "../sources/x.ts";
 
 export const DEFAULT_COLLECTOR_PORT = 8600;
@@ -119,6 +131,8 @@ export interface CollectorSnapshot {
   health: Readonly<Record<string, CollectorSourceHealth>>;
   unifiedRounds: readonly CollectorUnifiedRound[];
   lifecycle: Readonly<Record<string, CollectorLifecycleDelivery>>;
+  /** Keyed by `${boutId}:${market}`; freshness for the latest odds shown per market. */
+  marketDeliveries: Readonly<Record<string, CollectorValueDelivery>>;
   lastReceivedAt?: string;
 }
 
@@ -133,6 +147,7 @@ interface CollectorBootstrap {
   state: DashboardState | null;
   health: Record<string, CollectorSourceHealth>;
   unifiedRounds: CollectorUnifiedRound[];
+  latestMarkets: MarketTick[];
 }
 
 interface EventSourceLike {
@@ -220,6 +235,197 @@ function parseHealthMap(
     if (parsed !== null) health[parsed.source] = parsed;
   }
   return health;
+}
+
+// ---------------------------------------------------------------------------
+// Market ticks and round-boundary snapshots (Kalshi/Polymarket/sportsbooks)
+// ---------------------------------------------------------------------------
+
+function isMarketSource(value: unknown): value is MarketSource {
+  return (
+    value === "kalshi" ||
+    value === "polymarket" ||
+    value === "odds-api-io" ||
+    value === "the-odds-api"
+  );
+}
+
+function isMarketBoundaryType(value: unknown): value is MarketBoundaryType {
+  return value === "provisional" || value === "confirmed";
+}
+
+function isOptionalFiniteNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value));
+}
+
+/**
+ * Parses both live "market-tick" payloads and bootstrap `latestMarkets`
+ * entries (a superset shape) — only the fields an OddsQuote/delivery need
+ * are validated; unrecognized extra fields are ignored.
+ */
+function parseMarketTick(value: unknown): MarketTick | null {
+  if (
+    !isRecord(value) ||
+    !isMarketSource(value.source) ||
+    typeof value.boutId !== "string" ||
+    (value.bookmaker !== undefined && typeof value.bookmaker !== "string") ||
+    typeof value.marketType !== "string" ||
+    typeof value.outcome !== "string" ||
+    !isOptionalFiniteNumber(value.bid) ||
+    !isOptionalFiniteNumber(value.ask) ||
+    !isOptionalFiniteNumber(value.lastTrade) ||
+    !isOptionalFiniteNumber(value.rawOdds) ||
+    !isOptionalFiniteNumber(value.impliedProbability) ||
+    !isOptionalFiniteNumber(value.noVigProbability) ||
+    (value.sourceUpdatedAt !== undefined &&
+      !isTimestamp(value.sourceUpdatedAt)) ||
+    !isTimestamp(value.receivedAt) ||
+    typeof value.stale !== "boolean"
+  ) {
+    return null;
+  }
+
+  return {
+    source: value.source,
+    boutId: value.boutId,
+    ...(value.bookmaker === undefined ? {} : { bookmaker: value.bookmaker }),
+    marketType: value.marketType,
+    outcome: value.outcome,
+    ...(value.bid === undefined ? {} : { bid: value.bid as number }),
+    ...(value.ask === undefined ? {} : { ask: value.ask as number }),
+    ...(value.lastTrade === undefined
+      ? {}
+      : { lastTrade: value.lastTrade as number }),
+    ...(value.rawOdds === undefined ? {} : { rawOdds: value.rawOdds as number }),
+    ...(value.impliedProbability === undefined
+      ? {}
+      : { impliedProbability: value.impliedProbability as number }),
+    ...(value.noVigProbability === undefined
+      ? {}
+      : { noVigProbability: value.noVigProbability as number }),
+    ...(value.sourceUpdatedAt === undefined
+      ? {}
+      : { sourceUpdatedAt: value.sourceUpdatedAt }),
+    receivedAt: value.receivedAt,
+    stale: value.stale,
+  };
+}
+
+function parseMarketSnapshotOutcome(
+  value: unknown,
+): MarketSnapshotOutcome | null {
+  if (
+    !isRecord(value) ||
+    (value.bookmaker !== undefined && typeof value.bookmaker !== "string") ||
+    typeof value.marketType !== "string" ||
+    typeof value.outcome !== "string" ||
+    !isOptionalFiniteNumber(value.bid) ||
+    !isOptionalFiniteNumber(value.ask) ||
+    !isOptionalFiniteNumber(value.midpoint) ||
+    !isOptionalFiniteNumber(value.spread) ||
+    !isOptionalFiniteNumber(value.lastTrade) ||
+    !isOptionalFiniteNumber(value.rawOdds) ||
+    !isOptionalFiniteNumber(value.impliedProbability) ||
+    !isOptionalFiniteNumber(value.noVigProbability) ||
+    !isOptionalFiniteNumber(value.volume) ||
+    !isOptionalFiniteNumber(value.tickSize) ||
+    (value.status !== undefined && typeof value.status !== "string") ||
+    (value.sourceUpdatedAt !== undefined &&
+      !isTimestamp(value.sourceUpdatedAt)) ||
+    !isTimestamp(value.receivedAt) ||
+    typeof value.stale !== "boolean" ||
+    (value.depth !== undefined &&
+      (!isRecord(value.depth) ||
+        !Array.isArray(value.depth.bids) ||
+        !Array.isArray(value.depth.asks) ||
+        !value.depth.bids.every((n) => typeof n === "number") ||
+        !value.depth.asks.every((n) => typeof n === "number")))
+  ) {
+    return null;
+  }
+
+  const depth = value.depth as { bids: number[]; asks: number[] } | undefined;
+
+  return {
+    ...(value.bookmaker === undefined ? {} : { bookmaker: value.bookmaker }),
+    marketType: value.marketType,
+    outcome: value.outcome,
+    ...(value.bid === undefined ? {} : { bid: value.bid as number }),
+    ...(value.ask === undefined ? {} : { ask: value.ask as number }),
+    ...(value.midpoint === undefined
+      ? {}
+      : { midpoint: value.midpoint as number }),
+    ...(value.spread === undefined ? {} : { spread: value.spread as number }),
+    ...(value.lastTrade === undefined
+      ? {}
+      : { lastTrade: value.lastTrade as number }),
+    ...(value.rawOdds === undefined ? {} : { rawOdds: value.rawOdds as number }),
+    ...(value.impliedProbability === undefined
+      ? {}
+      : { impliedProbability: value.impliedProbability as number }),
+    ...(value.noVigProbability === undefined
+      ? {}
+      : { noVigProbability: value.noVigProbability as number }),
+    ...(depth === undefined
+      ? {}
+      : { depth: { bids: [...depth.bids], asks: [...depth.asks] } }),
+    ...(value.volume === undefined ? {} : { volume: value.volume as number }),
+    ...(value.tickSize === undefined
+      ? {}
+      : { tickSize: value.tickSize as number }),
+    ...(value.status === undefined ? {} : { status: value.status }),
+    ...(value.sourceUpdatedAt === undefined
+      ? {}
+      : { sourceUpdatedAt: value.sourceUpdatedAt }),
+    receivedAt: value.receivedAt,
+    stale: value.stale,
+  };
+}
+
+function parseMarketSnapshot(value: unknown): MarketSnapshot | null {
+  if (
+    !isRecord(value) ||
+    !isMarketSource(value.source) ||
+    typeof value.boutId !== "string" ||
+    !Number.isSafeInteger(value.round) ||
+    (value.round as number) < 1 ||
+    !isMarketBoundaryType(value.boundaryType) ||
+    (value.label !== undefined &&
+      value.label !== "broad-post-round-comparison") ||
+    !isTimestamp(value.takenAt) ||
+    typeof value.fresh !== "boolean" ||
+    !Array.isArray(value.outcomes)
+  ) {
+    return null;
+  }
+
+  const outcomes: MarketSnapshotOutcome[] = [];
+  for (const raw of value.outcomes) {
+    const outcome = parseMarketSnapshotOutcome(raw);
+    if (outcome === null) return null;
+    outcomes.push(outcome);
+  }
+
+  return {
+    source: value.source,
+    boutId: value.boutId,
+    round: value.round as number,
+    boundaryType: value.boundaryType,
+    ...(value.label === undefined ? {} : { label: value.label }),
+    takenAt: value.takenAt,
+    fresh: value.fresh,
+    outcomes,
+  };
+}
+
+/** Which `marketAtEnd` slot a market source's round-boundary snapshot fills. */
+function marketAtEndField(
+  source: MarketSource,
+): keyof CollectorUnifiedRound["marketAtEnd"] {
+  if (source === "kalshi") return "kalshi";
+  if (source === "polymarket") return "polymarket";
+  if (source === "odds-api-io") return "oddsApiIo";
+  return "theOddsApi";
 }
 
 const STAT_KEYS = [
@@ -494,7 +700,8 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
   if (
     !isRecord(value) ||
     (value.state !== null && !isDashboardState(value.state)) ||
-    !Array.isArray(value.unifiedRounds)
+    !Array.isArray(value.unifiedRounds) ||
+    (value.latestMarkets !== undefined && !Array.isArray(value.latestMarkets))
   ) {
     return null;
   }
@@ -507,6 +714,11 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
       .filter(
         (round): round is CollectorUnifiedRound => round !== null,
       ),
+    latestMarkets: Array.isArray(value.latestMarkets)
+      ? value.latestMarkets
+          .map(parseMarketTick)
+          .filter((tick): tick is MarketTick => tick !== null)
+      : [],
   };
 }
 
@@ -561,6 +773,208 @@ function parseLifecycleEvent(
   }
 
   return null;
+}
+
+/** Diacritic/punctuation/case-insensitive comparison key for a free-text name. */
+function normalizeName(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^\p{Letter}\p{Number}]/gu, "")
+    .toLocaleLowerCase("en");
+}
+
+/**
+ * Matches a source's free-text outcome/winner label (a literal "red"/"blue",
+ * or a fighter's full or last name) to the bout's corner. Sources disagree
+ * on how they identify a fighter, so this is deliberately lenient; returns
+ * null rather than guessing when nothing matches.
+ */
+function matchCorner(rawName: string, bout: Bout): Corner | null {
+  const normalized = normalizeName(rawName);
+  if (normalized === "red" || normalized === "blue") return normalized;
+  return (
+    (["red", "blue"] as const).find((corner) => {
+      const name = bout.fighters[corner].name;
+      const last = name.split(/\s+/).at(-1);
+      return (
+        normalized === normalizeName(name) ||
+        (last !== undefined && normalized === normalizeName(last))
+      );
+    }) ?? null
+  );
+}
+
+const MARKET_TO_ODDS_SNAPSHOT: Record<MarketSource, OddsSnapshot["market"]> = {
+  kalshi: "kalshi",
+  polymarket: "polymarket",
+  "odds-api-io": "sportsbook",
+  "the-odds-api": "sportsbook",
+};
+
+const MARKET_SOURCE_LABEL: Record<MarketSource, string> = {
+  kalshi: "Kalshi",
+  polymarket: "Polymarket",
+  "odds-api-io": "Odds-API.io",
+  "the-odds-api": "The Odds API",
+};
+
+/** MarketSource and schema.ts SourceId agree except for "the-odds-api". */
+function schemaSourceFor(source: MarketSource): SourceId {
+  return source === "the-odds-api" ? "odds-api" : source;
+}
+
+function midOrFallback(tick: MarketTick): number | undefined {
+  if (tick.bid !== undefined && tick.ask !== undefined) {
+    return (tick.bid + tick.ask) / 2;
+  }
+  return tick.lastTrade ?? tick.rawOdds;
+}
+
+/** Native price in the market's own units, additive alongside implied probability. */
+function nativePriceFor(tick: MarketTick): NativePrice | null {
+  if (tick.source === "kalshi") {
+    const yes = midOrFallback(tick);
+    if (yes === undefined || !Number.isFinite(yes) || yes < 0 || yes > 100) {
+      return null;
+    }
+    return { kind: "kalshi-cents", yesCents: yes, noCents: 100 - yes };
+  }
+  if (tick.source === "polymarket") {
+    const price = midOrFallback(tick);
+    if (price === undefined || !Number.isFinite(price) || price < 0 || price > 1) {
+      return null;
+    }
+    return { kind: "polymarket-price", price };
+  }
+  const moneyline = tick.rawOdds ?? tick.lastTrade;
+  if (moneyline === undefined || !Number.isFinite(moneyline) || moneyline === 0) {
+    return null;
+  }
+  return {
+    kind: "american-moneyline",
+    moneyline,
+    book: tick.bookmaker ?? "unknown",
+  };
+}
+
+function impliedProbabilityFor(
+  tick: MarketTick,
+  native: NativePrice,
+): number | null {
+  if (
+    tick.impliedProbability !== undefined &&
+    Number.isFinite(tick.impliedProbability)
+  ) {
+    return tick.impliedProbability;
+  }
+  if (native.kind === "kalshi-cents") return native.yesCents / 100;
+  if (native.kind === "polymarket-price") return native.price;
+  return americanToImpliedProb(native.moneyline);
+}
+
+/** Same quote "slot": same corner, and same book for multi-book sportsbook quotes. */
+function quoteKey(quote: OddsQuote): string {
+  return quote.native.kind === "american-moneyline"
+    ? `${quote.corner}:${quote.native.book}`
+    : quote.corner;
+}
+
+const MAX_ODDS_HISTORY = 50;
+
+/**
+ * Folds one market tick (or a bootstrap `latestMarkets` entry, same shape)
+ * into a bout's latestOdds/oddsHistory. "seed" mode (bootstrap) replaces
+ * history with the freshly merged snapshot so a batch of seed entries ends
+ * on one real point, not a stack of partial-merge artifacts; "append" mode
+ * (live ticks) grows the timeline, bounded.
+ */
+function applyMarketUpdateResult(
+  dashboard: DashboardState,
+  tick: MarketTick,
+  historyMode: "seed" | "append",
+): { dashboard: DashboardState; market: OddsSnapshot["market"] } | null {
+  const market = MARKET_TO_ODDS_SNAPSHOT[tick.source];
+  const view = dashboard.boutViews[tick.boutId];
+  if (view === undefined) return null;
+  const corner = matchCorner(tick.outcome, view.bout);
+  if (corner === null) return null;
+  const native = nativePriceFor(tick);
+  if (native === null) return null;
+  const impliedProbability = impliedProbabilityFor(tick, native);
+  if (impliedProbability === null || !Number.isFinite(impliedProbability)) {
+    return null;
+  }
+
+  const quote: OddsQuote = { corner, native, impliedProbability };
+  const key = quoteKey(quote);
+  const existingSnapshot = view.latestOdds[market];
+  const nextQuotes = [
+    ...(existingSnapshot?.quotes.filter((q) => quoteKey(q) !== key) ?? []),
+    quote,
+  ];
+  const nextSnapshot: OddsSnapshot = {
+    boutId: tick.boutId,
+    market,
+    quotes: nextQuotes,
+    ...(tick.sourceUpdatedAt === undefined
+      ? {}
+      : { marketUpdatedAt: tick.sourceUpdatedAt }),
+    provenance: {
+      source: schemaSourceFor(tick.source),
+      fetchedAt: tick.receivedAt,
+      synthetic: false,
+    },
+  };
+  const nextHistory =
+    historyMode === "append"
+      ? [...(view.oddsHistory[market] ?? []), nextSnapshot].slice(
+          -MAX_ODDS_HISTORY,
+        )
+      : [nextSnapshot];
+
+  return {
+    market,
+    dashboard: {
+      ...dashboard,
+      boutViews: {
+        ...dashboard.boutViews,
+        [tick.boutId]: {
+          ...view,
+          latestOdds: { ...view.latestOdds, [market]: nextSnapshot },
+          oddsHistory: { ...view.oddsHistory, [market]: nextHistory },
+        },
+      },
+    },
+  };
+}
+
+function applyMarketUpdates(
+  dashboard: DashboardState | null,
+  ticks: readonly MarketTick[],
+  historyMode: "seed" | "append",
+): {
+  dashboard: DashboardState | null;
+  deliveries: Record<string, CollectorValueDelivery>;
+} {
+  let current = dashboard;
+  const deliveries: Record<string, CollectorValueDelivery> = {};
+  for (const tick of ticks) {
+    if (current === null) break;
+    const result = applyMarketUpdateResult(current, tick, historyMode);
+    if (result === null) continue;
+    current = result.dashboard;
+    deliveries[`${tick.boutId}:${result.market}`] = {
+      source: MARKET_SOURCE_LABEL[tick.source],
+      ...(tick.sourceUpdatedAt === undefined
+        ? {}
+        : { sourceUpdatedAt: tick.sourceUpdatedAt }),
+      receivedAt: tick.receivedAt,
+      stale: tick.stale,
+      provisional: false,
+    };
+  }
+  return { dashboard: current, deliveries };
 }
 
 function replaceBout(
@@ -684,27 +1098,10 @@ function applyCollectorRound(
     const scoreMatch = /^(\d+)\s*-\s*(\d+)$/.exec(
       scoreCard?.roundScore ?? "",
     );
-    const normalizedWinner = scoreCard?.winner
-      ?.normalize("NFKD")
-      .replace(/\p{Diacritic}/gu, "")
-      .replace(/[^\p{Letter}\p{Number}]/gu, "")
-      .toLocaleLowerCase("en");
-    const winner = (["red", "blue"] as const).find((corner) => {
-      const name = view.bout.fighters[corner].name;
-      const full = name
-        .normalize("NFKD")
-        .replace(/\p{Diacritic}/gu, "")
-        .replace(/[^\p{Letter}\p{Number}]/gu, "")
-        .toLocaleLowerCase("en");
-      const last = name
-        .split(/\s+/)
-        .at(-1)
-        ?.normalize("NFKD")
-        .replace(/\p{Diacritic}/gu, "")
-        .replace(/[^\p{Letter}\p{Number}]/gu, "")
-        .toLocaleLowerCase("en");
-      return normalizedWinner === full || normalizedWinner === last;
-    });
+    const winner =
+      scoreCard?.winner === undefined
+        ? undefined
+        : (matchCorner(scoreCard.winner, view.bout) ?? undefined);
     const high = Number(scoreMatch?.[1]);
     const low = Number(scoreMatch?.[2]);
     const update: RoundUpdate = {
@@ -847,6 +1244,15 @@ export function getCollectorRoundDelivery(
   };
 }
 
+/** Delivery/freshness for the latest odds shown in a given market bucket. */
+export function getCollectorMarketDelivery(
+  snapshot: CollectorSnapshot | undefined,
+  boutId: string,
+  market: OddsSnapshot["market"],
+): CollectorValueDelivery | undefined {
+  return snapshot?.marketDeliveries[`${boutId}:${market}`];
+}
+
 export function createCollectorClient(
   options: CollectorClientOptions = {},
 ): CollectorClient {
@@ -867,6 +1273,7 @@ export function createCollectorClient(
     health: {},
     unifiedRounds: [],
     lifecycle: {},
+    marketDeliveries: {},
   };
 
   const publish = (next: CollectorSnapshot): void => {
@@ -878,15 +1285,22 @@ export function createCollectorClient(
     bootstrap: CollectorBootstrap,
     receivedAt: string,
   ): void => {
+    const dashboardWithRounds = applyCollectorRounds(
+      bootstrap.state,
+      bootstrap.unifiedRounds,
+    );
+    const { dashboard, deliveries } = applyMarketUpdates(
+      dashboardWithRounds,
+      bootstrap.latestMarkets,
+      "seed",
+    );
     publish({
       ...snapshot,
       connection: "connected",
-      dashboard: applyCollectorRounds(
-        bootstrap.state,
-        bootstrap.unifiedRounds,
-      ),
+      dashboard,
       health: bootstrap.health,
       unifiedRounds: bootstrap.unifiedRounds,
+      marketDeliveries: deliveries,
       lastReceivedAt: receivedAt,
     });
   };
@@ -947,6 +1361,45 @@ export function createCollectorClient(
           snapshot.dashboard === null
             ? null
             : applyCollectorRound(snapshot.dashboard, record),
+        unifiedRounds,
+        lastReceivedAt: receivedAt,
+      });
+      return;
+    }
+
+    if (value.kind === "market-tick") {
+      const tick = parseMarketTick(value.tick);
+      if (tick === null) return;
+      const { dashboard, deliveries } = applyMarketUpdates(
+        snapshot.dashboard,
+        [tick],
+        "append",
+      );
+      publish({
+        ...snapshot,
+        connection: "connected",
+        dashboard,
+        marketDeliveries: { ...snapshot.marketDeliveries, ...deliveries },
+        lastReceivedAt: receivedAt,
+      });
+      return;
+    }
+
+    if (value.kind === "market-snapshot") {
+      const record = parseMarketSnapshot(value.snapshot);
+      if (record === null) return;
+      const field = marketAtEndField(record.source);
+      const unifiedRounds = snapshot.unifiedRounds.map((round) =>
+        round.boutId === record.boutId && round.round === record.round
+          ? {
+              ...round,
+              marketAtEnd: { ...round.marketAtEnd, [field]: record },
+            }
+          : round,
+      );
+      publish({
+        ...snapshot,
+        connection: "connected",
         unifiedRounds,
         lastReceivedAt: receivedAt,
       });

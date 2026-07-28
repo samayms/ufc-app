@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useDashboard } from "./store/useDashboard.ts";
 import {
+  getCollectorMarketDelivery,
   getCollectorRoundDelivery,
   type CollectorValueDelivery,
 } from "./store/collectorClient.ts";
@@ -112,6 +113,25 @@ export default function App() {
           stale: dashboard.collector?.connection !== "connected",
           provisional: lifecycle.provisional,
         };
+  const marketDeliveries = view
+    ? {
+        kalshi: getCollectorMarketDelivery(
+          dashboard.collector,
+          view.bout.id,
+          "kalshi",
+        ),
+        polymarket: getCollectorMarketDelivery(
+          dashboard.collector,
+          view.bout.id,
+          "polymarket",
+        ),
+        sportsbook: getCollectorMarketDelivery(
+          dashboard.collector,
+          view.bout.id,
+          "sportsbook",
+        ),
+      }
+    : undefined;
 
   const selectBout = (id: string) => {
     setSelected(id);
@@ -191,7 +211,9 @@ export default function App() {
                     <RoundGrid view={view} />
                   </>
                 )}
-                {section === "odds" && <OddsPanel view={view} />}
+                {section === "odds" && (
+                  <OddsPanel view={view} deliveries={marketDeliveries} />
+                )}
                 {section === "tale" && (
                   <>
                     <FighterProfile bout={view.bout} />
