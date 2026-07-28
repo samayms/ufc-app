@@ -1,0 +1,106 @@
+{
+  "events": [
+    {
+      "id": "600059339",
+      "uid": "s:3301~l:3321~e:600059339",
+      "date": "2026-08-01T14:00Z",
+      "name": "UFC Fight Night: Medić vs. Rodriguez",
+      "shortName": "UFC Fight Night",
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": [
+        {
+          "id": "401870844",
+          "uid": "s:3301~l:3321~e:600059339~c:401870844",
+          "date": "2026-08-01T14:00Z",
+          "status": {
+            "clock": 0,
+            "displayClock": "-",
+            "period": 0,
+            "type": {
+              "id": "1",
+              "name": "STATUS_SCHEDULED",
+              "state": "pre",
+              "completed": false,
+              "description": "Scheduled",
+              "detail": "Sat, August 1st at 10:00 AM EDT",
+              "shortDetail": "8/1 - 10:00 AM EDT"
+            }
+          },
+          "competitors": [
+            {
+              "id": "5312090",
+              "order": 1,
+              "winner": false,
+              "athlete": {
+                "fullName": "Jovan Leka",
+                "displayName": "Jovan Leka",
+                "shortName": "J. Leka"
+              }
+            },
+            {
+              "id": "5316622",
+              "order": 2,
+              "winner": false,
+              "athlete": {
+                "fullName": "Max Gimenis",
+                "displayName": "Max Gimenis",
+                "shortName": "M. Gimenis"
+              }
+            }
+          ]
+        },
+        {
+          "id": "401881924",
+          "uid": "s:3301~l:3321~e:600059339~c:401881924",
+          "date": "2026-08-01T14:00Z",
+          "status": {
+            "clock": 0,
+            "displayClock": "-",
+            "period": 0,
+            "type": {
+              "id": "1",
+              "name": "STATUS_SCHEDULED",
+              "state": "pre",
+              "completed": false,
+              "description": "Scheduled",
+              "detail": "Sat, August 1st at 10:00 AM EDT",
+              "shortDetail": "8/1 - 10:00 AM EDT"
+            }
+          },
+          "competitors": [
+            {
+              "id": "4374742",
+              "order": 2,
+              "winner": false,
+              "athlete": {
+                "fullName": "Hailey Cowan",
+                "displayName": "Hailey Cowan",
+                "shortName": "H. Cowan"
+              }
+            },
+            {
+              "id": "5361791",
+              "order": 1,
+              "winner": false,
+              "athlete": {
+                "fullName": "Nina Milošević",
+                "displayName": "Nina Milošević",
+                "shortName": "N. Milošević"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

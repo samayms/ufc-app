@@ -531,8 +531,18 @@ export function parseEspnScoreboardLifecycle(
     throw new TypeError("ESPN scoreboard response was not a JSON object");
   }
 
+  // Verified live 2026-07-28 against site.api.espn.com/.../mma/ufc/scoreboard:
+  // the scoreboard returns `events[].competitions[]` (one competition per
+  // bout). The `event.header.competitions` path below is the *summary*
+  // endpoint's shape, which the bundled fixture uses; it is retained as a
+  // fallback so either payload normalizes correctly.
+  const raw = payload as EspnRawPayload & {
+    events?: Array<{ competitions?: EspnCompetition[] }>;
+  };
   const competitions =
-    (payload as EspnRawPayload).event?.header?.competitions ?? [];
+    raw.events?.flatMap((event) => event.competitions ?? []) ??
+    raw.event?.header?.competitions ??
+    [];
 
   return competitions.flatMap((competition): EspnLifecycleEntry[] => {
     if (typeof competition.id !== "string") return [];

@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import liveScoreboard from "../fixtures/espnScoreboardLive.json" with {
+  type: "json",
+};
 import type { Bout } from "../schema.ts";
 import {
   buildEspnScoreboardUrl,
@@ -229,6 +232,22 @@ describe("parseEspnScoreboardLifecycle", () => {
 
   it("returns an empty array when the payload has no competitions", () => {
     expect(parseEspnScoreboardLifecycle({})).toEqual([]);
+  });
+
+  // Regression guard for the shape captured live on 2026-07-28: the real
+  // scoreboard nests competitions under `events[]`, not `event.header`.
+  // Parsing the captured payload must yield one entry per bout.
+  it("parses the captured live scoreboard payload", () => {
+    const entries = parseEspnScoreboardLifecycle(liveScoreboard);
+
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toEqual({
+      externalId: "401870844",
+      state: "pre",
+      period: 0,
+      completed: false,
+    });
+    expect(entries.every((entry) => entry.externalId.length > 0)).toBe(true);
   });
 });
 
