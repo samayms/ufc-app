@@ -144,7 +144,7 @@ export function ScheduledFightPreview({
 
   return (
     <div className="scheduled-preview">
-      <BackButton onClick={onBack} label="Back to card" />
+      <BackButton onClick={onBack} />
 
       <section className="tot" aria-label="Tale of the tape">
         <div className="scheduled-preview-head">

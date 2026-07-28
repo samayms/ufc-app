@@ -310,9 +310,7 @@ export default function App() {
               />
             ) : view ? (
               <div className="fight-screen">
-                {cameFromEvent && (
-                  <BackButton onClick={backToEventFromFight} label="Back to card" />
-                )}
+                {cameFromEvent && <BackButton onClick={backToEventFromFight} />}
                 <BoutHeader bout={view.bout} />
                 {lifecycleDelivery && (
                   <div className="delivery-notice" role="status">

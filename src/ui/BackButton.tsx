@@ -1,5 +1,3 @@
-import { ArrowLeft } from "lucide-react";
-
 import { Button } from "@/components/ui/button";
 
 /**
@@ -26,7 +24,9 @@ export function BackButton({
       aria-label={label ?? "Back"}
       className={`gap-1.5 px-2 text-foreground/80 hover:text-foreground${className ? ` ${className}` : ""}`}
     >
-      <ArrowLeft className="size-4.5" strokeWidth={2.5} />
+      <span aria-hidden="true" className="text-base leading-none font-semibold">
+        {"<"}
+      </span>
       {label && <span>{label}</span>}
     </Button>
   );
