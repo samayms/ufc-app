@@ -8,9 +8,9 @@
  * never redisplayed publicly.
  */
 
-import type { Corner, OddsQuote, OddsSnapshot } from "../schema/types.ts";
+import type { Corner, OddsQuote, OddsSnapshot } from "../schema.ts";
 import type { OddsSource, SourceConfig } from "./contract.ts";
-import fixture from "../fixtures/kalshi/raw.json";
+import fixture from "../fixtures/kalshi.json";
 
 interface KalshiMarket {
   ticker: string;

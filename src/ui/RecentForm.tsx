@@ -1,4 +1,4 @@
-import type { Bout, Corner, Fighter, PastBout } from "../schema/types.ts";
+import type { Bout, Corner, Fighter, PastBout } from "../schema.ts";
 import { fmtMethod, fmtTime } from "./format.ts";
 
 const RESULT_LETTER: Record<PastBout["result"], string> = {

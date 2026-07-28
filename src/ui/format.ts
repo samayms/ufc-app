@@ -1,4 +1,4 @@
-import type { FightRecord, FinishMethod, NativePrice } from "../schema/types.ts";
+import type { FightRecord, FinishMethod, NativePrice } from "../schema.ts";
 
 export function fmtRecord(r: FightRecord): string {
   const base = `${r.wins}-${r.losses}-${r.draws}`;

@@ -1,4 +1,4 @@
-import type { BoutView, Corner, RoundUpdate, SourceId } from "../schema/types.ts";
+import type { BoutView, Corner, RoundUpdate, SourceId } from "../schema.ts";
 import { fmtTime } from "./format.ts";
 
 const SOURCE_LABEL: Partial<Record<SourceId, string>> = {

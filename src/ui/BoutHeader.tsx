@@ -1,4 +1,4 @@
-import type { Bout, Corner, Fighter } from "../schema/types.ts";
+import type { Bout, Corner, Fighter } from "../schema.ts";
 import { fmtMethod, fmtRecord, WEIGHT_LABEL } from "./format.ts";
 
 function FighterBlock({ fighter, corner }: { fighter: Fighter; corner: Corner }) {

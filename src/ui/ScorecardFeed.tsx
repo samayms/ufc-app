@@ -1,4 +1,4 @@
-import type { BoutView, Corner, ScorecardAccount } from "../schema/types.ts";
+import type { BoutView, Corner, ScorecardAccount } from "../schema.ts";
 import { completedRounds } from "./RoundSelector.tsx";
 
 /** Each demo journalist's round-by-round pick, oldest round first. */

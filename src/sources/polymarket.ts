@@ -1,5 +1,5 @@
-import rawFixture from "../fixtures/polymarket/raw.json";
-import type { Bout, Corner, OddsQuote, OddsSnapshot } from "../schema/types.ts";
+import rawFixture from "../fixtures/polymarket.json";
+import type { Bout, Corner, OddsQuote, OddsSnapshot } from "../schema.ts";
 import type { OddsSource, SourceConfig } from "./contract.ts";
 
 interface GammaMarket {

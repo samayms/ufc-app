@@ -28,7 +28,7 @@
  *   disagree, not just a single blended number.
  */
 
-import type { Corner, OddsSnapshot } from "../schema/types.ts";
+import type { Corner, OddsSnapshot } from "../schema.ts";
 
 /** American moneyline -> implied probability, vig included. */
 export function americanToImpliedProb(moneyline: number): number {

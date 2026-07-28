@@ -1,11 +1,11 @@
-import rawOdds from "../fixtures/oddsapi/raw.json";
+import rawOdds from "../fixtures/oddsapi.json";
 import { americanToImpliedProb } from "../lib/oddsMath.ts";
 import type {
   Bout,
   Corner,
   OddsQuote,
   OddsSnapshot,
-} from "../schema/types.ts";
+} from "../schema.ts";
 import type { OddsSource, SourceConfig } from "./contract.ts";
 
 interface OddsApiOutcome {

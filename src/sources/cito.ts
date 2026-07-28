@@ -2,7 +2,7 @@
  * Cito free-tier live-update behavior is unverified until tested during a real event.
  */
 
-import rawFixture from "../fixtures/cito/raw.json";
+import rawFixture from "../fixtures/cito.json";
 import type {
   Bout,
   BoutResult,
@@ -16,7 +16,7 @@ import type {
   RoundUpdate,
   UfcEvent,
   WeightClass,
-} from "../schema/types.ts";
+} from "../schema.ts";
 import type {
   FightDataSource,
   FighterRecordSource,

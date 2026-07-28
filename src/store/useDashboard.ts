@@ -10,7 +10,7 @@ import type {
   DashboardState,
   OddsSnapshot,
   ScorecardAccount,
-} from "../schema/types.ts";
+} from "../schema.ts";
 import type { SourceConfig } from "../sources/contract.ts";
 import { createCitoSource } from "../sources/cito.ts";
 import { createEspnSource } from "../sources/espn.ts";

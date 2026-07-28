@@ -1,4 +1,4 @@
-import type { Bout } from "../schema/types.ts";
+import type { Bout } from "../schema.ts";
 import { fmtMethod, WEIGHT_LABEL } from "./format.ts";
 
 const SEGMENT_LABEL = {

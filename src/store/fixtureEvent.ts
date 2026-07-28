@@ -12,7 +12,7 @@ import type {
   Corner,
   Fighter,
   UfcEvent,
-} from "../schema/types.ts";
+} from "../schema.ts";
 
 interface RawBout
   extends Omit<Bout, "fighters" | "result" | "weightClass" | "segment" | "status" | "scheduledRounds"> {

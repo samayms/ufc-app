@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { OddsSnapshot } from "../schema/types.ts";
+import type { OddsSnapshot } from "../schema.ts";
 import {
   americanToImpliedProb,
   consensus,

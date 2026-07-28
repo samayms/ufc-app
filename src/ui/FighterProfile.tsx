@@ -1,4 +1,4 @@
-import type { Bout, Corner, Fighter } from "../schema/types.ts";
+import type { Bout, Corner, Fighter } from "../schema.ts";
 import { fmtRecord, fmtTime } from "./format.ts";
 
 function value(value: string | number | undefined, suffix = "") {

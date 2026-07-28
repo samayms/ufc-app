@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Bout } from "../schema/types.ts";
+import type { Bout } from "../schema.ts";
 import { createEspnSource } from "./espn.ts";
 
 const espn = createEspnSource({ mode: "fixture" });

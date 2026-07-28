@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Bout, Fighter, Provenance } from "../schema/types.ts";
+import type { Bout, Fighter, Provenance } from "../schema.ts";
 import { createSherdogSource } from "./sherdog.ts";
 
 const fixtureProvenance: Provenance = {

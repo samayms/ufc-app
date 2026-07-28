@@ -1,4 +1,4 @@
-import type { BoutView, Corner, RoundStats } from "../schema/types.ts";
+import type { BoutView, Corner, RoundStats } from "../schema.ts";
 import type { RoundSelection } from "./RoundSelector.tsx";
 import { fmtTime } from "./format.ts";
 

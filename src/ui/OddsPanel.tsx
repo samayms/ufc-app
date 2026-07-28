@@ -1,4 +1,4 @@
-import type { BoutView, OddsSnapshot } from "../schema/types.ts";
+import type { BoutView, OddsSnapshot } from "../schema.ts";
 import { averageImpliedProbability, consensus } from "../lib/oddsMath.ts";
 import { fmtMoneyline, fmtNative, fmtPct, fmtTime } from "./format.ts";
 

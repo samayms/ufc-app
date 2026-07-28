@@ -1,4 +1,4 @@
-import type { UfcEvent } from "../schema/types.ts";
+import type { UfcEvent } from "../schema.ts";
 import { UfcWordmark } from "./UfcWordmark.tsx";
 
 const UFC_PREFIX = /^UFC\s+/i;

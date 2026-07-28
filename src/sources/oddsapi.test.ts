@@ -1,5 +1,5 @@
 import eventFixture from "../fixtures/event.json";
-import type { Bout, Corner, Fighter } from "../schema/types.ts";
+import type { Bout, Corner, Fighter } from "../schema.ts";
 import { describe, expect, it } from "vitest";
 import { createOddsApiSource } from "./oddsapi.ts";
 

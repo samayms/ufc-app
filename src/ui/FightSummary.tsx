@@ -3,7 +3,7 @@ import type {
   Corner,
   RoundStats,
   RoundUpdate,
-} from "../schema/types.ts";
+} from "../schema.ts";
 import type { RoundSelection } from "./RoundSelector.tsx";
 
 const STAT_ROWS: {

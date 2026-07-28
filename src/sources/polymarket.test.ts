@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import eventFixture from "../fixtures/event.json";
-import type { Bout } from "../schema/types.ts";
+import type { Bout } from "../schema.ts";
 import { createPolymarketSource } from "./polymarket.ts";
 
 function getFixtureBout(id: string): Bout {

@@ -1,4 +1,4 @@
-import type { BoutView } from "../schema/types.ts";
+import type { BoutView } from "../schema.ts";
 
 export type RoundSelection = number | "total";
 

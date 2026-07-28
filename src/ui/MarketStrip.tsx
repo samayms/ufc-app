@@ -1,5 +1,5 @@
 import { averageImpliedProbability } from "../lib/oddsMath.ts";
-import type { BoutView, OddsSnapshot } from "../schema/types.ts";
+import type { BoutView, OddsSnapshot } from "../schema.ts";
 import { fmtPct } from "./format.ts";
 
 function firstUsable(view: BoutView): OddsSnapshot | null {

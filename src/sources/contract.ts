@@ -7,7 +7,7 @@
  * Client rules (enforced by review, stated here so they live with the code):
  * - No network calls in "fixture" mode, ever. Fixture data loads from
  *   static JSON under src/fixtures/ and is marked `synthetic: true`.
- * - Clients normalize into src/schema/types.ts shapes at the boundary and
+ * - Clients normalize into src/schema.ts shapes at the boundary and
  *   never export source-native payload types.
  * - Clients never throw for "no data yet" — they return null/[] so the
  *   dashboard renders absence instead of crashing mid-event.
@@ -21,7 +21,7 @@ import type {
   RoundUpdate,
   ScorecardEmbed,
   UfcEvent,
-} from "../schema/types.ts";
+} from "../schema.ts";
 
 /** How a client resolves data. Live mode arrives with tomorrow's credentials. */
 export type SourceMode = "fixture" | "live";

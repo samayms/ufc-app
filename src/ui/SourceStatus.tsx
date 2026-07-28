@@ -1,4 +1,4 @@
-import type { DashboardState, SourceId } from "../schema/types.ts";
+import type { DashboardState, SourceId } from "../schema.ts";
 import { fmtTime } from "./format.ts";
 
 const SOURCES: {

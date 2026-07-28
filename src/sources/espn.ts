@@ -1,4 +1,4 @@
-import rawFixture from "../fixtures/espn/raw.json";
+import rawFixture from "../fixtures/espn.json";
 import type {
   Bout,
   BoutResult,
@@ -13,7 +13,7 @@ import type {
   RoundUpdate,
   UfcEvent,
   WeightClass,
-} from "../schema/types.ts";
+} from "../schema.ts";
 import type {
   FighterRecordSource,
   FightDataSource,
