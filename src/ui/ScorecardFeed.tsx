@@ -1,3 +1,4 @@
+import { useEffect, useState, type ReactNode } from "react";
 import type {
   BoutView,
   ExpertConsensus,
@@ -9,6 +10,47 @@ import type {
   CollectorValueDelivery,
 } from "../store/collectorClient.ts";
 import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
+import {
+  ensureXWidgetsScript,
+  subscribeXWidgetsState,
+  type XWidgetsState,
+} from "./xWidgetsScript.ts";
+
+/**
+ * One official X embed: a blockquote link that's fully readable on its own,
+ * progressively enhanced into the rich embed once (and only once, however
+ * many of these mount) the widgets script loads. If that script fails, the
+ * plain link stays and we say so instead of leaving a silent dead widget.
+ */
+function XEmbedBlockquote({
+  href,
+  children,
+}: {
+  href: string;
+  children: ReactNode;
+}) {
+  const [widgetsState, setWidgetsState] = useState<XWidgetsState>("idle");
+
+  useEffect(() => {
+    ensureXWidgetsScript();
+    return subscribeXWidgetsState(setWidgetsState);
+  }, []);
+
+  return (
+    <>
+      <blockquote className="twitter-tweet official-x-embed" data-dnt="true">
+        <a href={href} target="_blank" rel="noreferrer noopener">
+          {children}
+        </a>
+      </blockquote>
+      {widgetsState === "error" && (
+        <span className="x-embed-fallback-note">
+          Live preview unavailable — the link above opens the post on X.
+        </span>
+      )}
+    </>
+  );
+}
 
 function consensusLabel(
   consensus: ExpertConsensus | undefined,
@@ -212,33 +254,26 @@ export function ScorecardFeed({
                 className="media-scorecard"
                 key={`x-embed:${post.postId}`}
               >
-                <blockquote
-                  className="twitter-tweet official-x-embed"
-                  data-dnt="true"
+                <XEmbedBlockquote
+                  href={`https://x.com/${post.handle}/status/${post.postId}`}
                 >
-                  <a
-                    href={`https://x.com/${post.handle}/status/${post.postId}`}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    <span className="media-scorecard-id">
-                      <strong className="media-scorecard-name">
-                        {activeAccounts.get(
-                          post.handle.toLocaleLowerCase("en"),
-                        ) ?? `@${post.handle}`}
-                      </strong>
-                      <span className="media-scorecard-handle">
-                        Official X embed
-                        {post.round === undefined
-                          ? ""
-                          : ` · round ${post.round}`}
-                      </span>
+                  <span className="media-scorecard-id">
+                    <strong className="media-scorecard-name">
+                      {activeAccounts.get(
+                        post.handle.toLocaleLowerCase("en"),
+                      ) ?? `@${post.handle}`}
+                    </strong>
+                    <span className="media-scorecard-handle">
+                      Official X embed
+                      {post.round === undefined
+                        ? ""
+                        : ` · round ${post.round}`}
                     </span>
-                    <span className="media-scorecard-score">
-                      <b>View post</b>
-                    </span>
-                  </a>
-                </blockquote>
+                  </span>
+                  <span className="media-scorecard-score">
+                    <b>View post</b>
+                  </span>
+                </XEmbedBlockquote>
               </li>
             ))}
             {xScores.map((score) => {
@@ -279,18 +314,9 @@ export function ScorecardFeed({
                   key={`${score.source}:${score.sourcePostId}`}
                 >
                   {score.mode === "embed" ? (
-                    <blockquote
-                      className="twitter-tweet official-x-embed"
-                      data-dnt="true"
-                    >
-                      <a
-                        href={score.postUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      >
-                        {content}
-                      </a>
-                    </blockquote>
+                    <XEmbedBlockquote href={score.postUrl}>
+                      {content}
+                    </XEmbedBlockquote>
                   ) : (
                     <a
                       className="expert-score-link"

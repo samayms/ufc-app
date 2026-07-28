@@ -969,6 +969,12 @@
   min-width: 0;
 }
 
+.x-embed-fallback-note {
+  grid-column: 1 / -1;
+  color: var(--text-faint);
+  font-size: 0.68rem;
+}
+
 .media-scorecard-avatar {
   width: 32px;
   height: 32px;
