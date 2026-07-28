@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { useDashboard } from "./store/useDashboard.ts";
+import {
+  getCollectorRoundDelivery,
+  type CollectorValueDelivery,
+} from "./store/collectorClient.ts";
 import { BottomNav, type AppTab } from "./ui/BottomNav.tsx";
 import { BoutHeader } from "./ui/BoutHeader.tsx";
 import { CardRail } from "./ui/CardRail.tsx";
+import { DeliveryFreshness } from "./ui/DeliveryFreshness.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
 import { FighterProfile } from "./ui/FighterProfile.tsx";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
@@ -75,6 +80,38 @@ export default function App() {
   );
   const selectedId = selected ?? live?.id ?? event.bouts[0]?.id;
   const view = selectedId ? boutViews[selectedId] : undefined;
+  const selectedRound =
+    view === undefined
+      ? undefined
+      : round === "total"
+        ? Math.max(
+            0,
+            ...(dashboard.collector?.unifiedRounds
+              .filter((record) => record.boutId === view.bout.id)
+              .map((record) => record.round) ?? []),
+          )
+        : round;
+  const roundDelivery =
+    view === undefined || selectedRound === undefined || selectedRound < 1
+      ? undefined
+      : getCollectorRoundDelivery(
+          dashboard.collector,
+          view.bout.id,
+          selectedRound,
+        );
+  const lifecycle = view
+    ? dashboard.collector?.lifecycle[view.bout.id]
+    : undefined;
+  const lifecycleDelivery: CollectorValueDelivery | undefined =
+    lifecycle === undefined
+      ? undefined
+      : {
+          source: lifecycle.source,
+          sourceUpdatedAt: lifecycle.sourceUpdatedAt,
+          receivedAt: lifecycle.receivedAt,
+          stale: dashboard.collector?.connection !== "connected",
+          provisional: lifecycle.provisional,
+        };
 
   const selectBout = (id: string) => {
     setSelected(id);
@@ -104,6 +141,11 @@ export default function App() {
             (view ? (
               <div className="fight-screen">
                 <BoutHeader bout={view.bout} />
+                {lifecycleDelivery && (
+                  <div className="delivery-notice" role="status">
+                    <DeliveryFreshness delivery={lifecycleDelivery} />
+                  </div>
+                )}
                 {dashboard.stale && (
                   <div className="state-notice" role="status">
                     <strong>Stale snapshot</strong>
@@ -123,7 +165,11 @@ export default function App() {
                 )}
                 {section === "summary" && (
                   <>
-                    <FightSummary view={view} selection={round} />
+                    <FightSummary
+                      view={view}
+                      selection={round}
+                      delivery={roundDelivery}
+                    />
                     <ScorecardFeed
                       view={view}
                       accounts={state.scorecardAccounts}
@@ -132,7 +178,11 @@ export default function App() {
                 )}
                 {section === "stats" && (
                   <>
-                    <RoundStatsPanel view={view} selection={round} />
+                    <RoundStatsPanel
+                      view={view}
+                      selection={round}
+                      delivery={roundDelivery}
+                    />
                     <RoundGrid view={view} />
                   </>
                 )}
@@ -167,7 +217,11 @@ export default function App() {
             </section>
           )}
           {tab === "sources" && (
-            <SourceStatus state={state} stale={dashboard.stale} />
+            <SourceStatus
+              state={state}
+              stale={dashboard.stale}
+              collector={dashboard.collector}
+            />
           )}
         </main>
       </div>

@@ -1,4 +1,6 @@
 import type { BoutView, Corner, RoundStats } from "../schema.ts";
+import type { CollectorValueDelivery } from "../store/collectorClient.ts";
+import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
 import type { RoundSelection } from "./RoundSelector.tsx";
 import { fmtTime } from "./format.ts";
 
@@ -55,9 +57,11 @@ function totals(
 export function RoundStatsPanel({
   view,
   selection = "total",
+  delivery,
 }: {
   view: BoutView;
   selection?: RoundSelection;
+  delivery?: CollectorValueDelivery;
 }) {
   const citoRounds = view.rounds.cito ?? [];
   const selectedUpdates =
@@ -90,14 +94,20 @@ export function RoundStatsPanel({
     <section className="panel" aria-label="Fight stats">
       <div className="panel-head">
         <h2>{heading}</h2>
-        <span className="freshness">
-          Cito ·{" "}
-          {selection === "total"
-            ? `through R${through?.round}`
-            : `R${through?.round}`}{" "}
-          ·{" "}
-          <span className="num">{fmtTime(through?.provenance.fetchedAt ?? "")}</span>
-        </span>
+        {delivery ? (
+          <DeliveryFreshness delivery={delivery} />
+        ) : (
+          <span className="freshness">
+            Cito ·{" "}
+            {selection === "total"
+              ? `through R${through?.round}`
+              : `R${through?.round}`}{" "}
+            ·{" "}
+            <span className="num">
+              {fmtTime(through?.provenance.fetchedAt ?? "")}
+            </span>
+          </span>
+        )}
       </div>
       <div className="stats">
         {STAT_ROWS.map(({ key, totalKey, label, fmt }) => {

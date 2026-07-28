@@ -4,6 +4,8 @@ import type {
   RoundStats,
   RoundUpdate,
 } from "../schema.ts";
+import type { CollectorValueDelivery } from "../store/collectorClient.ts";
+import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
 import type { RoundSelection } from "./RoundSelector.tsx";
 
 const STAT_ROWS: {
@@ -65,9 +67,11 @@ function preferredSummary(view: BoutView, selection: RoundSelection) {
 export function FightSummary({
   view,
   selection,
+  delivery,
 }: {
   view: BoutView;
   selection: RoundSelection;
+  delivery?: CollectorValueDelivery;
 }) {
   const stats = updatesForSelection(view.rounds.cito ?? [], selection);
   const rows = STAT_ROWS.map((row) => ({
@@ -87,9 +91,11 @@ export function FightSummary({
       <section className="compact-stats" aria-label={`${selectionLabel} statistics`}>
         <div className="compact-stats-head">
           <span>{selectionLabel}</span>
-          {!hasStats && (
+          {delivery ? (
+            <DeliveryFreshness delivery={delivery} />
+          ) : !hasStats ? (
             <span className="freshness">awaiting completed-round stats</span>
-          )}
+          ) : null}
         </div>
         {hasStats ? (
           <div className="compact-stat-list">

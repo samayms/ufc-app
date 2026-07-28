@@ -18,6 +18,10 @@ import { createKalshiSource } from "../sources/kalshi.ts";
 import { createOddsApiSource } from "../sources/oddsapi.ts";
 import { createPolymarketSource } from "../sources/polymarket.ts";
 import { createSherdogSource } from "../sources/sherdog.ts";
+import {
+  createCollectorClient,
+  type CollectorSnapshot,
+} from "./collectorClient.ts";
 import { loadFixtureEvent } from "./fixtureEvent.ts";
 
 const config: SourceConfig = { mode: "fixture" };
@@ -33,6 +37,7 @@ export interface DashboardLoadState {
   status: "loading" | "ready" | "error";
   data: DashboardState | null;
   stale: boolean;
+  collector?: CollectorSnapshot;
   message?: string;
   reload: () => void;
 }
@@ -140,6 +145,23 @@ function applyLiveDemo(state: DashboardState): DashboardState {
   };
 }
 
+export function collectorSnapshotIsStale(
+  snapshot: CollectorSnapshot,
+): boolean {
+  return (
+    snapshot.dashboard !== null &&
+    (snapshot.connection !== "connected" ||
+      Object.values(snapshot.health).some((health) => !health.fresh))
+  );
+}
+
+export function resolveDashboardData(
+  fixture: DashboardState,
+  snapshot: CollectorSnapshot,
+): DashboardState {
+  return snapshot.dashboard ?? fixture;
+}
+
 export function useDashboard(): DashboardLoadState {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<Omit<DashboardLoadState, "reload">>({
@@ -171,14 +193,38 @@ export function useDashboard(): DashboardLoadState {
       };
     }
 
+    let closeCollector: (() => void) | undefined;
     assembleDashboard()
       .then((next) => {
         if (cancelled) return;
+        const fixture =
+          demo === "live" ? applyLiveDemo(next) : next;
         setState({
           status: "ready",
-          data: demo === "live" ? applyLiveDemo(next) : next,
+          data: fixture,
           stale: demo === "stale",
         });
+
+        if (demo !== "default") return;
+
+        const collector = createCollectorClient();
+        const unsubscribe = collector.subscribe((snapshot) => {
+          if (cancelled) return;
+          setState((current) => ({
+            status: "ready",
+            data: resolveDashboardData(fixture, snapshot),
+            stale: collectorSnapshotIsStale(snapshot),
+            collector: snapshot,
+            ...(current.message === undefined
+              ? {}
+              : { message: current.message }),
+          }));
+        });
+        closeCollector = () => {
+          unsubscribe();
+          collector.close();
+        };
+        void collector.start();
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -195,6 +241,7 @@ export function useDashboard(): DashboardLoadState {
 
     return () => {
       cancelled = true;
+      closeCollector?.();
     };
   }, [attempt]);
 

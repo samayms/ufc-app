@@ -1,4 +1,5 @@
 import type { DashboardState, SourceId } from "../schema.ts";
+import type { CollectorSnapshot } from "../store/collectorClient.ts";
 import { fmtTime } from "./format.ts";
 
 const SOURCES: {
@@ -83,9 +84,11 @@ function sourceTimes(state: DashboardState, source: SourceId) {
 export function SourceStatus({
   state,
   stale = false,
+  collector,
 }: {
   state: DashboardState;
   stale?: boolean;
+  collector?: CollectorSnapshot;
 }) {
   const sourceUpdates = SOURCES.map((source) => sourceTimes(state, source.id));
   const lastSyncedAt = [
@@ -95,6 +98,18 @@ export function SourceStatus({
     .sort()
     .at(-1);
   const fixtureMode = state.event.provenance.synthetic;
+  const connectionLabel =
+    collector?.connection === "unavailable"
+      ? "Collector unavailable"
+      : collector?.connection === "reconnecting"
+        ? "Reconnecting"
+        : stale
+          ? "Stale"
+          : "Synced";
+  const connectionStale =
+    stale ||
+    (collector !== undefined && collector.connection !== "connected");
+  const syncedAt = collector?.lastReceivedAt ?? lastSyncedAt;
 
   return (
     <section className="source-panel" aria-labelledby="source-title">
@@ -111,15 +126,15 @@ export function SourceStatus({
         </div>
         <div className="data-overview-item">
           <span>Connection</span>
-          <strong className={stale ? "is-stale" : "is-synced"}>
+          <strong className={connectionStale ? "is-stale" : "is-synced"}>
             <span className="data-state-dot" aria-hidden="true" />
-            {stale ? "Stale" : "Synced"}
+            {connectionLabel}
           </strong>
         </div>
         <div className="data-overview-item">
           <span>Last synced</span>
           <strong className="num">
-            {lastSyncedAt ? fmtTime(lastSyncedAt) : "No snapshot"}
+            {syncedAt ? fmtTime(syncedAt) : "No snapshot"}
           </strong>
         </div>
       </div>
@@ -130,12 +145,20 @@ export function SourceStatus({
       <div className="source-list">
         {SOURCES.map((source, index) => {
           const fetchedAt = sourceUpdates[index];
-          const unavailable = fetchedAt == null;
-          const status = unavailable
-            ? "Waiting"
-            : stale
-              ? "Stale"
-              : "Loaded";
+          const sourceHealth = collector?.health[source.id];
+          const unavailable =
+            sourceHealth?.status === "unavailable" || fetchedAt == null;
+          const sourceStale =
+            sourceHealth !== undefined
+              ? !sourceHealth.fresh
+              : stale;
+          const status = sourceHealth?.status === "unavailable"
+            ? "Unavailable"
+            : unavailable
+              ? "Waiting"
+              : sourceStale
+                ? "Stale"
+                : "Loaded";
           return (
             <div className="source-row" key={source.id}>
               <div className="source-row-copy">
@@ -144,10 +167,17 @@ export function SourceStatus({
                 <div className="source-meta">
                   <span>{source.cadence}</span>
                   <span className="source-time num">
-                    {fetchedAt
-                      ? `Updated ${fmtTime(fetchedAt)}`
+                    {sourceHealth?.sourceUpdatedAt
+                      ? `Source updated ${fmtTime(sourceHealth.sourceUpdatedAt)}`
+                      : fetchedAt
+                        ? `Updated ${fmtTime(fetchedAt)}`
                       : "No snapshot for this card"}
                   </span>
+                  {sourceHealth && (
+                    <span className="source-time num">
+                      Received {fmtTime(sourceHealth.checkedAt)}
+                    </span>
+                  )}
                 </div>
               </div>
               <span

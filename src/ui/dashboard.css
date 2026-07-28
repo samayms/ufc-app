@@ -579,6 +579,33 @@
   text-transform: uppercase;
 }
 
+.delivery-freshness {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 2px 7px;
+  text-align: right;
+}
+
+.delivery-state-provisional,
+.delivery-state-stale {
+  color: var(--market);
+}
+
+.delivery-state-final {
+  color: var(--live);
+}
+
+.delivery-notice {
+  display: flex;
+  justify-content: center;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
 .compact-stat {
   margin-bottom: 7px;
 }
@@ -1410,6 +1437,9 @@
 
 .data-overview-item .is-stale {
   color: var(--market);
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .is-stale .data-state-dot {
@@ -1496,6 +1526,7 @@
 }
 
 .source-state-stale,
+.source-state-unavailable,
 .source-state-waiting {
   color: var(--text-muted) !important;
   background: color-mix(in srgb, var(--text) 7%, transparent);
