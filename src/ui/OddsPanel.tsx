@@ -8,11 +8,19 @@ import { fmtMoneyline, fmtMove, fmtNative, fmtPct, fmtTime } from "./format.ts";
  * One corner's movement since the prior tick — the market-amber reservation
  * (DESIGN.md's Amber-Is-Money rule) exercised for the first time. Renders an
  * honest "no history yet" dash rather than a fabricated zero when there's no
- * prior tick to compare against.
+ * prior tick to compare against. `emptyLabel` lets callers with a different
+ * reason for "no delta" (e.g. no opening line to compare against) say so
+ * without inventing a second visual language for the same kind of absence.
  */
-function MarketMoveTag({ move }: { move?: MarketMove }) {
+function MarketMoveTag({
+  move,
+  emptyLabel = "no history yet",
+}: {
+  move?: MarketMove;
+  emptyLabel?: string;
+}) {
   if (!move) {
-    return <span className="market-move market-move-empty">no history yet</span>;
+    return <span className="market-move market-move-empty">{emptyLabel}</span>;
   }
   if (move.direction === "flat") {
     return <span className="market-move market-move-flat">flat</span>;
@@ -22,6 +30,92 @@ function MarketMoveTag({ move }: { move?: MarketMove }) {
     <span className={`market-move market-move-${move.direction} num`}>
       {arrow} {fmtMove(move.deltaProbability)}
     </span>
+  );
+}
+
+/**
+ * Movement from the opening line to the current price, in the same
+ * MarketMove shape market-tick movement uses — same math (average implied
+ * probability per corner, no de-vig), just anchored on the pre-fight
+ * snapshot instead of the prior tick. Null — never a fabricated delta —
+ * when either side is missing a usable quote for the corner.
+ */
+function openToNowMove(
+  open: OddsSnapshot,
+  current: OddsSnapshot,
+  corner: Corner,
+): MarketMove | null {
+  const previousProbability = averageImpliedProbability(open, corner);
+  const currentProbability = averageImpliedProbability(current, corner);
+  if (previousProbability == null || currentProbability == null) return null;
+  const deltaProbability = currentProbability - previousProbability;
+  const direction =
+    deltaProbability > 0 ? "up" : deltaProbability < 0 ? "down" : "flat";
+  return { direction, deltaProbability, previousProbability, currentProbability };
+}
+
+/**
+ * The opening (pre-fight) line for one market, shown alongside the current
+ * price so the owner can actually check pre-fight odds — the dashboard's
+ * primary ask. A missing `open` snapshot is rendered as a plain, honest
+ * absence (schema.ts's contract: no pre-fight snapshot means no opening
+ * line, never the current price standing in for it).
+ */
+function OpeningLine({
+  open,
+  current,
+}: {
+  open: OddsSnapshot | null;
+  current: OddsSnapshot | null;
+}) {
+  if (!open) {
+    return (
+      <div className="market-open">
+        <p className="market-note">No opening line captured for this market.</p>
+      </div>
+    );
+  }
+  const red = averageImpliedProbability(open, "red");
+  const blue = averageImpliedProbability(open, "blue");
+  if (red == null || blue == null) {
+    return (
+      <div className="market-open">
+        <p className="market-note">Opening line captured but incomplete.</p>
+      </div>
+    );
+  }
+  const singleBook = open.market !== "sportsbook";
+  const redQuote = open.quotes.find((q) => q.corner === "red");
+  const blueQuote = open.quotes.find((q) => q.corner === "blue");
+  const moveRed = current ? openToNowMove(open, current, "red") : null;
+  const moveBlue = current ? openToNowMove(open, current, "blue") : null;
+  const emptyLabel = current ? "no history yet" : "current price unavailable";
+
+  return (
+    <div className="market-open">
+      <div className="market-head">
+        <span className="freshness">Opening line</span>
+        <span className="freshness">
+          opened <span className="num">{fmtTime(open.provenance.fetchedAt)}</span>
+        </span>
+      </div>
+      <div className="market-bar">
+        <span className="market-side">
+          <span className="market-pct num">{fmtPct(red)}</span>
+          {singleBook && redQuote && (
+            <span className="market-native num">{fmtNative(redQuote.native)}</span>
+          )}
+          <MarketMoveTag move={moveRed ?? undefined} emptyLabel={emptyLabel} />
+        </span>
+        <span className="market-side market-side-blue">
+          <span className="market-pct num">{fmtPct(blue)}</span>
+          {singleBook && blueQuote && (
+            <span className="market-native num">{fmtNative(blueQuote.native)}</span>
+          )}
+          <MarketMoveTag move={moveBlue ?? undefined} emptyLabel={emptyLabel} />
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -49,6 +143,7 @@ function MarketBlock({
   emptyText,
   delivery,
   moves,
+  preFight,
   children,
 }: {
   title: string;
@@ -57,6 +152,7 @@ function MarketBlock({
   emptyText: string;
   delivery?: CollectorValueDelivery;
   moves?: Partial<Record<Corner, MarketMove>>;
+  preFight: OddsSnapshot | null;
   children?: React.ReactNode;
 }) {
   return (
@@ -81,6 +177,7 @@ function MarketBlock({
       ) : (
         <p className="empty">{emptyText}</p>
       )}
+      <OpeningLine open={preFight} current={snapshot} />
     </section>
   );
 }
@@ -169,7 +266,7 @@ export function OddsPanel({
   view: BoutView;
   deliveries?: Partial<Record<OddsSnapshot["market"], CollectorValueDelivery>>;
 }) {
-  const { latestOdds, marketMoves, bout } = view;
+  const { latestOdds, marketMoves, preFightOdds, bout } = view;
   const finalText =
     bout.status === "final"
       ? "Market settled — bout is final."
@@ -211,6 +308,7 @@ export function OddsPanel({
         emptyText={finalText}
         delivery={deliveries?.kalshi}
         moves={marketMoves.kalshi}
+        preFight={preFightOdds.kalshi ?? null}
       />
       <MarketBlock
         title="Polymarket"
@@ -218,6 +316,7 @@ export function OddsPanel({
         emptyText={finalText}
         delivery={deliveries?.polymarket}
         moves={marketMoves.polymarket}
+        preFight={preFightOdds.polymarket ?? null}
       />
       <MarketBlock
         title="Sportsbooks"
@@ -226,6 +325,7 @@ export function OddsPanel({
         emptyText={finalText}
         delivery={deliveries?.sportsbook}
         moves={marketMoves.sportsbook}
+        preFight={preFightOdds.sportsbook ?? null}
       >
         {sportsbook && <BookRows snapshot={sportsbook} />}
       </MarketBlock>
