@@ -1,9 +1,9 @@
-export type AppTab = "fight" | "card" | "sources";
+export type AppTab = "event" | "fight" | "data";
 
 const ITEMS: { id: AppTab; label: string; shortLabel: string }[] = [
+  { id: "event", label: "Event card", shortLabel: "Event" },
   { id: "fight", label: "Live fight", shortLabel: "Fight" },
-  { id: "card", label: "Event card", shortLabel: "Card" },
-  { id: "sources", label: "Data health", shortLabel: "Data" },
+  { id: "data", label: "Data health", shortLabel: "Data" },
 ];
 
 export function BottomNav({

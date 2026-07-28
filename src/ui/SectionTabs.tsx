@@ -1,22 +1,27 @@
 export type FightSection = "summary" | "stats" | "odds" | "tale";
 
-const SECTIONS: { id: FightSection; label: string }[] = [
-  { id: "summary", label: "Fight" },
-  { id: "stats", label: "Stats" },
-  { id: "odds", label: "Odds" },
-  { id: "tale", label: "Tale" },
-];
+const SECTION_LABEL: Record<FightSection, string> = {
+  summary: "Fight",
+  stats: "Stats",
+  odds: "Odds",
+  tale: "Tale",
+};
+
+const DEFAULT_SECTIONS: FightSection[] = ["summary", "stats", "odds", "tale"];
 
 export function SectionTabs({
   active,
   onChange,
+  sections = DEFAULT_SECTIONS,
 }: {
   active: FightSection;
   onChange: (section: FightSection) => void;
+  /** Restrict which tabs render, in order. Defaults to all four, preserving prior behavior. */
+  sections?: FightSection[];
 }) {
   return (
     <div className="section-tabs" role="tablist" aria-label="Fight information">
-      {SECTIONS.map((section) => (
+      {sections.map((id) => ({ id, label: SECTION_LABEL[id] })).map((section) => (
         <button
           key={section.id}
           type="button"

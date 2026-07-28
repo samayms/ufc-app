@@ -1,5 +1,45 @@
-import type { Bout } from "../schema.ts";
+import { useState } from "react";
+import type { Bout, Corner, Fighter } from "../schema.ts";
 import { fmtMethod, WEIGHT_LABEL } from "./format.ts";
+import "./newComponents.css";
+
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2);
+}
+
+function RailPhoto({
+  fighter,
+  corner,
+  photoUrl,
+}: {
+  fighter: Fighter;
+  corner: Corner;
+  photoUrl?: string;
+}) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImg = photoUrl && !imgFailed;
+  return (
+    <span
+      className={`rail-photo rail-photo-${corner}`}
+      aria-hidden={showImg ? undefined : "true"}
+    >
+      {showImg ? (
+        <img
+          className="fighter-photo-img"
+          src={photoUrl}
+          alt={fighter.name}
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        initialsOf(fighter.name)
+      )}
+    </span>
+  );
+}
 
 const SEGMENT_LABEL = {
   "main-card": "Main card",
@@ -37,10 +77,13 @@ export function CardRail({
   bouts,
   selectedId,
   onSelect,
+  photosByBoutId,
 }: {
   bouts: Bout[];
   selectedId: string;
   onSelect: (id: string) => void;
+  /** Optional fighter photo URLs, keyed by bout id. Falls back to initials-in-circle when absent. */
+  photosByBoutId?: Record<string, { red?: string; blue?: string }>;
 }) {
   const segments = ["main-card", "prelims", "early-prelims"] as const;
   return (
@@ -63,9 +106,17 @@ export function CardRail({
                   onClick={() => onSelect(bout.id)}
                   aria-current={bout.id === selectedId ? "true" : undefined}
                 >
-                  <span className="rail-corners" aria-hidden="true">
-                    <span className="rail-corner rail-corner-red" />
-                    <span className="rail-corner rail-corner-blue" />
+                  <span className="rail-photos">
+                    <RailPhoto
+                      fighter={bout.fighters.red}
+                      corner="red"
+                      photoUrl={photosByBoutId?.[bout.id]?.red}
+                    />
+                    <RailPhoto
+                      fighter={bout.fighters.blue}
+                      corner="blue"
+                      photoUrl={photosByBoutId?.[bout.id]?.blue}
+                    />
                   </span>
                   <span className="rail-names">
                     <span className={`rail-name corner-red${winner === "blue" ? " is-loser" : ""}`}>

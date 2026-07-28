@@ -5,10 +5,12 @@ import {
   getCollectorRoundDelivery,
   type CollectorValueDelivery,
 } from "./store/collectorClient.ts";
+import { BackButton } from "./ui/BackButton.tsx";
 import { BottomNav, type AppTab } from "./ui/BottomNav.tsx";
 import { BoutHeader } from "./ui/BoutHeader.tsx";
 import { CardRail } from "./ui/CardRail.tsx";
 import { DeliveryFreshness } from "./ui/DeliveryFreshness.tsx";
+import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
 import { FighterProfile } from "./ui/FighterProfile.tsx";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
@@ -22,6 +24,7 @@ import {
 } from "./ui/RoundSelector.tsx";
 import { RoundStatsPanel } from "./ui/RoundStatsPanel.tsx";
 import { ScheduledCardRail } from "./ui/ScheduledCardRail.tsx";
+import { ScheduledFightPreview } from "./ui/ScheduledFightPreview.tsx";
 import { ScorecardFeed } from "./ui/ScorecardFeed.tsx";
 import {
   SectionTabs,
@@ -29,8 +32,13 @@ import {
 } from "./ui/SectionTabs.tsx";
 import { SourceStatus } from "./ui/SourceStatus.tsx";
 import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
-import { UpcomingEventRail } from "./ui/UpcomingEventRail.tsx";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
+import {
+  fighterEspnAthleteId,
+  useCurrentEventAthletePhotos,
+  useUpcomingEventPhotos,
+} from "./store/useEventPhotos.ts";
+import type { EspnScheduledFight } from "./sources/espnSchedule.ts";
 import "./ui/dashboard.css";
 
 export default function App() {
@@ -40,12 +48,31 @@ export default function App() {
   const [tab, setTab] = useState<AppTab>("fight");
   const [section, setSection] = useState<FightSection>("summary");
   const [round, setRound] = useState<RoundSelection>(1);
-  // null = the app's current in-memory event (default); otherwise an ESPN event id.
+  // null = the Event tab's top-level events list; the current event's own id
+  // or an ESPN event id = drilled into that one event's fight list.
   const [scheduleSelection, setScheduleSelection] = useState<string | null>(
     null,
   );
+  // Whether the currently open Fight tab was reached by drilling into an
+  // event from the Event tab (shows a back arrow) vs. opened directly from
+  // the bottom nav (no "back" to go to).
+  const [cameFromEvent, setCameFromEvent] = useState(false);
+  const [selectedFutureFight, setSelectedFutureFight] =
+    useState<EspnScheduledFight | null>(null);
+
   const upcomingEspn = useUpcomingEspnEvents();
-  const espnCard = useEspnCard(scheduleSelection);
+  const currentEventId = state?.event.id;
+  // scheduleSelection only names a real ESPN event id once it's neither the
+  // list screen (null) nor the current event's own internal id.
+  const futureEventId =
+    scheduleSelection !== null && scheduleSelection !== currentEventId
+      ? scheduleSelection
+      : null;
+  const espnCard = useEspnCard(futureEventId);
+  const upcomingEventPhotos = useUpcomingEventPhotos(
+    upcomingEspn.status === "ready" ? upcomingEspn.events : [],
+  );
+  const currentEventAthletePhotos = useCurrentEventAthletePhotos(state?.event);
 
   useEffect(() => {
     if (!state) return;
@@ -142,46 +169,150 @@ export default function App() {
       }
     : undefined;
 
-  const selectBout = (id: string) => {
+  const selectBout = (id: string, opts?: { fromEvent?: boolean }) => {
     setSelected(id);
     setTab("fight");
     setSection("summary");
+    setSelectedFutureFight(null);
+    setCameFromEvent(opts?.fromEvent ?? false);
   };
 
-  // Reflects whichever card the Card tab is currently showing. Undefined while a
-  // future ESPN card is still loading or failed, so the header omits the count
-  // rather than reporting the previous card's.
+  const selectFutureFight = (fight: EspnScheduledFight) => {
+    setSelectedFutureFight(fight);
+    setTab("fight");
+    setCameFromEvent(true);
+  };
+
+  // Back arrow from the Fight tab: returns to the event's drilled fight
+  // list (scheduleSelection is left as-is, so Event tab shows the same
+  // drilled-in list rather than jumping back to the top-level events list).
+  const backToEventFromFight = () => {
+    setTab("event");
+    setSelectedFutureFight(null);
+    setCameFromEvent(false);
+  };
+
+  // Back arrow within the Event tab's drilled fight-list screen: returns to
+  // the top-level events list.
+  const backToEventList = () => {
+    setScheduleSelection(null);
+  };
+
+  // Bottom nav is the only "start fresh" entry point — clears any
+  // drill-down/back-arrow state left over from the Event tab.
+  const handleNavTabChange = (next: AppTab) => {
+    setTab(next);
+    setCameFromEvent(false);
+    setSelectedFutureFight(null);
+  };
+
+  const mainBout = event.bouts.find((bout) => bout.cardPosition === 1);
+  const mainBoutPhotoUrl = (corner: "red" | "blue") => {
+    const fighter = mainBout?.fighters[corner];
+    if (!fighter) return undefined;
+    const athleteId = fighterEspnAthleteId(fighter.externalRefs);
+    return athleteId ? currentEventAthletePhotos[athleteId] : undefined;
+  };
+
+  const currentEventEntry: EventListEntry = {
+    id: event.id,
+    name: event.name,
+    startsAt: event.startsAt,
+    ...(mainBout
+      ? {
+          redFighter: {
+            name: mainBout.fighters.red.name,
+            photoUrl: mainBoutPhotoUrl("red"),
+          },
+          blueFighter: {
+            name: mainBout.fighters.blue.name,
+            photoUrl: mainBoutPhotoUrl("blue"),
+          },
+        }
+      : {}),
+  };
+
+  const upcomingEventEntries: EventListEntry[] = (
+    upcomingEspn.status === "ready" ? upcomingEspn.events : []
+  ).map((upcomingEvent) => {
+    const corners = upcomingEventPhotos[upcomingEvent.eventId];
+    return {
+      id: upcomingEvent.eventId,
+      name: upcomingEvent.name,
+      startsAt: upcomingEvent.startsAt,
+      ...(corners?.red
+        ? { redFighter: { name: corners.red.name, photoUrl: corners.red.headshotUrl } }
+        : {}),
+      ...(corners?.blue
+        ? { blueFighter: { name: corners.blue.name, photoUrl: corners.blue.headshotUrl } }
+        : {}),
+    };
+  });
+
+  const photosByBoutId: Record<string, { red?: string; blue?: string }> = {};
+  for (const bout of event.bouts) {
+    const redId = fighterEspnAthleteId(bout.fighters.red.externalRefs);
+    const blueId = fighterEspnAthleteId(bout.fighters.blue.externalRefs);
+    photosByBoutId[bout.id] = {
+      red: redId ? currentEventAthletePhotos[redId] : undefined,
+      blue: blueId ? currentEventAthletePhotos[blueId] : undefined,
+    };
+  }
+
+  // Reflects whichever card the drilled-in Event tab screen is currently
+  // showing. Undefined on the top-level list screen (no single event's bout
+  // count applies) or while a future ESPN card is still loading or failed.
   const cardBoutCount =
     scheduleSelection === null
-      ? event.bouts.length
-      : espnCard.card
-        ? espnCard.card.sections.reduce(
-            (total, sec) => total + sec.fights.length,
-            0,
-          )
-        : undefined;
+      ? undefined
+      : scheduleSelection === event.id
+        ? event.bouts.length
+        : espnCard.card
+          ? espnCard.card.sections.reduce(
+              (total, sec) => total + sec.fights.length,
+              0,
+            )
+          : undefined;
 
   return (
     <div className="app">
       <TopBar />
-      <EventSubheader event={event} />
+      <EventSubheader
+        event={event}
+        leading={
+          tab === "event" && scheduleSelection !== null ? (
+            <BackButton onClick={backToEventList} />
+          ) : undefined
+        }
+      />
       <div className="desktop-tabs">
-        <BottomNav active={tab} onChange={setTab} />
+        <BottomNav active={tab} onChange={handleNavTabChange} />
       </div>
-      <div className={`app-body${tab === "fight" ? " has-rail" : ""}`}>
-        {tab === "fight" && (
+      <div
+        className={`app-body${tab === "fight" && !selectedFutureFight ? " has-rail" : ""}`}
+      >
+        {tab === "fight" && !selectedFutureFight && (
           <aside className="desktop-rail">
             <CardRail
               bouts={event.bouts}
               selectedId={selectedId ?? ""}
               onSelect={selectBout}
+              photosByBoutId={photosByBoutId}
             />
           </aside>
         )}
         <main className="app-content" id="main-content">
           {tab === "fight" &&
-            (view ? (
+            (selectedFutureFight ? (
+              <ScheduledFightPreview
+                fight={selectedFutureFight}
+                onBack={backToEventFromFight}
+              />
+            ) : view ? (
               <div className="fight-screen">
+                {cameFromEvent && (
+                  <BackButton onClick={backToEventFromFight} label="Back to card" />
+                )}
                 <BoutHeader bout={view.bout} />
                 {lifecycleDelivery && (
                   <div className="delivery-notice" role="status">
@@ -249,77 +380,87 @@ export default function App() {
                 <span>Event data loaded without a selectable matchup.</span>
               </div>
             ))}
-          {tab === "card" && (
-            <section className="card-screen" aria-labelledby="card-title">
-              <div className="page-heading">
-                <div>
-                  <span className="page-kicker">Bout order</span>
-                  <h2 id="card-title">Event card</h2>
+          {tab === "event" &&
+            (scheduleSelection === null ? (
+              <section className="card-screen" aria-labelledby="card-title">
+                <div className="page-heading">
+                  <div>
+                    <span className="page-kicker">Browse</span>
+                    <h2 id="card-title">Events</h2>
+                  </div>
                 </div>
-                {cardBoutCount !== undefined && (
-                  <span className="num page-count">{cardBoutCount} bouts</span>
+                {upcomingEspn.status === "error" && (
+                  <div className="state-notice" role="status">
+                    <strong>ESPN unavailable</strong>
+                    <span>
+                      {upcomingEspn.message ??
+                        "Upcoming ESPN events could not be loaded."}
+                    </span>
+                    <button
+                      type="button"
+                      className="retry-button"
+                      onClick={upcomingEspn.reload}
+                    >
+                      Retry
+                    </button>
+                  </div>
                 )}
-              </div>
-              <UpcomingEventRail
-                currentEvent={{
-                  id: event.id,
-                  name: event.name,
-                  startsAt: event.startsAt,
-                }}
-                events={
-                  upcomingEspn.status === "ready" ? upcomingEspn.events : []
-                }
-                selectedId={scheduleSelection ?? event.id}
-                onSelect={(id) =>
-                  setScheduleSelection(id === event.id ? null : id)
-                }
-              />
-              {upcomingEspn.status === "error" && (
-                <div className="state-notice" role="status">
-                  <strong>ESPN unavailable</strong>
-                  <span>
-                    {upcomingEspn.message ??
-                      "Upcoming ESPN events could not be loaded."}
-                  </span>
-                  <button
-                    type="button"
-                    className="retry-button"
-                    onClick={upcomingEspn.reload}
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-              {scheduleSelection === null ? (
-                <CardRail
-                  bouts={event.bouts}
-                  selectedId={selectedId ?? ""}
-                  onSelect={selectBout}
+                <EventList
+                  currentEvent={currentEventEntry}
+                  events={upcomingEventEntries}
+                  selectedId=""
+                  onSelect={setScheduleSelection}
                 />
-              ) : espnCard.status === "loading" || espnCard.status === "idle" ? (
-                <div className="empty-state">
-                  <strong>Loading card…</strong>
-                  <span>Fetching the ESPN fight card.</span>
+              </section>
+            ) : (
+              <section className="card-screen" aria-labelledby="card-title">
+                <div className="page-heading">
+                  <div>
+                    <span className="page-kicker">Bout order</span>
+                    <h2 id="card-title">
+                      {scheduleSelection === event.id
+                        ? event.name
+                        : (espnCard.card?.name ?? "Event card")}
+                    </h2>
+                  </div>
+                  {cardBoutCount !== undefined && (
+                    <span className="num page-count">{cardBoutCount} bouts</span>
+                  )}
                 </div>
-              ) : espnCard.status === "error" ? (
-                <div className="state-notice" role="status">
-                  <strong>Card unavailable</strong>
-                  <span>
-                    {espnCard.message ??
-                      "This event's fight card could not be loaded."}
-                  </span>
-                </div>
-              ) : espnCard.card ? (
-                <ScheduledCardRail card={espnCard.card} />
-              ) : (
-                <div className="empty-state">
-                  <strong>No fight card yet</strong>
-                  <span>ESPN hasn't published matchups for this event.</span>
-                </div>
-              )}
-            </section>
-          )}
-          {tab === "sources" && (
+                {scheduleSelection === event.id ? (
+                  <CardRail
+                    bouts={event.bouts}
+                    selectedId={selectedId ?? ""}
+                    onSelect={(id) => selectBout(id, { fromEvent: true })}
+                    photosByBoutId={photosByBoutId}
+                  />
+                ) : espnCard.status === "loading" || espnCard.status === "idle" ? (
+                  <div className="empty-state">
+                    <strong>Loading card…</strong>
+                    <span>Fetching the ESPN fight card.</span>
+                  </div>
+                ) : espnCard.status === "error" ? (
+                  <div className="state-notice" role="status">
+                    <strong>Card unavailable</strong>
+                    <span>
+                      {espnCard.message ??
+                        "This event's fight card could not be loaded."}
+                    </span>
+                  </div>
+                ) : espnCard.card ? (
+                  <ScheduledCardRail
+                    card={espnCard.card}
+                    onSelect={selectFutureFight}
+                  />
+                ) : (
+                  <div className="empty-state">
+                    <strong>No fight card yet</strong>
+                    <span>ESPN hasn't published matchups for this event.</span>
+                  </div>
+                )}
+              </section>
+            ))}
+          {tab === "data" && (
             <SourceStatus
               state={state}
               stale={dashboard.stale}
@@ -329,7 +470,7 @@ export default function App() {
         </main>
       </div>
       <div className="mobile-nav">
-        <BottomNav active={tab} onChange={setTab} />
+        <BottomNav active={tab} onChange={handleNavTabChange} />
       </div>
     </div>
   );

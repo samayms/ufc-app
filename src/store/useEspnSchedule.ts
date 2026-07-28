@@ -12,7 +12,10 @@ import {
   type EspnScheduledEventSummary,
 } from "../sources/espnSchedule.ts";
 
-const scheduleSource = createEspnScheduleSource();
+// Exported so other hooks (e.g. useEventPhotos.ts) can reuse this exact
+// instance and its TTL cache instead of standing up a second source with a
+// cold cache.
+export const scheduleSource = createEspnScheduleSource();
 
 export interface UpcomingEspnEventsState {
   status: "loading" | "ready" | "error";

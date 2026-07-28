@@ -1,14 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   EspnScheduledCard,
-  EspnScheduledEventSummary,
   EspnScheduledFight,
   EspnScheduledFighter,
 } from "../sources/espnSchedule.ts";
 import { fmtTime } from "./format.ts";
 import { ScheduledCardRail } from "./ScheduledCardRail.tsx";
-import { UpcomingEventRail } from "./UpcomingEventRail.tsx";
 
 function fighter(
   name: string,
@@ -97,7 +95,9 @@ const card: EspnScheduledCard = {
 
 describe("ScheduledCardRail", () => {
   it("renders fights in the given order with the main event first, never re-sorting", () => {
-    const markup = renderToStaticMarkup(<ScheduledCardRail card={card} />);
+    const markup = renderToStaticMarkup(
+      <ScheduledCardRail card={card} onSelect={() => undefined} />,
+    );
     const mainRedIndex = markup.indexOf("Main Red");
     const coRedIndex = markup.indexOf("Co Red");
     const prelimRedIndex = markup.indexOf("Prelim Red");
@@ -110,7 +110,9 @@ describe("ScheduledCardRail", () => {
   });
 
   it("shows the three section headings with their start times, omitting the time when absent", () => {
-    const markup = renderToStaticMarkup(<ScheduledCardRail card={card} />);
+    const markup = renderToStaticMarkup(
+      <ScheduledCardRail card={card} onSelect={() => undefined} />,
+    );
 
     expect(markup).toContain(
       `Main Card · from ${fmtTime(card.sections[0]!.startsAt!)}`,
@@ -123,89 +125,37 @@ describe("ScheduledCardRail", () => {
   });
 
   it("labels chips TITLE / MAIN / UPCOMING per fight", () => {
-    const markup = renderToStaticMarkup(<ScheduledCardRail card={card} />);
+    const markup = renderToStaticMarkup(
+      <ScheduledCardRail card={card} onSelect={() => undefined} />,
+    );
     expect(markup).toContain(">TITLE<");
     expect(markup).toContain(">UPCOMING<");
   });
 
   it("never renders a per-fight timestamp, only the section's", () => {
-    const markup = renderToStaticMarkup(<ScheduledCardRail card={card} />);
+    const markup = renderToStaticMarkup(
+      <ScheduledCardRail card={card} onSelect={() => undefined} />,
+    );
     expect(markup).not.toContain("01:20");
     expect(markup).not.toContain(card.sections[0]!.fights[1]!.startsAt!);
   });
 
   it("omits the weight element and does not crash when weightClassLabel is absent", () => {
     expect(() =>
-      renderToStaticMarkup(<ScheduledCardRail card={card} />),
+      renderToStaticMarkup(<ScheduledCardRail card={card} onSelect={() => undefined} />),
     ).not.toThrow();
 
-    const markup = renderToStaticMarkup(<ScheduledCardRail card={card} />);
+    const markup = renderToStaticMarkup(
+      <ScheduledCardRail card={card} onSelect={() => undefined} />,
+    );
     expect(markup).not.toMatch(/<span class="rail-weight"><\/span>/);
   });
 
-  it("renders fights as non-interactive rows, not buttons", () => {
-    const markup = renderToStaticMarkup(<ScheduledCardRail card={card} />);
-    expect(markup).not.toContain("<button");
-  });
-});
-
-describe("UpcomingEventRail", () => {
-  const events: EspnScheduledEventSummary[] = [
-    { eventId: "1", name: "UFC 500", startsAt: "2026-08-01T14:00:00Z" },
-    {
-      eventId: "2",
-      name: "UFC 501",
-      shortName: "UFC 501",
-      startsAt: "2026-08-08T14:00:00Z",
-    },
-  ];
-
-  it("lists the current event first and pre-selected, then upcoming ESPN events", () => {
+  it("renders each fight as a clickable button, one per fight", () => {
     const markup = renderToStaticMarkup(
-      <UpcomingEventRail
-        currentEvent={{
-          id: "current",
-          name: "UFC Fight Night: X vs. Y",
-          startsAt: "2026-07-28T22:00:00Z",
-        }}
-        events={events}
-        selectedId="current"
-        onSelect={() => undefined}
-      />,
+      <ScheduledCardRail card={card} onSelect={vi.fn()} />,
     );
-
-    expect(markup).toContain("Current event");
-    expect(markup).toContain("Upcoming events");
-
-    const currentIdx = markup.indexOf("UFC Fight Night: X vs. Y");
-    const firstUpcomingIdx = markup.indexOf("UFC 500");
-    expect(currentIdx).toBeGreaterThan(-1);
-    expect(currentIdx).toBeLessThan(firstUpcomingIdx);
-
-    const selectedMatches = markup.match(/aria-current="true"/g) ?? [];
-    expect(selectedMatches.length).toBe(1);
-  });
-
-  it("marks a selected future ESPN event, not the current one", () => {
-    const markup = renderToStaticMarkup(
-      <UpcomingEventRail
-        currentEvent={{
-          id: "current",
-          name: "Current",
-          startsAt: "2026-07-28T22:00:00Z",
-        }}
-        events={events}
-        selectedId="2"
-        onSelect={() => undefined}
-      />,
-    );
-
-    const selectedMatches = markup.match(/aria-current="true"/g) ?? [];
-    expect(selectedMatches.length).toBe(1);
-
-    const idx = markup.indexOf('aria-current="true"');
-    const buttonStart = markup.lastIndexOf("<button", idx);
-    const buttonEnd = markup.indexOf("</button>", idx);
-    expect(markup.slice(buttonStart, buttonEnd)).toContain("UFC 501");
+    const buttonCount = (markup.match(/<button/g) ?? []).length;
+    expect(buttonCount).toBe(4);
   });
 });

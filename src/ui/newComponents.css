@@ -1,0 +1,268 @@
+/*
+ * Styles for the new event-browsing / scheduled-fight-preview components
+ * (EventList, ScheduledFightPreview, and the fighter-photo additions to
+ * CardRail/ScheduledCardRail). Kept separate from dashboard.css, which is
+ * being edited concurrently elsewhere — this file only adds new classes
+ * and reuses existing dashboard.css classes (.rail, .rail-heading,
+ * .fighter-photo, .profile-panel, .profile-row, .chip, .state-notice, …)
+ * by referencing them alongside these from component className strings.
+ */
+
+/* EventSubheader back-button slot — pinned to the left of the header row,
+   above/inside its existing bottom border, without touching .event-subheader
+   in dashboard.css directly. */
+.event-subheader-with-leading {
+  position: relative;
+}
+
+.event-subheader-leading {
+  position: absolute;
+  top: 50%;
+  left: max(15px, env(safe-area-inset-left));
+  transform: translateY(-50%);
+}
+
+/* Fighter-photo image fill — layered on top of the existing
+   .fighter-photo/.fighter-photo-red/.fighter-photo-blue circle so a real
+   headshot can fill the circle instead of initials. */
+.fighter-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* Small rail-row photo circles (CardRail / ScheduledCardRail) — same
+   bordered-circle treatment as .fighter-photo, scaled down, replacing the
+   purely decorative .rail-corners color blocks. */
+.rail-photos {
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+
+.rail-photo {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid;
+  border-radius: 50%;
+  font-family: var(--font-data);
+  font-size: 0.5rem;
+  color: var(--text-faint);
+  background: var(--surface-2);
+}
+
+.rail-photo-red {
+  border-color: var(--red-corner);
+  background: radial-gradient(circle at 65% 20%, var(--red-corner-dim), var(--surface-2) 68%);
+}
+
+.rail-photo-blue {
+  border-color: var(--blue-corner);
+  background: radial-gradient(circle at 35% 20%, var(--blue-corner-dim), var(--surface-2) 68%);
+}
+
+/* EventList ---------------------------------------------------------------
+ * A visually heavier card-style row than the thin .rail-bout rows, for the
+ * top-level "browse events" screen. Reuses .rail/.rail-segment/.rail-heading
+ * for section structure, but each entry is its own bigger card. */
+
+.event-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 13px;
+  margin-bottom: 9px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+  text-align: left;
+  transition: background 150ms ease;
+}
+
+.event-card:hover,
+.event-card.is-selected {
+  background: var(--surface-3);
+}
+
+.event-card.is-selected {
+  border-color: var(--border-strong);
+}
+
+.event-card-matchup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.event-card-fighter {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-card-fighter.is-blue {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.event-card-fighter-photo {
+  width: 52px;
+  height: 52px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid;
+  border-radius: 50%;
+  font-family: var(--font-data);
+  font-size: 0.62rem;
+  color: var(--text-faint);
+  background: var(--surface-2);
+}
+
+.event-card-fighter-name {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-card-vs {
+  color: var(--text-ghost);
+  font-family: var(--font-data);
+  font-size: 0.55rem;
+}
+
+.event-card-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.event-card-name {
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-card-date {
+  flex: none;
+  color: var(--text-faint);
+  font-family: var(--font-data);
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ScheduledFightPreview ---------------------------------------------------- */
+
+.scheduled-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scheduled-preview-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.scheduled-preview-class {
+  color: var(--text-faint);
+  font-family: var(--font-data);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.scheduled-preview-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.scheduled-preview-fighter {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.scheduled-preview-photo {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid;
+  border-radius: 50%;
+  font-family: var(--font-data);
+  font-size: 0.66rem;
+  color: var(--text-faint);
+  background: var(--surface-2);
+}
+
+.scheduled-preview-vs {
+  color: var(--text-ghost);
+  font-family: var(--font-data);
+  font-size: 0.55rem;
+}
+
+.scheduled-preview-name {
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scheduled-preview-record {
+  color: var(--text-faint);
+  font-family: var(--font-data);
+  font-size: 0.57rem;
+}
+
+/* Fight outlook placeholder (stats section) */
+.outlook-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.outlook-heading {
+  color: var(--text-faint);
+  font-family: var(--font-data);
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.outlook-body {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
