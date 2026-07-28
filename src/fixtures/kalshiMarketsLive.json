@@ -1,0 +1,31 @@
+{
+  "cursor": "",
+  "markets": [
+    {
+      "ticker": "KXMVESPORTSMULTIGAMEEXTENDED-S202611885FBB79D-9FF8189A699",
+      "event_ticker": "KXMVESPORTSMULTIGAMEEXTENDED-S202611885FBB79D",
+      "market_type": "binary",
+      "status": "active",
+      "yes_bid_dollars": "0.0000",
+      "yes_ask_dollars": "0.0000",
+      "no_bid_dollars": "1.0000",
+      "no_ask_dollars": "1.0000",
+      "last_price_dollars": "0.0000",
+      "open_time": "2026-07-28T14:09:29Z",
+      "close_time": "2026-08-12T01:00:00Z"
+    },
+    {
+      "ticker": "KXMVESPORTSMULTIGAMEEXTENDED-S2026D1300C962A1-295E6F1CC6E",
+      "event_ticker": "KXMVESPORTSMULTIGAMEEXTENDED-S2026D1300C962A1",
+      "market_type": "binary",
+      "status": "active",
+      "yes_bid_dollars": "0.0000",
+      "yes_ask_dollars": "0.0000",
+      "no_bid_dollars": "1.0000",
+      "no_ask_dollars": "1.0000",
+      "last_price_dollars": "0.0000",
+      "open_time": "2026-07-28T14:09:29Z",
+      "close_time": "2026-08-01T02:10:00Z"
+    }
+  ]
+}

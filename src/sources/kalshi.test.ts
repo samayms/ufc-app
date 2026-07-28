@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { loadFixtureEvent } from "../store/fixtureEvent.ts";
-import { createKalshiSource } from "./kalshi.ts";
+import liveMarkets from "../fixtures/kalshiMarketsLive.json" with {
+  type: "json",
+};
+import {
+  createKalshiSource,
+  parseKalshiLiveMarket,
+  parseKalshiMarketsResponse,
+} from "./kalshi.ts";
 import {
   importKalshiPrivateKey,
   kalshiMessage,
@@ -99,5 +106,64 @@ describe("kalshi RSA-PSS signing", () => {
       new TextEncoder().encode(kalshiMessage(ts, "GET", "/trade-api/v2/markets")),
     );
     expect(ok).toBe(true);
+  });
+});
+
+describe("parseKalshiMarketsResponse", () => {
+  // Captured live 2026-07-28 from api.elections.kalshi.com/trade-api/v2/markets
+  // (HTTP 200, unauthenticated). Guards the field-name/type migration: the
+  // API now returns dollar-denominated strings, not integer cents.
+  it("parses the captured live markets envelope", () => {
+    const markets = parseKalshiMarketsResponse(liveMarkets);
+
+    expect(markets).toHaveLength(2);
+    const first = markets[0];
+    expect(first?.ticker).toBe(liveMarkets.markets[0]?.ticker);
+    expect(first?.status).toBe("active");
+    // Both books were empty at capture time; the point of this assertion is
+    // that dollar strings normalize to numeric cents rather than NaN.
+    expect(first?.yes_bid).toBe(0);
+    expect(first?.no_bid).toBe(100);
+    expect(Number.isNaN(first?.last_price)).toBe(false);
+  });
+
+  it("converts dollar strings into cents", () => {
+    const parsed = parseKalshiLiveMarket({
+      ticker: "KXUFCFIGHT-EXAMPLE-RED",
+      status: "active",
+      yes_bid_dollars: "0.6300",
+      yes_ask_dollars: "0.6500",
+      no_bid_dollars: "0.3500",
+      no_ask_dollars: "0.3700",
+      last_price_dollars: "0.6400",
+    });
+
+    expect(parsed).toEqual({
+      ticker: "KXUFCFIGHT-EXAMPLE-RED",
+      status: "active",
+      yes_bid: 63,
+      yes_ask: 65,
+      no_bid: 35,
+      no_ask: 37,
+      last_price: 64,
+    });
+  });
+
+  it("rejects markets without a usable ticker", () => {
+    expect(parseKalshiLiveMarket({ yes_bid_dollars: "0.5" })).toBeNull();
+    expect(parseKalshiLiveMarket(null)).toBeNull();
+  });
+
+  it("accepts the fixture's nested markets_response envelope", () => {
+    const markets = parseKalshiMarketsResponse({
+      markets_response: { markets: [{ ticker: "T", status: "active" }] },
+    });
+
+    expect(markets).toHaveLength(1);
+    expect(markets[0]?.ticker).toBe("T");
+  });
+
+  it("throws on a non-object payload", () => {
+    expect(() => parseKalshiMarketsResponse(null)).toThrow(/JSON object/);
   });
 });
