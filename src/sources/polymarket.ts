@@ -1,4 +1,4 @@
-import rawFixture from "../fixtures/polymarket.json";
+import rawFixture from "../fixtures/polymarket.json" with { type: "json" };
 import type { Bout, Corner, OddsQuote, OddsSnapshot } from "../schema.ts";
 import type { OddsSource, SourceConfig } from "./contract.ts";
 

@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "collector": "node server/collector.ts",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:collector": "vitest run server",
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit"
   },

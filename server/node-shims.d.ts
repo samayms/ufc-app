@@ -39,3 +39,56 @@ declare module "node:os" {
 declare module "node:path" {
   export function join(...paths: string[]): string;
 }
+
+declare module "node:http" {
+  export interface IncomingMessage {
+    method?: string;
+    url?: string;
+    headers: Record<string, string | string[] | undefined>;
+    on(event: "close", listener: () => void): this;
+  }
+
+  export interface ServerResponse {
+    readonly headersSent: boolean;
+    writeHead(
+      statusCode: number,
+      headers?: Record<string, string>,
+    ): this;
+    flushHeaders(): void;
+    write(chunk: string): boolean;
+    end(chunk?: string): void;
+    on(event: "close", listener: () => void): this;
+  }
+
+  export interface AddressInfo {
+    port: number;
+  }
+
+  export interface Server {
+    readonly listening: boolean;
+    listen(port: number, hostname: string): this;
+    close(callback: (error?: Error) => void): this;
+    address(): AddressInfo | string | null;
+    once(event: "error", listener: (error: Error) => void): this;
+    once(event: "listening", listener: () => void): this;
+    off(event: "error", listener: (error: Error) => void): this;
+    off(event: "listening", listener: () => void): this;
+  }
+
+  export function createServer(
+    listener: (
+      request: IncomingMessage,
+      response: ServerResponse,
+    ) => void,
+  ): Server;
+}
+
+declare module "node:url" {
+  export function pathToFileURL(path: string): URL;
+}
+
+declare const process: {
+  env: Readonly<Record<string, string | undefined>>;
+  argv: string[];
+  exitCode?: number;
+};

@@ -1,4 +1,4 @@
-import rawFixture from "../fixtures/espn.json";
+import rawFixture from "../fixtures/espn.json" with { type: "json" };
 import type {
   Bout,
   BoutResult,

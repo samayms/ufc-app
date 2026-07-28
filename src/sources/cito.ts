@@ -2,7 +2,7 @@
  * Cito free-tier live-update behavior is unverified until tested during a real event.
  */
 
-import rawFixture from "../fixtures/cito.json";
+import rawFixture from "../fixtures/cito.json" with { type: "json" };
 import type {
   Bout,
   BoutResult,

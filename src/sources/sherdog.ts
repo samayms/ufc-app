@@ -1,4 +1,4 @@
-import liveBlogFixture from "../fixtures/sherdog.json";
+import liveBlogFixture from "../fixtures/sherdog.json" with { type: "json" };
 import type { Bout, Corner, RoundUpdate } from "../schema.ts";
 import type {
   RoundCommentarySource,

@@ -1,4 +1,4 @@
-import rawOdds from "../fixtures/oddsapi.json";
+import rawOdds from "../fixtures/oddsapi.json" with { type: "json" };
 import { americanToImpliedProb } from "../lib/oddsMath.ts";
 import type {
   Bout,

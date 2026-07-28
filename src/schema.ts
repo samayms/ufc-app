@@ -32,6 +32,7 @@ export type SourceId =
   | "cito"
   | "kalshi"
   | "polymarket"
+  | "odds-api-io"
   | "odds-api"
   | "x-embed"
   | "fixture";

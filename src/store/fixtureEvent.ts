@@ -5,7 +5,7 @@
  * arrive, the ESPN/Cito clients replace this as the event source.
  */
 
-import raw from "../fixtures/event.json";
+import raw from "../fixtures/event.json" with { type: "json" };
 import type {
   Bout,
   BoutResult,
