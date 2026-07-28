@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import canonicalFixture from "../fixtures/event.json";
+import citoLiveLiveFixture from "../fixtures/citoLiveLive.json";
 import {
   buildCitoLiveStateUrl,
   createCitoSource,
@@ -150,50 +151,61 @@ describe("createCitoSource", () => {
 });
 
 describe("buildCitoLiveStateUrl", () => {
-  it("builds a live-state URL under the configured base URL", () => {
-    const url = buildCitoLiveStateUrl(
-      "https://cito.example.invalid/v1",
-      "ufc-fixture-night",
-    );
+  it("preserves an /api/v1 base URL prefix when resolving the live path", () => {
+    const url = buildCitoLiveStateUrl("https://api.citoapi.com/api/v1");
 
-    expect(url).toBe(
-      "https://cito.example.invalid/events/ufc-fixture-night/live",
+    expect(url).toBe("https://api.citoapi.com/api/v1/ufc/live");
+  });
+
+  it("builds a live-state URL under a configured base URL without a version prefix", () => {
+    const url = buildCitoLiveStateUrl("https://cito.example.invalid/v1");
+
+    expect(url).toBe("https://cito.example.invalid/v1/ufc/live");
+  });
+
+  it("resolves correctly whether or not the base URL has a trailing slash", () => {
+    expect(buildCitoLiveStateUrl("https://cito.example.invalid/v1/")).toBe(
+      buildCitoLiveStateUrl("https://cito.example.invalid/v1"),
     );
   });
 
-  it("rejects an empty base URL or event id", () => {
-    expect(() => buildCitoLiveStateUrl("", "ufc-fixture-night")).toThrow(
-      /non-empty base URL/,
-    );
-    expect(() =>
-      buildCitoLiveStateUrl("https://cito.example.invalid", "  "),
-    ).toThrow(/non-empty event id/);
+  it("rejects an empty base URL", () => {
+    expect(() => buildCitoLiveStateUrl("")).toThrow(/non-empty base URL/);
   });
 });
 
 describe("parseCitoLiveStateLifecycle", () => {
-  it("normalizes a realistic live-state payload into lifecycle entries", () => {
+  it("normalizes a realistic {success,data,meta} live-state payload into lifecycle entries", () => {
     const payload = {
-      bouts: [
-        {
-          id: "cito-bout-9001",
-          status: "between_rounds",
-          current_round: 2,
-          final_round: null,
-        },
-        {
-          id: "cito-bout-9002",
-          status: "completed",
-          current_round: null,
-          final_round: 2,
-        },
-        {
-          id: "cito-bout-9003",
-          status: "scheduled",
-          current_round: null,
-          final_round: null,
-        },
-      ],
+      success: true,
+      data: {
+        liveBouts: [
+          {
+            boutId: "cito-bout-9001",
+            status: "between_rounds",
+            currentRound: 2,
+            finalRound: null,
+          },
+          {
+            boutId: "cito-bout-9002",
+            status: "completed",
+            currentRound: null,
+            finalRound: 2,
+          },
+          {
+            boutId: "cito-bout-9003",
+            status: "scheduled",
+            currentRound: null,
+            finalRound: null,
+          },
+        ],
+        nextBouts: [
+          { boutId: "cito-bout-9999", status: "scheduled" },
+        ],
+        nextArmedBout: null,
+        events: [],
+      },
+      meta: { recommendedPollSeconds: 15, health: { ok: true } },
     };
 
     expect(parseCitoLiveStateLifecycle(payload)).toEqual([
@@ -219,8 +231,27 @@ describe("parseCitoLiveStateLifecycle", () => {
     ]);
   });
 
-  it("skips bouts without an id", () => {
-    const payload = { bouts: [{ status: "live", current_round: 1 }] };
+  it("ignores nextBouts entirely (only liveBouts feed lifecycle entries)", () => {
+    const payload = {
+      success: true,
+      data: {
+        liveBouts: [],
+        nextBouts: [
+          { boutId: "cito-bout-armed", status: "scheduled" },
+        ],
+        nextArmedBout: { boutId: "cito-bout-armed" },
+        events: [],
+      },
+    };
+
+    expect(parseCitoLiveStateLifecycle(payload)).toEqual([]);
+  });
+
+  it("skips live bouts without a recognizable id", () => {
+    const payload = {
+      success: true,
+      data: { liveBouts: [{ status: "live", currentRound: 1 }] },
+    };
 
     expect(parseCitoLiveStateLifecycle(payload)).toEqual([]);
   });
@@ -230,8 +261,18 @@ describe("parseCitoLiveStateLifecycle", () => {
     expect(() => parseCitoLiveStateLifecycle(42)).toThrow(/JSON object/);
   });
 
-  it("returns an empty array when the payload has no bouts", () => {
+  it("degrades safely (returns no entries) when data/liveBouts is missing or malformed", () => {
     expect(parseCitoLiveStateLifecycle({})).toEqual([]);
+    expect(parseCitoLiveStateLifecycle({ success: false })).toEqual([]);
+    expect(parseCitoLiveStateLifecycle({ data: null })).toEqual([]);
+    expect(parseCitoLiveStateLifecycle({ data: {} })).toEqual([]);
+    expect(parseCitoLiveStateLifecycle({ data: { liveBouts: null } })).toEqual(
+      [],
+    );
+  });
+
+  it("yields no lifecycle entries from the real captured /ufc/live response (empty liveBouts/nextBouts)", () => {
+    expect(parseCitoLiveStateLifecycle(citoLiveLiveFixture)).toEqual([]);
   });
 });
 

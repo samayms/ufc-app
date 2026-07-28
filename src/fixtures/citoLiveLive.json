@@ -1,0 +1,241 @@
+{
+  "success": true,
+  "data": {
+    "liveBouts": [],
+    "nextBouts": [],
+    "nextArmedBout": null,
+    "events": [
+      {
+        "entity_type": "ufc_live_event",
+        "eventSlug": "ufc-304",
+        "status": "completed",
+        "eventStatus": "completed",
+        "chronoFmids": [
+          "11513",
+          "11425",
+          "11433",
+          "11432",
+          "11429",
+          "11397",
+          "11514",
+          "11415",
+          "11423",
+          "11396",
+          "11500",
+          "11398",
+          "11395",
+          "11394"
+        ],
+        "currentLiveFmid": null,
+        "nextCandidateFmid": null,
+        "lastCardPollAt": "2026-07-28T14:26:04.918Z",
+        "lastHeartbeatAt": "2026-07-28T14:26:04.918Z",
+        "lastJsonApiSeedAt": "2026-07-28T14:30:48.666Z",
+        "pollIntervalMs": 300000,
+        "consecutiveEmpty": 0,
+        "consecutiveErrors": 0,
+        "health": {
+          "live": null,
+          "next": null,
+          "samples": 1,
+          "strategy": "ios-impersonate",
+          "warnings": [],
+          "armedNext": null,
+          "eventFmid": "1208",
+          "fightCount": 14,
+          "fightmetric": {
+            "finals": 14,
+            "source": "ufc_fightmetric_cdn",
+            "liveFightId": null,
+            "liveRoundNumber": null,
+            "liveRoundElapsedTime": null
+          },
+          "stickyEmptyClock": false,
+          "adaptiveBackoffMs": 0,
+          "homepageWeAreLive": false,
+          "nextConfirmReasons": [],
+          "transitionedFromLive": null,
+          "degraded_sticky_clock": false
+        },
+        "sourceUrl": "https://www.ufc.com/event/ufc-304?language_content_entity=en",
+        "lagSeconds": 295,
+        "degraded": true,
+        "degradedReason": null,
+        "recommendedPollSeconds": 300,
+        "transport": {
+          "rest": "/api/v1/ufc/live/events/ufc-304",
+          "sse": "/api/v1/ufc/live/stream?eventSlug=ufc-304",
+          "websocket": "/api/v1/ufc/live/ws",
+          "rooms": [
+            "event:ufc-304"
+          ]
+        }
+      },
+      {
+        "entity_type": "ufc_live_event",
+        "eventSlug": "ufc-fight-night-july-25-2026",
+        "status": "completed",
+        "eventStatus": "completed",
+        "chronoFmids": [
+          "12974",
+          "12939",
+          "12895",
+          "12898",
+          "12955",
+          "12973",
+          "12894",
+          "12967",
+          "12893",
+          "12938",
+          "12896",
+          "12961"
+        ],
+        "currentLiveFmid": null,
+        "nextCandidateFmid": null,
+        "lastCardPollAt": "2026-07-26T09:56:34.189Z",
+        "lastHeartbeatAt": "2026-07-26T09:56:34.189Z",
+        "lastJsonApiSeedAt": "2026-07-26T09:56:21.149Z",
+        "pollIntervalMs": 300000,
+        "consecutiveEmpty": 0,
+        "consecutiveErrors": 0,
+        "health": {
+          "live": null,
+          "next": null,
+          "samples": 1,
+          "strategy": "ios-impersonate",
+          "warnings": [],
+          "armedNext": null,
+          "eventFmid": "1322",
+          "fightCount": 12,
+          "fightmetric": {
+            "finals": 12,
+            "source": "ufc_fightmetric_cdn",
+            "liveFightId": null,
+            "liveRoundNumber": null,
+            "liveRoundElapsedTime": null
+          },
+          "stickyEmptyClock": false,
+          "adaptiveBackoffMs": 0,
+          "homepageWeAreLive": false,
+          "nextConfirmReasons": [],
+          "transitionedFromLive": null,
+          "degraded_sticky_clock": false
+        },
+        "sourceUrl": "https://www.ufc.com/event/ufc-fight-night-july-25-2026?language_content_entity=en",
+        "lagSeconds": 189266,
+        "degraded": true,
+        "degradedReason": null,
+        "recommendedPollSeconds": 300,
+        "transport": {
+          "rest": "/api/v1/ufc/live/events/ufc-fight-night-july-25-2026",
+          "sse": "/api/v1/ufc/live/stream?eventSlug=ufc-fight-night-july-25-2026",
+          "websocket": "/api/v1/ufc/live/ws",
+          "rooms": [
+            "event:ufc-fight-night-july-25-2026"
+          ]
+        }
+      }
+    ]
+  },
+  "meta": {
+    "count": 0,
+    "eventCount": 2,
+    "lagSeconds": 295,
+    "recommendedPollSeconds": 300,
+    "health": {
+      "ok": false,
+      "workerStarted": false,
+      "workerAlive": false,
+      "workerProcessStarted": false,
+      "workerHostHint": "ufc-live pm2 on VPS 169 only; API 209 is read-only",
+      "freshestHeartbeatLagSeconds": 295,
+      "emptyReason": "worker_stale",
+      "degradedReason": "worker_heartbeat_stale",
+      "cardPollInFlight": null,
+      "lastPollCompletedAt": null,
+      "adaptiveBackoffMs": null,
+      "homepageWeAreLive": null,
+      "events": [
+        {
+          "eventSlug": "ufc-304",
+          "status": "completed",
+          "currentLiveFmid": null,
+          "nextCandidateFmid": null,
+          "pollIntervalMs": 300000,
+          "lagSeconds": 295,
+          "degraded": true,
+          "degradedReason": "worker_heartbeat_stale",
+          "health": {
+            "live": null,
+            "next": null,
+            "samples": 1,
+            "strategy": "ios-impersonate",
+            "warnings": [],
+            "armedNext": null,
+            "eventFmid": "1208",
+            "fightCount": 14,
+            "fightmetric": {
+              "finals": 14,
+              "source": "ufc_fightmetric_cdn",
+              "liveFightId": null,
+              "liveRoundNumber": null,
+              "liveRoundElapsedTime": null
+            },
+            "stickyEmptyClock": false,
+            "adaptiveBackoffMs": 0,
+            "homepageWeAreLive": false,
+            "nextConfirmReasons": [],
+            "transitionedFromLive": null,
+            "degraded_sticky_clock": false
+          }
+        },
+        {
+          "eventSlug": "ufc-fight-night-july-25-2026",
+          "status": "completed",
+          "currentLiveFmid": null,
+          "nextCandidateFmid": null,
+          "pollIntervalMs": 300000,
+          "lagSeconds": 189266,
+          "degraded": true,
+          "degradedReason": "worker_heartbeat_stale",
+          "health": {
+            "live": null,
+            "next": null,
+            "samples": 1,
+            "strategy": "ios-impersonate",
+            "warnings": [],
+            "armedNext": null,
+            "eventFmid": "1322",
+            "fightCount": 12,
+            "fightmetric": {
+              "finals": 12,
+              "source": "ufc_fightmetric_cdn",
+              "liveFightId": null,
+              "liveRoundNumber": null,
+              "liveRoundElapsedTime": null
+            },
+            "stickyEmptyClock": false,
+            "adaptiveBackoffMs": 0,
+            "homepageWeAreLive": false,
+            "nextConfirmReasons": [],
+            "transitionedFromLive": null,
+            "degraded_sticky_clock": false
+          }
+        }
+      ],
+      "activeTracking": [],
+      "nextArmedBout": null
+    },
+    "emptyReason": "worker_stale",
+    "boardCriteria": "live|watching only; armed excluded (see data.nextBouts)",
+    "redis_configured": true,
+    "redis_ready": false,
+    "stream": "/api/v1/ufc/live/stream",
+    "websocket": "/api/v1/ufc/live/ws",
+    "transport": {
+      "rest": "/api/v1/ufc/live",
+      "sse": "/api/v1/ufc/live/stream",
+      "websocket": "/api/v1/ufc/live/ws"
+    }
+  }
+}

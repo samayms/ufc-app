@@ -1,5 +1,9 @@
 /**
- * Cito free-tier live-update behavior is unverified until tested during a real event.
+ * Cito base URL, auth scheme, and the `GET /ufc/live` response envelope are
+ * confirmed live (see src/fixtures/citoLiveLive.json / citoEventsLive.json).
+ * Per-bout live-update shape and cadence during an actual event card are
+ * still unverified — the captured response had empty `liveBouts`/
+ * `nextBouts` arrays.
  */
 
 import rawFixture from "../fixtures/cito.json" with { type: "json" };
@@ -432,41 +436,69 @@ export interface CitoLifecycleFetcher {
   fetchLifecycle(eventExternalId: string): Promise<CitoLifecycleEntry[]>;
 }
 
+/**
+ * Shape of a single item in `data.liveBouts` / `data.nextBouts` on the
+ * verified `GET /ufc/live` response. The captured live response (see
+ * src/fixtures/citoLiveLive.json) had both arrays empty, so the per-bout
+ * field names below are inferred from the naming conventions used
+ * elsewhere in that same payload (camelCase, e.g. `eventSlug`,
+ * `currentLiveFmid`) rather than confirmed against a populated example.
+ * Parsing is deliberately defensive (accepts either camelCase or the
+ * snake_case used by the unrelated /ufc/events bout shape) and skips
+ * anything that doesn't match instead of throwing, so an unverified guess
+ * here degrades safely rather than crashing the poll loop.
+ */
 interface CitoLiveStateBout {
-  id?: string;
-  status?: string;
-  current_round?: number | null;
-  final_round?: number | null;
+  id?: unknown;
+  boutId?: unknown;
+  status?: unknown;
+  current_round?: unknown;
+  currentRound?: unknown;
+  final_round?: unknown;
+  finalRound?: unknown;
 }
 
-interface CitoLiveStatePayload {
-  bouts?: CitoLiveStateBout[];
+/** Real envelope confirmed from a live GET /ufc/live response (HTTP 200). */
+interface CitoLiveStateEnvelope {
+  success?: unknown;
+  data?: {
+    liveBouts?: unknown[];
+    nextBouts?: unknown[];
+    nextArmedBout?: unknown;
+    events?: unknown[];
+  };
+  meta?: {
+    recommendedPollSeconds?: unknown;
+    health?: unknown;
+    [key: string]: unknown;
+  };
 }
 
 const CITO_LIVE_STATE_REQUEST_TIMEOUT_MS = 8_000;
 const CITO_LIVE_STATE_MAX_RESPONSE_BYTES = 500_000;
 
 /**
- * Cito's live-state endpoint shape and host are unverified — no confirmed
- * API documentation exists (see the file-level note above). `baseUrl` must
- * be supplied explicitly (e.g. from CITO_API_BASE_URL) once real access is
- * provisioned; there is no built-in default.
+ * Builds the URL for Cito's verified `GET /ufc/live` card-overview
+ * endpoint. `baseUrl` is expected to include the `/api/v1` prefix (e.g.
+ * `https://api.citoapi.com/api/v1`); resolution is done relative to the
+ * base (trailing slash added, no leading slash on the path) so that
+ * prefix is preserved instead of being discarded by root-relative
+ * resolution. Verified live: `https://api.citoapi.com/api/v1` resolves to
+ * `https://api.citoapi.com/api/v1/ufc/live`, which returned HTTP 200.
+ *
+ * There is no per-event path for the live card overview — Cito's only
+ * documented live-state endpoints are this global overview and
+ * `ufc/live/{boutId}/state` (per-bout, keyed by bout id, not event id).
+ * Selecting a specific event out of the overview response is left to the
+ * caller/parser, not the URL.
  */
-export function buildCitoLiveStateUrl(
-  baseUrl: string,
-  eventExternalId: string,
-): string {
+export function buildCitoLiveStateUrl(baseUrl: string): string {
   if (baseUrl.trim().length === 0) {
     throw new TypeError("Cito live-state URL requires a non-empty base URL");
   }
-  if (eventExternalId.trim().length === 0) {
-    throw new TypeError("Cito live-state URL requires a non-empty event id");
-  }
 
-  return new URL(
-    `/events/${encodeURIComponent(eventExternalId)}/live`,
-    baseUrl,
-  ).toString();
+  const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  return new URL("ufc/live", base).toString();
 }
 
 function citoLifecycleState(status: string | undefined): "pre" | "in" | "post" {
@@ -481,7 +513,61 @@ function citoLifecycleState(status: string | undefined): "pre" | "in" | "post" {
   }
 }
 
-/** Pure normalization: raw Cito live-state JSON -> per-bout lifecycle entries. */
+function citoLiveStateBoutEntry(raw: unknown): CitoLifecycleEntry[] {
+  if (typeof raw !== "object" || raw === null) return [];
+  const bout = raw as CitoLiveStateBout;
+
+  const externalId =
+    typeof bout.boutId === "string"
+      ? bout.boutId
+      : typeof bout.id === "string"
+        ? bout.id
+        : undefined;
+  if (externalId === undefined) return [];
+
+  const status = typeof bout.status === "string" ? bout.status : undefined;
+  const currentRound =
+    typeof bout.currentRound === "number"
+      ? bout.currentRound
+      : typeof bout.current_round === "number"
+        ? bout.current_round
+        : null;
+  const finalRound =
+    typeof bout.finalRound === "number"
+      ? bout.finalRound
+      : typeof bout.final_round === "number"
+        ? bout.final_round
+        : null;
+
+  const completed = status === "completed";
+  const period = (completed ? finalRound : currentRound) ?? 0;
+
+  return [
+    {
+      externalId,
+      state: citoLifecycleState(status),
+      period,
+      completed,
+      ...(status === "between_rounds" ? { clockSeconds: 0 } : {}),
+    },
+  ];
+}
+
+/**
+ * Pure normalization: raw Cito `GET /ufc/live` JSON -> per-bout lifecycle
+ * entries. Real envelope verified live: `{ success, data: { liveBouts,
+ * nextBouts, nextArmedBout, events }, meta }` (see
+ * src/fixtures/citoLiveLive.json, captured with both bout arrays empty).
+ *
+ * Only `data.liveBouts` feeds lifecycle entries — those are the bouts
+ * actually in progress. `data.nextBouts` are upcoming/armed candidates,
+ * not yet in a lifecycle state worth reporting, so they're intentionally
+ * excluded. Per-bout field names inside `liveBouts` are unverified (the
+ * captured response had none), so extraction is defensive and skips
+ * anything that doesn't parse instead of throwing — this must degrade
+ * safely (empty arrays, null/missing fields) without crashing the poll
+ * loop.
+ */
 export function parseCitoLiveStateLifecycle(
   payload: unknown,
 ): CitoLifecycleEntry[] {
@@ -489,24 +575,11 @@ export function parseCitoLiveStateLifecycle(
     throw new TypeError("Cito live-state response was not a JSON object");
   }
 
-  const bouts = (payload as CitoLiveStatePayload).bouts ?? [];
+  const envelope = payload as CitoLiveStateEnvelope;
+  const data = typeof envelope.data === "object" ? envelope.data : null;
+  const liveBouts = Array.isArray(data?.liveBouts) ? data.liveBouts : [];
 
-  return bouts.flatMap((bout): CitoLifecycleEntry[] => {
-    if (typeof bout.id !== "string") return [];
-
-    const completed = bout.status === "completed";
-    const period = (completed ? bout.final_round : bout.current_round) ?? 0;
-
-    return [
-      {
-        externalId: bout.id,
-        state: citoLifecycleState(bout.status),
-        period,
-        completed,
-        ...(bout.status === "between_rounds" ? { clockSeconds: 0 } : {}),
-      },
-    ];
-  });
+  return liveBouts.flatMap(citoLiveStateBoutEntry);
 }
 
 async function readWithByteLimit(
@@ -610,15 +683,21 @@ export function createLiveCitoLifecycleFetcher(
 
   return {
     async fetchLifecycle(eventExternalId) {
-      const payload = await fetchJsonWithLimits(
-        buildCitoLiveStateUrl(baseUrl, eventExternalId),
-        {
-          timeoutMs: CITO_LIVE_STATE_REQUEST_TIMEOUT_MS,
-          maxBytes: CITO_LIVE_STATE_MAX_RESPONSE_BYTES,
-          fetchImpl,
-          headers: { Authorization: `Bearer ${apiKey}` },
-        },
-      );
+      if (eventExternalId.trim().length === 0) {
+        throw new TypeError(
+          "Cito live lifecycle fetch requires a non-empty event id",
+        );
+      }
+
+      // The verified live-state endpoint (`ufc/live`) is a global card
+      // overview, not a per-event lookup, so `eventExternalId` isn't part
+      // of the URL — see buildCitoLiveStateUrl for why.
+      const payload = await fetchJsonWithLimits(buildCitoLiveStateUrl(baseUrl), {
+        timeoutMs: CITO_LIVE_STATE_REQUEST_TIMEOUT_MS,
+        maxBytes: CITO_LIVE_STATE_MAX_RESPONSE_BYTES,
+        fetchImpl,
+        headers: { "x-api-key": apiKey },
+      });
       return parseCitoLiveStateLifecycle(payload);
     },
   };
