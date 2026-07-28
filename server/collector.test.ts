@@ -189,6 +189,16 @@ describe.skipIf(!localhostAvailable)(
           },
         },
       },
+      boutMappings: expect.arrayContaining([
+        expect.objectContaining({
+          internalBoutId: "bout-main",
+          mappingConfidence: 1,
+          externalRefs: expect.arrayContaining([
+            { source: "espn", id: "401770001" },
+            { source: "cito", id: "cito-bout-9001" },
+          ]),
+        }),
+      ]),
       health: {
         espn: { status: "healthy", fresh: true },
       },
@@ -353,5 +363,59 @@ describe("fixture collector loading", () => {
     expect(second).toEqual(first);
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+
+  it("persists and restores bout mappings in bootstrap state", async () => {
+    const storage = new MemoryStorage();
+    const first = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage,
+    });
+    collectors.push(first);
+    await first.boutMappings.matchDiscoveredBout({
+      externalRef: {
+        source: "polymarket",
+        id: "condition-main",
+      },
+      redFighter: "Danilo Reyes",
+      blueFighter: "Artem Volkov",
+    });
+
+    expect(first.getBootstrap().boutMappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          internalBoutId: "bout-main",
+          mappingConfidence: 0.95,
+          externalRefs: expect.arrayContaining([
+            {
+              source: "polymarket",
+              id: "condition-main",
+            },
+          ]),
+        }),
+      ]),
+    );
+    await first.close();
+
+    const restored = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage,
+    });
+    collectors.push(restored);
+
+    expect(
+      restored.boutMappings.findInternalBoutId(
+        "polymarket",
+        "condition-main",
+      ),
+    ).toBe("bout-main");
+    expect(restored.getBootstrap().boutMappings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          internalBoutId: "bout-main",
+          mappingConfidence: 0.95,
+        }),
+      ]),
+    );
   });
 });

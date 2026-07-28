@@ -31,6 +31,12 @@ import {
   type CollectorEvent,
 } from "./eventBus.ts";
 import {
+  createBoutMappingRegistry,
+  type BoutMapping,
+  type BoutMappingRegistry,
+  type ManualBoutMappingOverride,
+} from "./mapping.ts";
+import {
   sanitizeClientPayload,
   SsePush,
   type SsePushOptions,
@@ -60,6 +66,7 @@ export interface SourceHealth {
 
 export interface CollectorBootstrap {
   state: DashboardState | null;
+  boutMappings: BoutMapping[];
   health: Readonly<Record<string, SourceHealth>>;
 }
 
@@ -71,6 +78,7 @@ export interface CreateCollectorOptions {
   env?: CollectorEnvironment;
   storage?: Storage;
   stateLoader?: NormalizedStateLoader;
+  manualBoutMappingOverrides?: readonly ManualBoutMappingOverride[];
   host?: string;
   sse?: Pick<
     SsePushOptions,
@@ -81,6 +89,7 @@ export interface CreateCollectorOptions {
 export interface Collector {
   readonly config: CollectorConfig;
   readonly eventBus: CollectorEventBus;
+  readonly boutMappings: BoutMappingRegistry;
   readonly push: SsePush;
   readonly server: Server;
   start(): Promise<number>;
@@ -393,6 +402,7 @@ export async function createCollector(
     .filter(isPersistedCollectorState)
     .at(-1)?.state;
   let state: DashboardState | null = restoredState ?? null;
+  let boutMappings: BoutMappingRegistry | undefined;
 
   const healthRecords =
     await storage.read<unknown>(COLLECTOR_HEALTH_STREAM);
@@ -405,6 +415,7 @@ export async function createCollector(
 
   const getBootstrap = (): CollectorBootstrap => ({
     state,
+    boutMappings: boutMappings?.getAll() ?? [],
     health: Object.fromEntries(
       [...health.entries()]
         .sort(([left], [right]) => left.localeCompare(right))
@@ -451,6 +462,12 @@ export async function createCollector(
   } else {
     state = loaded;
   }
+  const initializedBoutMappings = await createBoutMappingRegistry({
+    event: loaded.event,
+    storage,
+    manualOverrides: options.manualBoutMappingOverrides,
+  });
+  boutMappings = initializedBoutMappings;
 
   const publishHealth = async (
     nextHealth: SourceHealth,
@@ -534,6 +551,7 @@ export async function createCollector(
   return {
     config,
     eventBus,
+    boutMappings: initializedBoutMappings,
     push,
     server,
     async start() {
