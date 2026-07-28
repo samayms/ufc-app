@@ -18,6 +18,7 @@ import {
 } from "./quota.ts";
 import type { Storage } from "./storage.ts";
 import type { MarketTickStore } from "./tickStore.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
 
 export const ODDS_API_IO_QUOTA_SOURCE = "odds-api-io";
 export const ODDS_API_IO_DEFAULT_INTERVAL_MS = 30_000;
@@ -51,6 +52,7 @@ export interface OddsApiIoPollerOptions {
   quota?: RollingQuotaGuard;
   quotaPolicy?: QuotaPolicy;
   publishTick?: (tick: MarketTick) => Promise<void>;
+  metrics?: Metrics;
 }
 
 type PollReason = "periodic" | "boundary" | "final";
@@ -128,6 +130,8 @@ export class OddsApiIoPoller {
     | ((tick: MarketTick) => Promise<void>)
     | undefined;
 
+  private readonly metrics: Metrics;
+
   private readonly activeBouts = new Set<string>();
 
   private readonly timers = new Map<string, unknown>();
@@ -154,6 +158,7 @@ export class OddsApiIoPoller {
     this.clock = options.clock ?? { now: () => Date.now() };
     this.timer = options.timer ?? defaultTimer();
     this.publishTick = options.publishTick;
+    this.metrics = options.metrics ?? NOOP_METRICS;
     this.quota =
       options.quota ??
       new RollingQuotaGuard({
@@ -163,6 +168,7 @@ export class OddsApiIoPoller {
             options.quotaPolicy ?? DEFAULT_ODDS_API_IO_QUOTA_POLICY,
         },
         clock: this.clock,
+        metrics: this.metrics,
       });
 
     this.unsubscribers.push(
@@ -313,6 +319,7 @@ export class OddsApiIoPoller {
       if (!(await this.quota.tryAcquire(ODDS_API_IO_QUOTA_SOURCE))) {
         return { status: "terminal" };
       }
+      const startedAt = this.clock.now();
       try {
         const snapshot = await this.source.getBoutOdds({
           bout: resolved.bout,
@@ -331,8 +338,22 @@ export class OddsApiIoPoller {
           await this.tickStore.ingest(tick);
           await this.publishTick?.(tick).catch(() => undefined);
         }
+        this.metrics.set(
+          "source_response_latency_ms",
+          ODDS_API_IO_QUOTA_SOURCE,
+          Math.max(0, this.clock.now() - startedAt),
+          { localTimestamp: receivedAt },
+        );
         return { status: "accepted", receivedAt };
       } catch (error) {
+        this.metrics.increment(
+          "source_errors_total",
+          ODDS_API_IO_QUOTA_SOURCE,
+          1,
+          {
+            localTimestamp: new Date(this.clock.now()).toISOString(),
+          },
+        );
         if (isTerminalRequestError(error)) {
           return { status: "terminal" };
         }

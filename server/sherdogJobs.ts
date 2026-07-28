@@ -21,6 +21,8 @@ import {
   type RoundJobClock,
 } from "./roundJobs.ts";
 import type { Storage } from "./storage.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
+import type { ParserErrorSink } from "./review.ts";
 
 export const SHERDOG_ROUND_JOB_TYPE = "sherdog_round";
 export const SHERDOG_FINAL_JOB_TYPE = "sherdog_final";
@@ -83,6 +85,8 @@ export interface SherdogRoundJobsOptions {
     sourceUpdatedAt?: string;
     message?: string;
   }) => Promise<unknown>;
+  metrics?: Metrics;
+  review?: ParserErrorSink;
 }
 
 interface PersistedSherdogObservation {
@@ -243,6 +247,10 @@ export class SherdogRoundJobs {
 
   private readonly publishHealth: SherdogRoundJobsOptions["publishHealth"];
 
+  private readonly metrics: Metrics;
+
+  private readonly review: ParserErrorSink | undefined;
+
   private readonly current = new Map<string, SherdogObservationRevision>();
 
   private readonly histories = new Map<
@@ -281,12 +289,15 @@ export class SherdogRoundJobs {
     this.random = options.random ?? Math.random;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
     this.publishHealth = options.publishHealth;
+    this.metrics = options.metrics ?? NOOP_METRICS;
+    this.review = options.review;
     this.quota =
       options.quota ??
       new RequestIntervalGuard({
         storage: options.storage,
         intervalsMs: { sherdog: options.requestIntervalMs },
         clock: this.clock,
+        metrics: this.metrics,
       });
 
     this.scheduler.registerHandler(
@@ -430,6 +441,12 @@ export class SherdogRoundJobs {
   private async runRound(job: RoundJob): Promise<void> {
     const observations = await this.fetchAndParse(job.boutId, "round");
     if (observations.length === 0) {
+      await this.review?.recordParserError({
+        source: "sherdog",
+        context: `round:${job.boutId}:${job.round}`,
+        error: "parser found no round headings",
+        localTimestamp: new Date(this.clock.now()).toISOString(),
+      });
       throw new TerminalRoundJobError(
         `Sherdog parser found no round headings for ${job.boutId}`,
       );
@@ -448,6 +465,12 @@ export class SherdogRoundJobs {
   private async runFinal(job: RoundJob): Promise<void> {
     const observations = await this.fetchAndParse(job.boutId, "final");
     if (observations.length === 0) {
+      await this.review?.recordParserError({
+        source: "sherdog",
+        context: `final:${job.boutId}`,
+        error: "final parser found no rounds",
+        localTimestamp: new Date(this.clock.now()).toISOString(),
+      });
       throw new TerminalRoundJobError(
         `Sherdog final parser found no rounds for ${job.boutId}`,
       );
@@ -521,6 +544,15 @@ export class SherdogRoundJobs {
           : { publishedAt: response.publishedAt }),
       });
     } catch (error) {
+      await this.review?.recordParserError({
+        source: "sherdog",
+        context: `${purpose}:${boutId}`,
+        error,
+        ...(response.publishedAt === undefined
+          ? {}
+          : { sourceTimestamp: response.publishedAt }),
+        localTimestamp: fetchedAt,
+      });
       throw new TerminalRoundJobError(
         `Sherdog parser failed: ${errorText(error)}`,
       );
@@ -544,6 +576,37 @@ export class SherdogRoundJobs {
         previous?.firstObservedAt ?? observation.fetchedAt,
       lastObservedAt: observation.fetchedAt,
     };
+    this.metrics.recordPayload(
+      "sherdog",
+      observation.publishedAt,
+      observation.fetchedAt,
+    );
+    if (observation.publishedAt !== undefined) {
+      this.metrics.set(
+        "sherdog_publication_delay_ms",
+        "sherdog",
+        Math.max(
+          0,
+          Date.parse(observation.fetchedAt) -
+            Date.parse(observation.publishedAt),
+        ),
+        {
+          sourceTimestamp: observation.publishedAt,
+          localTimestamp: observation.fetchedAt,
+        },
+      );
+    }
+    if (
+      previous !== undefined &&
+      previous.observation.payloadHash !== observation.payloadHash
+    ) {
+      this.metrics.increment("revisions_total", "sherdog", 1, {
+        ...(observation.publishedAt === undefined
+          ? {}
+          : { sourceTimestamp: observation.publishedAt }),
+        localTimestamp: observation.fetchedAt,
+      });
+    }
     await this.storage.append(SHERDOG_OBSERVATIONS_STORAGE_STREAM, {
       version: 1,
       value: next,

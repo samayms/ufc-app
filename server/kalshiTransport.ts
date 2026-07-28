@@ -21,6 +21,8 @@ import {
   TerminalTransportError,
 } from "./marketTransport.ts";
 import type { MarketTickStore } from "./tickStore.ts";
+import type { Metrics } from "./health.ts";
+import type { ParserErrorSink } from "./review.ts";
 
 const KALSHI_SOCKET_URL =
   "wss://external-api-ws.kalshi.com/trade-api/ws/v2";
@@ -45,6 +47,8 @@ interface KalshiLiveDependencies {
   timer?: MarketTransportTimer;
   random?: () => number;
   reconnect?: Partial<ReconnectPolicy>;
+  metrics?: Metrics;
+  review?: ParserErrorSink;
 }
 
 interface KalshiLiveTransportOptions extends KalshiLiveDependencies {
@@ -529,6 +533,8 @@ class KalshiLiveTransport extends SupervisedMarketTransport {
       ...(options.reconnect === undefined
         ? {}
         : { reconnect: options.reconnect }),
+      ...(options.metrics === undefined ? {} : { metrics: options.metrics }),
+      ...(options.review === undefined ? {} : { review: options.review }),
     });
   }
 }

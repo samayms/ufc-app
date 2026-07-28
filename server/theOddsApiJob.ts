@@ -16,6 +16,7 @@ import {
   type RoundJobClock,
 } from "./roundJobs.ts";
 import type { MarketTickStore } from "./tickStore.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
 
 export const THE_ODDS_API_ROUND_JOB_TYPE =
   "the_odds_api_round_snapshot";
@@ -31,6 +32,7 @@ export interface TheOddsApiRoundJobOptions {
   clock?: RoundJobClock;
   random?: () => number;
   publishTick?: (tick: MarketTick) => Promise<void>;
+  metrics?: Metrics;
 }
 
 function errorText(error: unknown): string {
@@ -69,6 +71,8 @@ export class TheOddsApiRoundJob {
     | ((tick: MarketTick) => Promise<void>)
     | undefined;
 
+  private readonly metrics: Metrics;
+
   private readonly unsubscribe: () => void;
 
   private eventQueue: Promise<void> = Promise.resolve();
@@ -82,6 +86,7 @@ export class TheOddsApiRoundJob {
     this.clock = options.clock ?? { now: () => Date.now() };
     this.random = options.random ?? Math.random;
     this.publishTick = options.publishTick;
+    this.metrics = options.metrics ?? NOOP_METRICS;
     this.scheduler.registerHandler(
       THE_ODDS_API_ROUND_JOB_TYPE,
       (job) => this.run(job),
@@ -128,6 +133,12 @@ export class TheOddsApiRoundJob {
     }
 
     let snapshot;
+    this.metrics.increment(
+      "source_requests_total",
+      "the-odds-api",
+      1,
+      { localTimestamp: new Date(this.clock.now()).toISOString() },
+    );
     try {
       snapshot = await this.source.getH2hSnapshot(
         bout,

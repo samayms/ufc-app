@@ -1,4 +1,5 @@
 import type { Storage } from "./storage.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
 
 export const DEFAULT_QUOTA_STORAGE_STREAM = "quota-acquisitions";
 export const DEFAULT_INTERVAL_QUOTA_STORAGE_STREAM =
@@ -33,6 +34,7 @@ export interface RollingQuotaGuardOptions {
   policies: Readonly<Record<string, QuotaPolicy>>;
   clock?: QuotaClock;
   storageStream?: string;
+  metrics?: Metrics;
 }
 
 interface PersistedAcquisition {
@@ -150,6 +152,8 @@ export class RollingQuotaGuard {
 
   private readonly storageStream: string;
 
+  private readonly metrics: Metrics;
+
   private readonly acquisitions = new Map<string, number[]>();
 
   private restorePromise: Promise<void> | undefined;
@@ -166,6 +170,7 @@ export class RollingQuotaGuard {
     this.clock = options.clock ?? { now: () => Date.now() };
     this.storageStream =
       options.storageStream ?? DEFAULT_QUOTA_STORAGE_STREAM;
+    this.metrics = options.metrics ?? NOOP_METRICS;
   }
 
   static async create(
@@ -224,6 +229,14 @@ export class RollingQuotaGuard {
           this.countInside(acquisitions, now, window) >=
           limitFor(policy, window)
         ) {
+          this.metrics.set(
+            "source_rate_limit_remaining",
+            source,
+            0,
+            {
+              localTimestamp: new Date(now).toISOString(),
+            },
+          );
           return false;
         }
       }
@@ -236,6 +249,19 @@ export class RollingQuotaGuard {
       await this.storage.append(this.storageStream, record);
       acquisitions.push(now);
       this.acquisitions.set(source, acquisitions);
+      this.metrics.increment("source_requests_total", source, 1, {
+        localTimestamp: new Date(now).toISOString(),
+      });
+      this.metrics.set(
+        "source_rate_limit_remaining",
+        source,
+        Math.max(
+          0,
+          policy.perDay -
+            this.countInside(acquisitions, now, "day"),
+        ),
+        { localTimestamp: new Date(now).toISOString() },
+      );
       return true;
     });
   }
@@ -343,6 +369,7 @@ export interface RequestIntervalGuardOptions {
   intervalsMs: Readonly<Record<string, number>>;
   clock?: QuotaClock;
   storageStream?: string;
+  metrics?: Metrics;
 }
 
 /**
@@ -357,6 +384,8 @@ export class RequestIntervalGuard {
   private readonly clock: QuotaClock;
 
   private readonly storageStream: string;
+
+  private readonly metrics: Metrics;
 
   private readonly lastAcquiredAt = new Map<string, number>();
 
@@ -381,6 +410,7 @@ export class RequestIntervalGuard {
     this.clock = options.clock ?? { now: () => Date.now() };
     this.storageStream =
       options.storageStream ?? DEFAULT_INTERVAL_QUOTA_STORAGE_STREAM;
+    this.metrics = options.metrics ?? NOOP_METRICS;
   }
 
   static async create(
@@ -418,6 +448,9 @@ export class RequestIntervalGuard {
       };
       await this.storage.append(this.storageStream, record);
       this.lastAcquiredAt.set(source, now);
+      this.metrics.increment("source_requests_total", source, 1, {
+        localTimestamp: new Date(now).toISOString(),
+      });
       return true;
     });
   }
@@ -464,6 +497,7 @@ export interface SpendingCapGuardOptions {
   capsUsd: Readonly<Record<string, number>>;
   clock?: QuotaClock;
   storageStream?: string;
+  metrics?: Metrics;
 }
 
 /** Persisted cents-based counter used before any paid API request. */
@@ -475,6 +509,8 @@ export class SpendingCapGuard {
   private readonly clock: QuotaClock;
 
   private readonly storageStream: string;
+
+  private readonly metrics: Metrics;
 
   private readonly totals = new Map<string, number>();
 
@@ -495,6 +531,7 @@ export class SpendingCapGuard {
     this.clock = options.clock ?? { now: () => Date.now() };
     this.storageStream =
       options.storageStream ?? DEFAULT_SPEND_STORAGE_STREAM;
+    this.metrics = options.metrics ?? NOOP_METRICS;
   }
 
   static async create(
@@ -540,6 +577,9 @@ export class SpendingCapGuard {
       };
       await this.storage.append(this.storageStream, record);
       this.totals.set(source, current + amountCents);
+      this.metrics.increment("source_requests_total", source, 1, {
+        localTimestamp: new Date(record.acquiredAt).toISOString(),
+      });
       return true;
     });
   }

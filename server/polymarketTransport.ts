@@ -17,6 +17,8 @@ import {
   SupervisedMarketTransport,
 } from "./marketTransport.ts";
 import type { MarketTickStore } from "./tickStore.ts";
+import type { Metrics } from "./health.ts";
+import type { ParserErrorSink } from "./review.ts";
 
 const POLYMARKET_SOCKET_URL =
   "wss://ws-subscriptions-clob.polymarket.com/ws/market";
@@ -33,6 +35,8 @@ interface PolymarketLiveTransportOptions {
   timer?: MarketTransportTimer;
   random?: () => number;
   reconnect?: Partial<ReconnectPolicy>;
+  metrics?: Metrics;
+  review?: ParserErrorSink;
 }
 
 export function startPolymarketPingLoop(
@@ -343,6 +347,8 @@ class PolymarketLiveTransport extends SupervisedMarketTransport {
       ...(options.reconnect === undefined
         ? {}
         : { reconnect: options.reconnect }),
+      ...(options.metrics === undefined ? {} : { metrics: options.metrics }),
+      ...(options.review === undefined ? {} : { review: options.review }),
     });
   }
 

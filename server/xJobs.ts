@@ -17,6 +17,7 @@ import {
   type RoundJobClock,
 } from "./roundJobs.ts";
 import type { Storage } from "./storage.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
 
 export const X_API_ROUND_JOB_TYPE = "x_api_round";
 export const X_API_LATE_CHECK_DELAY_MS = 40_000;
@@ -36,6 +37,7 @@ export interface XRoundJobsOptions {
   requestCostUsd: number;
   clock?: RoundJobClock;
   spending?: SpendingCapGuard;
+  metrics?: Metrics;
 }
 
 function errorText(error: unknown): string {
@@ -75,6 +77,8 @@ export class XRoundJobs {
 
   private readonly clock: RoundJobClock;
 
+  private readonly metrics: Metrics;
+
   private readonly unsubscribe: () => void;
 
   private eventQueue: Promise<void> = Promise.resolve();
@@ -93,12 +97,14 @@ export class XRoundJobs {
     this.getBout = options.getBout;
     this.requestCostUsd = options.requestCostUsd;
     this.clock = options.clock ?? { now: () => Date.now() };
+    this.metrics = options.metrics ?? NOOP_METRICS;
     this.spending =
       options.spending ??
       new SpendingCapGuard({
         storage: options.storage,
         capsUsd: { [X_API_SPEND_SOURCE]: options.spendingCapUsd },
         clock: this.clock,
+        metrics: this.metrics,
       });
 
     if (this.source.mode === "api") {

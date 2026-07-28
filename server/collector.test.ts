@@ -408,6 +408,77 @@ describe.skipIf(!localhostAvailable)(
     expect(serialized).not.toContain('"token"');
     expect(update.raw).toContain("[REDACTED]");
   });
+
+  it("exposes metrics/review and accepts only strict manual mapping overrides", async () => {
+    const { collector, port } = await startCollector();
+    await collector.review.recordParserError({
+      source: "sherdog",
+      context: "fixture-review",
+      error: new Error("invalid fixture markup"),
+      localTimestamp: "2026-07-28T01:00:00Z",
+    });
+
+    const metricsResponse = await fetch(
+      `http://127.0.0.1:${port}/api/metrics`,
+    );
+    expect(metricsResponse.status).toBe(200);
+    await expect(metricsResponse.json()).resolves.toMatchObject({
+      generatedAt: expect.any(String),
+      sources: expect.any(Object),
+    });
+
+    const reviewResponse = await fetch(
+      `http://127.0.0.1:${port}/api/review`,
+    );
+    expect(reviewResponse.status).toBe(200);
+    await expect(reviewResponse.json()).resolves.toMatchObject({
+      deadLetters: expect.any(Array),
+      parserErrors: [
+        expect.objectContaining({
+          source: "sherdog",
+          context: "fixture-review",
+        }),
+      ],
+      ambiguousMappings: expect.any(Array),
+    });
+
+    const invalidResponse = await fetch(
+      `http://127.0.0.1:${port}/api/mapping-override`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          internalBoutId: "bout-main",
+          externalRef: { source: "espn", id: "manual-espn-id" },
+          unsupported: true,
+        }),
+      },
+    );
+    expect(invalidResponse.status).toBe(400);
+
+    const overrideResponse = await fetch(
+      `http://127.0.0.1:${port}/api/mapping-override`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          internalBoutId: "bout-main",
+          externalRef: { source: "espn", id: "manual-espn-id" },
+        }),
+      },
+    );
+    expect(overrideResponse.status).toBe(200);
+    await expect(overrideResponse.json()).resolves.toMatchObject({
+      mapping: {
+        internalBoutId: "bout-main",
+        manuallyVerified: true,
+        mappingConfidence: 1,
+        externalRefs: expect.arrayContaining([
+          { source: "espn", id: "manual-espn-id" },
+        ]),
+      },
+    });
+  });
   },
 );
 

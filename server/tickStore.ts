@@ -13,6 +13,7 @@ import type {
   CollectorEventBus,
 } from "./eventBus.ts";
 import type { ProvisionalRoundSupersession } from "./lifecycle.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
 import type { Storage } from "./storage.ts";
 
 export type {
@@ -56,6 +57,7 @@ export interface MarketTickStoreOptions {
     round: number,
     boundaryType: MarketBoundaryType,
   ) => Promise<void>;
+  metrics?: Metrics;
 }
 
 interface PersistedTick {
@@ -728,6 +730,8 @@ export class MarketTickStore implements TickHistorySource {
 
   private readonly clock: TickStoreClock;
 
+  private readonly metrics: Metrics;
+
   private readonly publish:
     | ((snapshot: MarketSnapshot) => Promise<void>)
     | undefined;
@@ -768,6 +772,7 @@ export class MarketTickStore implements TickHistorySource {
     this.storage = options.storage;
     this.staleAfterMs = staleAfterMs;
     this.clock = options.clock ?? { now: () => Date.now() };
+    this.metrics = options.metrics ?? NOOP_METRICS;
     this.publish = options.publish;
     this.onSnapshot = options.onSnapshot;
     this.onSnapshotsRemoved = options.onSnapshotsRemoved;
@@ -805,6 +810,11 @@ export class MarketTickStore implements TickHistorySource {
         version: 1,
         tick: accepted,
       } satisfies PersistedTick);
+      this.metrics.recordPayload(
+        accepted.source,
+        accepted.sourceUpdatedAt,
+        accepted.receivedAt,
+      );
       this.history.push(accepted);
       const state = applyTick(this.latest, accepted);
       result = this.toLocalState(state, this.clock.now());

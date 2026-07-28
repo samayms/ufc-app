@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "collector": "node server/collector.ts",
+    "replay": "node server/replay.ts",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",

@@ -3,6 +3,8 @@ import type {
   MarketTick,
 } from "../src/sources/contract.ts";
 import type { BoutMapping } from "./mapping.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
+import type { ParserErrorSink } from "./review.ts";
 import type { MarketTickStore } from "./tickStore.ts";
 
 export type StreamingMarketSource = Extract<
@@ -223,6 +225,8 @@ export interface SupervisedMarketTransportOptions {
   timer?: MarketTransportTimer;
   random?: () => number;
   reconnect?: Partial<ReconnectPolicy>;
+  metrics?: Metrics;
+  review?: ParserErrorSink;
 }
 
 /**
@@ -248,6 +252,10 @@ export class SupervisedMarketTransport implements MarketTransport {
   private readonly random: () => number;
 
   private readonly reconnectPolicy: ReconnectPolicy;
+
+  private readonly metrics: Metrics;
+
+  private readonly review: ParserErrorSink | undefined;
 
   private readonly listeners = new Set<MarketTransportListener>();
 
@@ -284,6 +292,8 @@ export class SupervisedMarketTransport implements MarketTransport {
       ...DEFAULT_RECONNECT_POLICY,
       ...options.reconnect,
     };
+    this.metrics = options.metrics ?? NOOP_METRICS;
+    this.review = options.review;
     this.currentSubscriptions = [...options.subscriptions];
     this.currentSubscriptions.forEach((subscription) =>
       validateSubscription(subscription, this.source),
@@ -446,7 +456,31 @@ export class SupervisedMarketTransport implements MarketTransport {
   }
 
   private async handleRawMessage(raw: unknown): Promise<void> {
-    const normalized = this.normalizeMessage(raw, this.nowIso());
+    const receivedAt = this.nowIso();
+    let normalized:
+      | NormalizedTransportMessage
+      | readonly NormalizedTransportMessage[]
+      | null;
+    try {
+      normalized = this.normalizeMessage(raw, receivedAt);
+    } catch (error) {
+      if (this.review !== undefined) {
+        await this.review.recordParserError({
+          source: this.source,
+          context: "websocket-message",
+          error,
+          localTimestamp: receivedAt,
+        });
+      } else {
+        this.metrics.increment(
+          "parser_failures_total",
+          this.source,
+          1,
+          { localTimestamp: receivedAt },
+        );
+      }
+      throw error;
+    }
     if (normalized === null) return;
     const messages = Array.isArray(normalized)
       ? normalized
@@ -527,6 +561,12 @@ export class SupervisedMarketTransport implements MarketTransport {
 
   private scheduleReconnect(): void {
     if (!this.desired || this.reconnectHandle !== undefined) return;
+    this.metrics.increment(
+      "websocket_reconnects_total",
+      this.source,
+      1,
+      { localTimestamp: this.nowIso() },
+    );
     const delay = reconnectDelay(
       this.reconnectAttempt,
       this.random(),

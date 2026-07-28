@@ -1,4 +1,5 @@
 import type { CollectorEvent, CollectorEventBus } from "./eventBus.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
 import type { Storage } from "./storage.ts";
 
 export type LifecycleSource = "espn" | "cito";
@@ -64,6 +65,7 @@ export interface FightLifecycleMachineOptions {
   onProvisionalSuperseded?: (
     supersession: ProvisionalRoundSupersession,
   ) => void;
+  metrics?: Metrics;
 }
 
 function timestamp(value: string, field: string): number {
@@ -443,6 +445,8 @@ export class FightLifecycleMachine {
     | ((supersession: ProvisionalRoundSupersession) => void)
     | undefined;
 
+  private readonly metrics: Metrics;
+
   private readonly bouts = new Map<string, PersistedFightLifecycle>();
 
   private restorePromise: Promise<void> | undefined;
@@ -464,6 +468,7 @@ export class FightLifecycleMachine {
     this.espnFreshnessMs =
       options.espnFreshnessMs ?? DEFAULT_ESPN_FRESHNESS_MS;
     this.onProvisionalSuperseded = options.onProvisionalSuperseded;
+    this.metrics = options.metrics ?? NOOP_METRICS;
   }
 
   static async create(
@@ -532,6 +537,11 @@ export class FightLifecycleMachine {
     observation: FightLifecycleObservation,
   ): Promise<readonly CollectorEvent[]> {
     validateObservation(observation);
+    this.metrics.recordPayload(
+      observation.source,
+      observation.sourceUpdatedAt,
+      observation.receivedAt,
+    );
 
     const current = this.bouts.get(observation.boutId);
     if (current === undefined) {
@@ -577,6 +587,28 @@ export class FightLifecycleMachine {
     }
 
     for (const event of result.events) {
+      if (
+        event.type === "PROVISIONAL_ROUND_ENDED" ||
+        event.type === "ROUND_ENDED"
+      ) {
+        this.metrics.set(
+          "round_event_detection_delay_ms",
+          observation.source,
+          observation.sourceUpdatedAt === undefined
+            ? 0
+            : Math.max(
+                0,
+                Date.parse(event.detectedAt) -
+                  Date.parse(observation.sourceUpdatedAt),
+              ),
+          {
+            ...(observation.sourceUpdatedAt === undefined
+              ? {}
+              : { sourceTimestamp: observation.sourceUpdatedAt }),
+            localTimestamp: event.detectedAt,
+          },
+        );
+      }
       this.eventBus.emit(event);
     }
 

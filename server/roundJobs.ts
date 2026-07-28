@@ -1,4 +1,5 @@
 import type { Storage } from "./storage.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
 
 export const DEFAULT_ROUND_JOBS_STORAGE_STREAM = "round-jobs";
 export const DEFAULT_ROUND_JOB_DEAD_LETTER_STREAM =
@@ -53,6 +54,7 @@ export interface RoundJobSchedulerOptions {
   storageStream?: string;
   deadLetterStream?: string;
   handlers?: Readonly<Record<string, RoundJobHandler>>;
+  metrics?: Metrics;
 }
 
 export interface ScheduleRoundJob {
@@ -154,6 +156,14 @@ export function roundJobKey(
   return `${boutId}:${round}:${jobType}`;
 }
 
+export function roundJobSource(jobType: string): string {
+  if (jobType.startsWith("cito_")) return "cito";
+  if (jobType.startsWith("sherdog_")) return "sherdog";
+  if (jobType.startsWith("x_")) return "x";
+  if (jobType.startsWith("the_odds_api_")) return "the-odds-api";
+  return jobType;
+}
+
 export class RoundJobScheduler {
   private readonly storage: Storage;
 
@@ -164,6 +174,8 @@ export class RoundJobScheduler {
   private readonly storageStream: string;
 
   private readonly deadLetterStream: string;
+
+  private readonly metrics: Metrics;
 
   private readonly handlers = new Map<string, RoundJobHandler>();
 
@@ -197,6 +209,7 @@ export class RoundJobScheduler {
     this.deadLetterStream =
       options.deadLetterStream ??
       DEFAULT_ROUND_JOB_DEAD_LETTER_STREAM;
+    this.metrics = options.metrics ?? NOOP_METRICS;
 
     for (const [jobType, handler] of Object.entries(
       options.handlers ?? {},
@@ -394,6 +407,12 @@ export class RoundJobScheduler {
         };
         await this.storage.append(this.storageStream, completed);
         this.jobs.set(key, completed);
+        this.metrics.set(
+          "source_response_latency_ms",
+          roundJobSource(completed.jobType),
+          Math.max(0, completedAt - attempt.updatedAt),
+          { localTimestamp: new Date(completedAt).toISOString() },
+        );
       });
     } catch (error) {
       await this.enqueueMetadata(async () => {
@@ -401,6 +420,12 @@ export class RoundJobScheduler {
         if (current === undefined || current.status !== "pending") return;
 
         const message = errorMessage(error);
+        this.metrics.increment(
+          "source_errors_total",
+          roundJobSource(current.jobType),
+          1,
+          { localTimestamp: new Date(this.now()).toISOString() },
+        );
         if (
           error instanceof TerminalRoundJobError ||
           current.attemptCount >= current.retryPolicy.maxAttempts

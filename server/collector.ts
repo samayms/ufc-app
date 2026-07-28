@@ -47,6 +47,13 @@ import {
   CollectorEventBus,
   type CollectorEvent,
 } from "./eventBus.ts";
+import {
+  SourceHealthRegistry,
+  SOURCE_HEALTH_STORAGE_STREAM,
+  type HealthAlert,
+  type MetricsSnapshot,
+  type SourceHealth,
+} from "./health.ts";
 import { FightLifecycleMachine } from "./lifecycle.ts";
 import {
   createBoutMappingRegistry,
@@ -76,6 +83,7 @@ import {
   SsePush,
   type SsePushOptions,
 } from "./push.ts";
+import { ReviewRegistry } from "./review.ts";
 import type { QuotaPolicy } from "./quota.ts";
 import type {
   RoundJobClock,
@@ -104,22 +112,11 @@ import { TheOddsApiRoundJob } from "./theOddsApiJob.ts";
 import { XRoundJobs } from "./xJobs.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
-export const COLLECTOR_HEALTH_STREAM = "source-health";
-
-export type SourceHealthStatus =
-  | "healthy"
-  | "stale"
-  | "degraded"
-  | "unavailable";
-
-export interface SourceHealth {
-  source: string;
-  status: SourceHealthStatus;
-  fresh: boolean;
-  checkedAt: string;
-  sourceUpdatedAt?: string;
-  message?: string;
-}
+export const COLLECTOR_HEALTH_STREAM = SOURCE_HEALTH_STORAGE_STREAM;
+export type {
+  SourceHealth,
+  SourceHealthStatus,
+} from "./health.ts";
 
 export interface CollectorBootstrap {
   state: DashboardState | null;
@@ -128,6 +125,8 @@ export interface CollectorBootstrap {
   unifiedRounds: readonly UnifiedRoundRecord[];
   marketSnapshots: readonly MarketSnapshot[];
   latestMarkets: readonly LocalOrderBookState[];
+  metrics: MetricsSnapshot;
+  alerts: readonly HealthAlert[];
 }
 
 export interface CollectorRoundStatsOptions {
@@ -184,6 +183,12 @@ export interface CreateCollectorOptions {
   sportsbook?: CollectorSportsbookOptions;
   sherdog?: CollectorSherdogOptions;
   x?: CollectorXOptions;
+  health?: {
+    now?: () => string;
+    persistIntervalMs?: number;
+    staleAfterMs?: Readonly<Record<string, number>>;
+    quotaThresholds?: Readonly<Record<string, number>>;
+  };
 }
 
 export interface Collector {
@@ -199,6 +204,8 @@ export interface Collector {
   readonly sherdogJobs: SherdogRoundJobs;
   readonly xJobs: XRoundJobs;
   readonly lifecycle: FightLifecycleMachine;
+  readonly health: SourceHealthRegistry;
+  readonly review: ReviewRegistry;
   readonly server: Server;
   start(): Promise<number>;
   close(): Promise<void>;
@@ -210,11 +217,6 @@ export interface Collector {
 interface PersistedCollectorState {
   version: 1;
   state: DashboardState;
-}
-
-interface PersistedSourceHealth {
-  version: 1;
-  health: SourceHealth;
 }
 
 const SCORECARD_ACCOUNTS: readonly ScorecardAccount[] = [
@@ -251,60 +253,6 @@ function isPersistedCollectorState(
     isRecord(value) &&
     value.version === 1 &&
     isDashboardState(value.state)
-  );
-}
-
-function isSourceHealth(value: unknown): value is SourceHealth {
-  return (
-    isRecord(value) &&
-    typeof value.source === "string" &&
-    (value.status === "healthy" ||
-      value.status === "stale" ||
-      value.status === "degraded" ||
-      value.status === "unavailable") &&
-    typeof value.fresh === "boolean" &&
-    typeof value.checkedAt === "string" &&
-    (value.sourceUpdatedAt === undefined ||
-      typeof value.sourceUpdatedAt === "string") &&
-    (value.message === undefined || typeof value.message === "string")
-  );
-}
-
-function isPersistedSourceHealth(
-  value: unknown,
-): value is PersistedSourceHealth {
-  return (
-    isRecord(value) &&
-    value.version === 1 &&
-    isSourceHealth(value.health)
-  );
-}
-
-function copyHealth(health: SourceHealth): SourceHealth {
-  return {
-    source: health.source,
-    status: health.status,
-    fresh: health.fresh,
-    checkedAt: health.checkedAt,
-    ...(health.sourceUpdatedAt === undefined
-      ? {}
-      : { sourceUpdatedAt: health.sourceUpdatedAt }),
-    ...(health.message === undefined
-      ? {}
-      : { message: health.message }),
-  };
-}
-
-function healthChanged(
-  previous: SourceHealth | undefined,
-  next: SourceHealth,
-): boolean {
-  return (
-    previous === undefined ||
-    previous.status !== next.status ||
-    previous.fresh !== next.fresh ||
-    previous.sourceUpdatedAt !== next.sourceUpdatedAt ||
-    previous.message !== next.message
   );
 }
 
@@ -470,15 +418,107 @@ function sendJson(
   response.end(body);
 }
 
-function validateHealth(health: SourceHealth): void {
-  if (
-    health.source.trim().length === 0 ||
-    !Number.isFinite(Date.parse(health.checkedAt)) ||
-    (health.sourceUpdatedAt !== undefined &&
-      !Number.isFinite(Date.parse(health.sourceUpdatedAt)))
-  ) {
-    throw new TypeError("health requires a source and valid timestamps");
+class HttpRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "HttpRequestError";
+    this.status = status;
   }
+}
+
+function readJsonBody(
+  request: IncomingMessage,
+  maximumBytes = 16_384,
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    let rejected = false;
+    request.on("data", (chunk) => {
+      if (rejected) return;
+      size += chunk.byteLength;
+      if (size > maximumBytes) {
+        rejected = true;
+        reject(new HttpRequestError(413, "JSON body is too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    request.on("end", () => {
+      if (rejected) return;
+      if (size === 0) {
+        reject(new HttpRequestError(400, "JSON body is required"));
+        return;
+      }
+      try {
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        resolve(JSON.parse(new TextDecoder().decode(bytes)) as unknown);
+      } catch {
+        reject(new HttpRequestError(400, "Body must be valid JSON"));
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+const MAPPING_OVERRIDE_SOURCES = new Set<SourceId>([
+  "espn",
+  "sherdog",
+  "cito",
+  "kalshi",
+  "polymarket",
+  "odds-api-io",
+  "odds-api",
+  "x-embed",
+  "fixture",
+]);
+
+function parseMappingOverride(value: unknown): ManualBoutMappingOverride {
+  if (!isRecord(value)) {
+    throw new HttpRequestError(400, "Mapping override must be an object");
+  }
+  const keys = Object.keys(value).sort();
+  if (
+    keys.length !== 2 ||
+    keys[0] !== "externalRef" ||
+    keys[1] !== "internalBoutId" ||
+    typeof value.internalBoutId !== "string" ||
+    value.internalBoutId.trim().length === 0 ||
+    !isRecord(value.externalRef)
+  ) {
+    throw new HttpRequestError(
+      400,
+      "Mapping override requires only internalBoutId and externalRef",
+    );
+  }
+  const refKeys = Object.keys(value.externalRef).sort();
+  const source = value.externalRef.source;
+  const id = value.externalRef.id;
+  if (
+    refKeys.length !== 2 ||
+    refKeys[0] !== "id" ||
+    refKeys[1] !== "source" ||
+    typeof source !== "string" ||
+    !MAPPING_OVERRIDE_SOURCES.has(source as SourceId) ||
+    typeof id !== "string" ||
+    id.trim().length === 0
+  ) {
+    throw new HttpRequestError(
+      400,
+      "externalRef requires only a supported source and non-empty id",
+    );
+  }
+  return {
+    internalBoutId: value.internalBoutId,
+    externalRef: { source: source as SourceId, id },
+  };
 }
 
 function listen(server: Server, port: number, host: string): Promise<number> {
@@ -531,26 +571,46 @@ export async function createCollector(
   let tickStore: MarketTickStore | undefined;
   let marketTransports: MarketTransport[] = [];
 
-  const healthRecords =
-    await storage.read<unknown>(COLLECTOR_HEALTH_STREAM);
-  const health = new Map<string, SourceHealth>();
-  for (const record of healthRecords) {
-    if (isPersistedSourceHealth(record)) {
-      health.set(record.health.source, copyHealth(record.health));
-    }
-  }
+  const defaultStaleAfterMs: Readonly<Record<string, number>> = {
+    espn: config.staleAfterMs.lifecycle,
+    cito: config.staleAfterMs.stats,
+    kalshi: config.staleAfterMs.markets,
+    polymarket: config.staleAfterMs.markets,
+    "odds-api-io": config.staleAfterMs.markets,
+    "the-odds-api": config.staleAfterMs.markets,
+    sherdog: config.staleAfterMs.commentary,
+    x: config.staleAfterMs.commentary,
+  };
+  const healthRegistry = await SourceHealthRegistry.create({
+    storage,
+    staleAfterMs:
+      options.health?.staleAfterMs ?? defaultStaleAfterMs,
+    quotaThresholds:
+      options.health?.quotaThresholds ?? { "odds-api-io": 30 },
+    ...(options.health?.now === undefined
+      ? {}
+      : { now: options.health.now }),
+    ...(options.health?.persistIntervalMs === undefined
+      ? {}
+      : { persistIntervalMs: options.health.persistIntervalMs }),
+  });
+  const review = new ReviewRegistry({
+    storage,
+    metrics: healthRegistry,
+    ...(options.health?.now === undefined
+      ? {}
+      : { now: options.health.now }),
+  });
 
   const getBootstrap = (): CollectorBootstrap => ({
     state,
     boutMappings: boutMappings?.getAll() ?? [],
-    health: Object.fromEntries(
-      [...health.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([source, value]) => [source, copyHealth(value)]),
-    ),
+    health: healthRegistry.getHealth(),
     unifiedRounds: roundStats?.getUnifiedRounds() ?? [],
     marketSnapshots: tickStore?.getSnapshots() ?? [],
     latestMarkets: tickStore?.getLatest() ?? [],
+    metrics: healthRegistry.getMetrics(),
+    alerts: healthRegistry.getAlerts(),
   });
   const push = new SsePush({
     storage,
@@ -559,26 +619,11 @@ export async function createCollector(
     ...options.sse,
   });
   await push.restore();
+  healthRegistry.setPublisher((event) => push.publish("health", event));
 
   const publishHealth = async (
     nextHealth: SourceHealth,
-  ): Promise<boolean> => {
-    validateHealth(nextHealth);
-    const next = copyHealth(nextHealth);
-    const previous = health.get(next.source);
-    if (!healthChanged(previous, next)) {
-      health.set(next.source, next);
-      return false;
-    }
-
-    health.set(next.source, next);
-    await storage.append(COLLECTOR_HEALTH_STREAM, {
-      version: 1,
-      health: next,
-    } satisfies PersistedSourceHealth);
-    await push.publish("health", next);
-    return true;
-  };
+  ): Promise<boolean> => healthRegistry.publishHealth(nextHealth);
 
   const eventBus = new CollectorEventBus();
   const unsubscribers = (
@@ -601,6 +646,7 @@ export async function createCollector(
   const initializedTickStore = await MarketTickStore.create({
     eventBus,
     storage,
+    metrics: healthRegistry,
     publish: async (snapshot) => {
       await push.publish("update", {
         kind: "market-snapshot",
@@ -644,6 +690,7 @@ export async function createCollector(
         record,
       });
     },
+    metrics: healthRegistry,
     ...(roundJobClock === undefined
       ? {}
       : { clock: roundJobClock }),
@@ -667,6 +714,7 @@ export async function createCollector(
   const lifecycle = await FightLifecycleMachine.create({
     eventBus,
     storage,
+    metrics: healthRegistry,
     onProvisionalSuperseded: (supersession) => {
       void initializedTickStore
         .handleProvisionalSupersession(supersession)
@@ -690,6 +738,7 @@ export async function createCollector(
   const initializedBoutMappings = await createBoutMappingRegistry({
     event: loaded.event,
     storage,
+    metrics: healthRegistry,
     manualOverrides: options.manualBoutMappingOverrides,
   });
   boutMappings = initializedBoutMappings;
@@ -738,10 +787,14 @@ export async function createCollector(
           createKalshiLiveTransport(config, {
             tickStore: initializedTickStore,
             subscriptions: kalshiSubscriptions,
+            metrics: healthRegistry,
+            review,
           }),
           createPolymarketLiveTransport(config, {
             tickStore: initializedTickStore,
             subscriptions: polymarketSubscriptions,
+            metrics: healthRegistry,
+            review,
           }),
         ];
 
@@ -776,6 +829,8 @@ export async function createCollector(
     permissionScope: config.sherdog.permissionScope,
     requestIntervalMs: config.sherdog.requestIntervalMs,
     publishHealth,
+    metrics: healthRegistry,
+    review,
     ...(roundJobClock === undefined ? {} : { clock: roundJobClock }),
     ...(options.sherdog?.random === undefined
       ? {}
@@ -811,6 +866,7 @@ export async function createCollector(
     getBout: findBout,
     spendingCapUsd: config.xSpendCapUsd,
     requestCostUsd: config.xRequestCostUsd,
+    metrics: healthRegistry,
     ...(roundJobClock === undefined ? {} : { clock: roundJobClock }),
   });
   const initializedOddsApiIoPoller = await OddsApiIoPoller.create({
@@ -834,6 +890,7 @@ export async function createCollector(
         tick,
       });
     },
+    metrics: healthRegistry,
     ...(sportsbookClock === undefined ? {} : { clock: sportsbookClock }),
     ...(sportsbookTimer === undefined ? {} : { timer: sportsbookTimer }),
     ...(options.sportsbook?.oddsApiIoQuotaPolicy === undefined
@@ -856,6 +913,7 @@ export async function createCollector(
         tick,
       });
     },
+    metrics: healthRegistry,
     ...(sportsbookClock === undefined ? {} : { clock: sportsbookClock }),
     ...(options.sportsbook?.random === undefined
       ? {}
@@ -907,8 +965,8 @@ export async function createCollector(
     const url = new URL(request.url ?? "/", "http://collector.local");
     if (request.method === "OPTIONS") {
       response.writeHead(204, {
-        "Access-Control-Allow-Headers": "Last-Event-ID",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Last-Event-ID",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Allow-Origin": "*",
       });
       response.end();
@@ -919,7 +977,69 @@ export async function createCollector(
       return;
     }
     if (request.method === "GET" && url.pathname === "/api/health") {
-      sendJson(response, 200, { health: getBootstrap().health }, secrets);
+      sendJson(
+        response,
+        200,
+        {
+          health: getBootstrap().health,
+          metrics: healthRegistry.getMetrics(),
+          alerts: healthRegistry.getAlerts(),
+        },
+        secrets,
+      );
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/api/metrics") {
+      sendJson(response, 200, healthRegistry.getMetrics(), secrets);
+      return;
+    }
+    if (request.method === "GET" && url.pathname === "/api/review") {
+      sendJson(
+        response,
+        200,
+        await review.getReviewRecords(),
+        secrets,
+      );
+      return;
+    }
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/mapping-override"
+    ) {
+      const contentType = request.headers["content-type"];
+      const normalizedContentType = Array.isArray(contentType)
+        ? contentType[0]
+        : contentType;
+      if (
+        normalizedContentType === undefined ||
+        !normalizedContentType
+          .toLocaleLowerCase("en-US")
+          .startsWith("application/json")
+      ) {
+        throw new HttpRequestError(
+          415,
+          "Content-Type must be application/json",
+        );
+      }
+      const override = parseMappingOverride(await readJsonBody(request));
+      let mapping: BoutMapping;
+      try {
+        mapping = await initializedBoutMappings.setManualOverride(
+          override,
+        );
+      } catch (error) {
+        throw new HttpRequestError(
+          400,
+          error instanceof Error
+            ? error.message
+            : "Mapping override was rejected",
+        );
+      }
+      await push.publish("update", {
+        kind: "mapping-override",
+        mapping,
+      });
+      sendJson(response, 200, { mapping }, secrets);
       return;
     }
 
@@ -929,9 +1049,11 @@ export async function createCollector(
   server = createServer((request, response) => {
     void handleRequest(request, response).catch((error: unknown) => {
       if (!response.headersSent) {
+        const status =
+          error instanceof HttpRequestError ? error.status : 500;
         sendJson(
           response,
-          500,
+          status,
           {
             error:
               error instanceof Error
@@ -962,6 +1084,8 @@ export async function createCollector(
     sherdogJobs: initializedSherdogJobs,
     xJobs: initializedXJobs,
     lifecycle,
+    health: healthRegistry,
+    review,
     server,
     async start() {
       startPromise ??= listen(server, config.port, host);
@@ -995,6 +1119,7 @@ export async function createCollector(
       );
       await initializedTickStore.close();
       await initializedRoundStats.close();
+      await healthRegistry.close();
       await push.close();
       await closeServer(server);
     },

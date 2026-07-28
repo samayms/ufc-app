@@ -30,6 +30,7 @@ import {
   type RoundJobTimer,
 } from "./roundJobs.ts";
 import type { Storage } from "./storage.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
 
 export const ROUND_STATS_STORAGE_STREAM = "round-stats";
 export const UNIFIED_ROUNDS_STORAGE_STREAM = "unified-rounds";
@@ -105,6 +106,7 @@ export interface RoundStatsPipelineOptions {
   quotaPolicy?: QuotaPolicy;
   quota?: RollingQuotaGuard;
   scheduler?: RoundJobScheduler;
+  metrics?: Metrics;
 }
 
 interface PersistedRoundStats {
@@ -466,6 +468,8 @@ export class RoundStatsPipeline {
 
   private readonly retryDelayMs: number;
 
+  private readonly metrics: Metrics;
+
   private readonly stats = new Map<string, RoundStatsRecord>();
 
   private readonly histories = new Map<string, RoundStatsRecord[]>();
@@ -501,6 +505,7 @@ export class RoundStatsPipeline {
     this.clock = options.clock ?? { now: () => Date.now() };
     this.initialDelayMs = initialDelayMs;
     this.retryDelayMs = retryDelayMs;
+    this.metrics = options.metrics ?? NOOP_METRICS;
     this.quota =
       options.quota ??
       new RollingQuotaGuard({
@@ -509,6 +514,7 @@ export class RoundStatsPipeline {
           cito: options.quotaPolicy ?? DEFAULT_CITO_QUOTA_POLICY,
         },
         clock: this.clock,
+        metrics: this.metrics,
       });
     this.scheduler =
       options.scheduler ??
@@ -516,6 +522,7 @@ export class RoundStatsPipeline {
         storage: options.storage,
         clock: this.clock,
         ...(options.timer === undefined ? {} : { timer: options.timer }),
+        metrics: this.metrics,
       });
     this.scheduler.registerHandler(
       CITO_ROUND_STATS_JOB_TYPE,
@@ -992,6 +999,40 @@ export class RoundStatsPipeline {
         lastObservedAt: observedAt,
       };
 
+      this.metrics.recordPayload(
+        "cito",
+        next.sourceUpdatedAt,
+        observedAt,
+      );
+      const boundary = this.unified.get(key);
+      if (boundary !== undefined) {
+        this.metrics.set(
+          "round_stats_availability_delay_ms",
+          "cito",
+          Math.max(
+            0,
+            Date.parse(observedAt) -
+              Date.parse(boundary.detectedEndedAt),
+          ),
+          {
+            ...(next.sourceUpdatedAt === undefined
+              ? {}
+              : { sourceTimestamp: next.sourceUpdatedAt }),
+            localTimestamp: observedAt,
+          },
+        );
+      }
+      if (
+        previous !== undefined &&
+        previous.payloadHash !== next.payloadHash
+      ) {
+        this.metrics.increment("revisions_total", "cito", 1, {
+          ...(next.sourceUpdatedAt === undefined
+            ? {}
+            : { sourceTimestamp: next.sourceUpdatedAt }),
+          localTimestamp: observedAt,
+        });
+      }
       await this.persistStats(next);
       await this.updateUnifiedStats(next);
     });
@@ -1093,6 +1134,17 @@ export class RoundStatsPipeline {
             }
           : {}),
       };
+      if (
+        next.provisional &&
+        (previous === undefined || !previous.provisional)
+      ) {
+        this.metrics.increment(
+          "provisional_records_total",
+          "collector",
+          1,
+          { localTimestamp: event.detectedAt },
+        );
+      }
       await this.persistUnified(next);
     });
   }

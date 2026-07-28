@@ -5,6 +5,7 @@ import type {
   WeightClass,
 } from "../src/schema.ts";
 import type { Storage } from "./storage.ts";
+import { NOOP_METRICS, type Metrics } from "./health.ts";
 
 export const BOUT_MAPPING_STREAM = "bout-mappings";
 export const BOUT_MAPPING_OVERRIDE_STREAM = "bout-mapping-overrides";
@@ -54,6 +55,7 @@ export interface CreateBoutMappingRegistryOptions {
   storage: Storage;
   manualOverrides?: readonly ManualBoutMappingOverride[];
   confidenceThreshold?: number;
+  metrics?: Metrics;
 }
 
 interface PersistedBoutMapping {
@@ -305,6 +307,8 @@ export class BoutMappingRegistry {
 
   private readonly confidenceThreshold: number;
 
+  private readonly metrics: Metrics;
+
   private readonly mappings = new Map<string, BoutMapping>();
 
   private readonly externalToInternal = new Map<string, string>();
@@ -316,9 +320,11 @@ export class BoutMappingRegistry {
   private constructor(
     storage: Storage,
     confidenceThreshold: number,
+    metrics: Metrics,
   ) {
     this.storage = storage;
     this.confidenceThreshold = confidenceThreshold;
+    this.metrics = metrics;
   }
 
   static async create(
@@ -329,7 +335,11 @@ export class BoutMappingRegistry {
       DEFAULT_MAPPING_CONFIDENCE_THRESHOLD;
     validateThreshold(threshold);
 
-    const registry = new BoutMappingRegistry(options.storage, threshold);
+    const registry = new BoutMappingRegistry(
+      options.storage,
+      threshold,
+      options.metrics ?? NOOP_METRICS,
+    );
     await registry.restore(options.event);
     for (const override of options.manualOverrides ?? []) {
       await registry.setManualOverride(override);
@@ -387,6 +397,11 @@ export class BoutMappingRegistry {
           left.internalBoutId.localeCompare(right.internalBoutId),
       );
     const best = candidates[0];
+    this.metrics.set(
+      "mapping_confidence",
+      discovered.externalRef.source,
+      best?.confidence ?? 0,
+    );
 
     if (
       best === undefined ||
@@ -465,6 +480,11 @@ export class BoutMappingRegistry {
     }
     target.mappingConfidence = 1;
     target.manuallyVerified = true;
+    this.metrics.set(
+      "mapping_confidence",
+      storedOverride.externalRef.source,
+      1,
+    );
     this.rebuildExternalIndex();
     await this.persistMappingIfChanged(target);
     return cloneMapping(target);
@@ -599,6 +619,15 @@ export class BoutMappingRegistry {
   private async persistMappingIfChanged(
     mapping: BoutMapping,
   ): Promise<void> {
+    for (const source of new Set(
+      mapping.externalRefs.map((ref) => ref.source),
+    )) {
+      this.metrics.set(
+        "mapping_confidence",
+        source,
+        mapping.mappingConfidence,
+      );
+    }
     const serialized = JSON.stringify(mapping);
     if (
       this.latestPersistedMappings.get(mapping.internalBoutId) ===
