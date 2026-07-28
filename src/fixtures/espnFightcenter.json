@@ -1,0 +1,1536 @@
+{
+  "600059185": {
+    "event": {
+      "id": "600059185",
+      "uid": "s:3301~l:3321~e:600059185",
+      "date": "2026-08-15T21:00:00.000+00:00",
+      "name": "UFC 330: Makhachev vs. Machado Garry",
+      "shortName": "UFC 330"
+    },
+    "season": {
+      "year": 2026,
+      "displayName": "2026",
+      "startDate": "2026-01-01T08:00:00.000+00:00",
+      "endDate": "2026-12-31T08:00:00.000+00:00",
+      "type": {
+        "id": "2",
+        "type": 2,
+        "name": "Regular Season",
+        "startDate": "2026-01-01T08:00:00.000+00:00",
+        "endDate": "2026-12-31T08:00:00.000+00:00",
+        "week": {}
+      }
+    },
+    "venue": {
+      "id": "1845",
+      "fullName": "Xfinity Mobile Arena",
+      "displayNameLocation": "Xfinity Mobile Arena, Philadelphia, PA",
+      "address": {
+        "city": "Philadelphia",
+        "state": "PA",
+        "country": "USA"
+      },
+      "grass": false,
+      "indoor": true
+    },
+    "cards": {
+      "main": {
+        "name": "main",
+        "displayName": "Main Card",
+        "cardSegment": "main",
+        "competitions": [
+          {
+            "id": "401869336",
+            "uid": "s:3301~l:3321~e:600059185~c:401869336",
+            "date": "2026-08-16T01:00:00.000+00:00",
+            "type": {
+              "id": "969",
+              "text": "Welterweight",
+              "abbreviation": "Welterweight"
+            },
+            "types": [
+              {
+                "id": "381",
+                "text": "UFC Welterweight Title"
+              }
+            ],
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, August 15th at 9:00 PM EDT",
+                "shortDetail": "8/15 - 9:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "173",
+              "name": "main",
+              "description": "Main Card"
+            },
+            "matchNumber": 1,
+            "note": "Welterweight - Main Event - Title Fight",
+            "competitors": [
+              {
+                "id": "4738092",
+                "uid": "s:3301~a:4738092",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "4738092",
+                  "firstName": "Ian",
+                  "lastName": "Machado Garry",
+                  "displayName": "Ian Machado Garry",
+                  "fullName": "Ian Machado Garry",
+                  "shortName": "I. Machado Garry",
+                  "displayHeight": "6' 3\"",
+                  "displayWeight": "170 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/4738092.png",
+                    "alt": "Ian Machado Garry"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/irl.png",
+                    "alt": "Ireland",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "Ireland",
+                  "age": 28,
+                  "gender": "MALE",
+                  "displayReach": "74.5\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "969",
+                    "text": "Welterweight",
+                    "shortName": "Welterweight",
+                    "slug": "welterweight"
+                  },
+                  "color": "#169B62"
+                },
+                "displayRecord": "17-1-0"
+              },
+              {
+                "id": "3332412",
+                "uid": "s:3301~a:3332412",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "3332412",
+                  "firstName": "Islam",
+                  "lastName": "Makhachev",
+                  "displayName": "Islam Makhachev",
+                  "fullName": "Islam Makhachev",
+                  "shortName": "I. Makhachev",
+                  "displayHeight": "5' 10\"",
+                  "displayWeight": "170 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/3332412.png",
+                    "alt": "Islam Makhachev"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/rus.png",
+                    "alt": "Russia",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "Russia",
+                  "age": 34,
+                  "gender": "MALE",
+                  "displayReach": "70.5\"",
+                  "stance": {
+                    "id": "76",
+                    "text": "Southpaw"
+                  },
+                  "weightClass": {
+                    "id": "969",
+                    "text": "Welterweight",
+                    "shortName": "Welterweight",
+                    "slug": "welterweight"
+                  },
+                  "color": "#D00B0E"
+                },
+                "displayRecord": "28-1-0"
+              }
+            ]
+          },
+          {
+            "id": "401878072",
+            "uid": "s:3301~l:3321~e:600059185~c:401878072",
+            "date": "2026-08-16T01:00:00.000+00:00",
+            "type": {
+              "id": "1006",
+              "text": "Women's Strawweight",
+              "abbreviation": "W Strawweight"
+            },
+            "types": [
+              {
+                "id": "821",
+                "text": "UFC Women's Strawweight Title"
+              }
+            ],
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, August 15th at 9:00 PM EDT",
+                "shortDetail": "8/15 - 9:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "173",
+              "name": "main",
+              "description": "Main Card"
+            },
+            "matchNumber": 2,
+            "note": "Women's Strawweight - Title Fight",
+            "competitors": [
+              {
+                "id": "4089026",
+                "uid": "s:3301~a:4089026",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "4089026",
+                  "firstName": "Gillian",
+                  "lastName": "Robertson",
+                  "displayName": "Gillian Robertson",
+                  "fullName": "Gillian Robertson",
+                  "shortName": "G. Robertson",
+                  "displayHeight": "5' 5\"",
+                  "displayWeight": "116 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/4089026.png",
+                    "alt": "Gillian Robertson"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/can.png",
+                    "alt": "Canada",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "Canada",
+                  "age": 31,
+                  "gender": "FEMALE",
+                  "displayReach": "63\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "1006",
+                    "text": "Women's Strawweight",
+                    "shortName": "W Strawweight",
+                    "slug": "womens-strawweight"
+                  },
+                  "color": "#FF0000"
+                },
+                "displayRecord": "17-8-0"
+              },
+              {
+                "id": "4021217",
+                "uid": "s:3301~a:4021217",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "4021217",
+                  "firstName": "Mackenzie",
+                  "lastName": "Dern",
+                  "displayName": "Mackenzie Dern",
+                  "fullName": "Mackenzie Dern",
+                  "shortName": "M. Dern",
+                  "displayHeight": "5' 4\"",
+                  "displayWeight": "115 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/4021217.png",
+                    "alt": "Mackenzie Dern"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/bra.png",
+                    "alt": "Brazil",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "Brazil",
+                  "age": 33,
+                  "gender": "FEMALE",
+                  "displayReach": "63\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "1006",
+                    "text": "Women's Strawweight",
+                    "shortName": "W Strawweight",
+                    "slug": "womens-strawweight"
+                  },
+                  "color": "#FFDF00"
+                },
+                "displayRecord": "16-5-0"
+              }
+            ]
+          }
+        ],
+        "broadcasts": [
+          {
+            "type": {
+              "id": "4",
+              "shortName": "Streaming",
+              "longName": "Streaming",
+              "slug": "streaming"
+            },
+            "channel": 0,
+            "slug": "paramountplus",
+            "priority": 1,
+            "market": {
+              "id": "1",
+              "type": "National"
+            },
+            "media": {
+              "id": "792",
+              "callLetters": "Paramount+",
+              "name": "Paramount+",
+              "shortName": "Paramount+"
+            },
+            "lang": "en",
+            "region": "us",
+            "competition": {}
+          }
+        ]
+      },
+      "prelims1": {
+        "name": "prelims1",
+        "displayName": "Prelims",
+        "cardSegment": "prelims1",
+        "competitions": [
+          {
+            "id": "401886764",
+            "uid": "s:3301~l:3321~e:600059185~c:401886764",
+            "date": "2026-08-15T23:00:00.000+00:00",
+            "type": {
+              "id": "986",
+              "text": "Lightweight",
+              "abbreviation": "Lightweight"
+            },
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, August 15th at 7:00 PM EDT",
+                "shortDetail": "8/15 - 7:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "174",
+              "name": "prelims1",
+              "description": "Prelims"
+            },
+            "matchNumber": 3,
+            "note": "Lightweight",
+            "competitors": [
+              {
+                "id": "5172124",
+                "uid": "s:3301~a:5172124",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "5172124",
+                  "firstName": "Kauê",
+                  "lastName": "Fernandes",
+                  "displayName": "Kauê Fernandes",
+                  "fullName": "Kauê Fernandes",
+                  "shortName": "K. Fernandes",
+                  "displayHeight": "5' 9\"",
+                  "displayWeight": "155 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/5172124.png",
+                    "alt": "Kauê Fernandes"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/bra.png",
+                    "alt": "Brazil",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "Brazil",
+                  "age": 31,
+                  "gender": "MALE",
+                  "displayReach": "73\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "986",
+                    "text": "Lightweight",
+                    "shortName": "Lightweight",
+                    "slug": "lightweight"
+                  },
+                  "color": "#FFDF00"
+                },
+                "displayRecord": "11-2-0"
+              },
+              {
+                "id": "4339490",
+                "uid": "s:3301~a:4339490",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "4339490",
+                  "firstName": "Jalin",
+                  "lastName": "Turner",
+                  "displayName": "Jalin Turner",
+                  "fullName": "Jalin Turner",
+                  "shortName": "J. Turner",
+                  "displayHeight": "6' 3\"",
+                  "displayWeight": "155 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/4339490.png",
+                    "alt": "Jalin Turner"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/usa.png",
+                    "alt": "USA",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "USA",
+                  "age": 31,
+                  "gender": "MALE",
+                  "displayReach": "77\"",
+                  "stance": {
+                    "id": "76",
+                    "text": "Southpaw"
+                  },
+                  "weightClass": {
+                    "id": "986",
+                    "text": "Lightweight",
+                    "shortName": "Lightweight",
+                    "slug": "lightweight"
+                  },
+                  "color": "#3C3B6E"
+                },
+                "displayRecord": "15-9-0"
+              }
+            ]
+          },
+          {
+            "id": "401881928",
+            "uid": "s:3301~l:3321~e:600059185~c:401881928",
+            "date": "2026-08-15T23:00:00.000+00:00",
+            "type": {
+              "id": "972",
+              "text": "Middleweight",
+              "abbreviation": "Middleweight"
+            },
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, August 15th at 7:00 PM EDT",
+                "shortDetail": "8/15 - 7:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "174",
+              "name": "prelims1",
+              "description": "Prelims"
+            },
+            "matchNumber": 4,
+            "note": "Middleweight",
+            "competitors": [
+              {
+                "id": "4685871",
+                "uid": "s:3301~a:4685871",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "4685871",
+                  "firstName": "Dustin",
+                  "lastName": "Stoltzfus",
+                  "displayName": "Dustin Stoltzfus",
+                  "fullName": "Dustin Stoltzfus",
+                  "shortName": "D. Stoltzfus",
+                  "displayHeight": "6' 0\"",
+                  "displayWeight": "185 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/4685871.png",
+                    "alt": "Dustin Stoltzfus"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/usa.png",
+                    "alt": "USA",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "USA",
+                  "age": 34,
+                  "gender": "MALE",
+                  "displayReach": "75\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "972",
+                    "text": "Middleweight",
+                    "shortName": "Middleweight",
+                    "slug": "middleweight"
+                  },
+                  "color": "#3C3B6E"
+                },
+                "displayRecord": "16-8-0"
+              },
+              {
+                "id": "5211221",
+                "uid": "s:3301~a:5211221",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "5211221",
+                  "firstName": "Mansur",
+                  "lastName": "Abdul-Malik",
+                  "displayName": "Mansur Abdul-Malik",
+                  "fullName": "Mansur Abdul-Malik",
+                  "shortName": "M. Abdul-Malik",
+                  "displayHeight": "6' 2\"",
+                  "displayWeight": "185 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/5211221.png",
+                    "alt": "Mansur Abdul-Malik"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/usa.png",
+                    "alt": "USA",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "USA",
+                  "age": 28,
+                  "gender": "MALE",
+                  "displayReach": "79.5\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "972",
+                    "text": "Middleweight",
+                    "shortName": "Middleweight",
+                    "slug": "middleweight"
+                  },
+                  "color": "#3C3B6E"
+                },
+                "displayRecord": "9-1-1"
+              }
+            ]
+          },
+          {
+            "id": "401879330",
+            "uid": "s:3301~l:3321~e:600059185~c:401879330",
+            "date": "2026-08-16T01:00:00.000+00:00",
+            "type": {
+              "id": "986",
+              "text": "Lightweight",
+              "abbreviation": "Lightweight"
+            },
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, August 15th at 9:00 PM EDT",
+                "shortDetail": "8/15 - 9:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "174",
+              "name": "prelims1",
+              "description": "Prelims"
+            },
+            "matchNumber": 5,
+            "note": "Lightweight",
+            "competitors": [
+              {
+                "id": "5074131",
+                "uid": "s:3301~a:5074131",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "5074131",
+                  "firstName": "Esteban",
+                  "lastName": "Ribovics",
+                  "displayName": "Esteban Ribovics",
+                  "fullName": "Esteban Ribovics",
+                  "shortName": "E. Ribovics",
+                  "displayHeight": "5' 10\"",
+                  "displayWeight": "155 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/5074131.png",
+                    "alt": "Esteban Ribovics"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/arg.png",
+                    "alt": "Argentina",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "Argentina",
+                  "age": 30,
+                  "gender": "MALE",
+                  "displayReach": "69\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "986",
+                    "text": "Lightweight",
+                    "shortName": "Lightweight",
+                    "slug": "lightweight"
+                  },
+                  "color": "#74ACDF"
+                },
+                "displayRecord": "15-3-0"
+              },
+              {
+                "id": "2526299",
+                "uid": "s:3301~a:2526299",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "2526299",
+                  "firstName": "Edson",
+                  "lastName": "Barboza",
+                  "displayName": "Edson Barboza",
+                  "fullName": "Edson Barboza",
+                  "shortName": "E. Barboza",
+                  "displayHeight": "5' 11\"",
+                  "displayWeight": "155 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/2526299.png",
+                    "alt": "Edson Barboza"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/bra.png",
+                    "alt": "Brazil",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "Brazil",
+                  "age": 40,
+                  "gender": "MALE",
+                  "displayReach": "75\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "986",
+                    "text": "Lightweight",
+                    "shortName": "Lightweight",
+                    "slug": "lightweight"
+                  },
+                  "color": "#FFDF00"
+                },
+                "displayRecord": "24-14-0"
+              }
+            ]
+          },
+          {
+            "id": "401881926",
+            "uid": "s:3301~l:3321~e:600059185~c:401881926",
+            "date": "2026-08-15T21:00:00.000+00:00",
+            "type": {
+              "id": "969",
+              "text": "Welterweight",
+              "abbreviation": "Welterweight"
+            },
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, August 15th at 5:00 PM EDT",
+                "shortDetail": "8/15 - 5:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "174",
+              "name": "prelims1",
+              "description": "Prelims"
+            },
+            "matchNumber": 6,
+            "note": "Welterweight",
+            "competitors": [
+              {
+                "id": "5050129",
+                "uid": "s:3301~a:5050129",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "5050129",
+                  "firstName": "Myktybek",
+                  "lastName": "Orolbai",
+                  "displayName": "Myktybek Orolbai",
+                  "fullName": "Myktybek Orolbai",
+                  "shortName": "M. Orolbai",
+                  "displayHeight": "5' 10\"",
+                  "displayWeight": "170 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/5050129.png",
+                    "alt": "Myktybek Orolbai"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/kgz.png",
+                    "alt": "Kyrgyzstan",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "Kyrgyzstan",
+                  "age": 28,
+                  "gender": "MALE",
+                  "displayReach": "74\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "969",
+                    "text": "Welterweight",
+                    "shortName": "Welterweight",
+                    "slug": "welterweight"
+                  },
+                  "color": "#E8112D"
+                },
+                "displayRecord": "16-2-1"
+              },
+              {
+                "id": "3970873",
+                "uid": "s:3301~a:3970873",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "3970873",
+                  "firstName": "Jeremiah",
+                  "lastName": "Wells",
+                  "displayName": "Jeremiah Wells",
+                  "fullName": "Jeremiah Wells",
+                  "shortName": "J. Wells",
+                  "displayHeight": "5' 9\"",
+                  "displayWeight": "170 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/3970873.png",
+                    "alt": "Jeremiah Wells"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/usa.png",
+                    "alt": "USA",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "USA",
+                  "age": 39,
+                  "gender": "MALE",
+                  "displayReach": "74\"",
+                  "stance": {
+                    "id": "80",
+                    "text": "Switch"
+                  },
+                  "weightClass": {
+                    "id": "969",
+                    "text": "Welterweight",
+                    "shortName": "Welterweight",
+                    "slug": "welterweight"
+                  },
+                  "color": "#3C3B6E"
+                },
+                "displayRecord": "13-4-1"
+              }
+            ]
+          },
+          {
+            "id": "401869337",
+            "uid": "s:3301~l:3321~e:600059185~c:401869337",
+            "date": "2026-08-15T23:00:00.000+00:00",
+            "type": {
+              "id": "969",
+              "text": "Welterweight",
+              "abbreviation": "Welterweight"
+            },
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, August 15th at 7:00 PM EDT",
+                "shortDetail": "8/15 - 7:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "174",
+              "name": "prelims1",
+              "description": "Prelims"
+            },
+            "matchNumber": 7,
+            "note": "Welterweight",
+            "competitors": [
+              {
+                "id": "2959422",
+                "uid": "s:3301~a:2959422",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "2959422",
+                  "firstName": "Chidi",
+                  "lastName": "Njokuani",
+                  "displayName": "Chidi Njokuani",
+                  "fullName": "Chidi Njokuani",
+                  "shortName": "C. Njokuani",
+                  "displayHeight": "6' 3\"",
+                  "displayWeight": "171 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/2959422.png",
+                    "alt": "Chidi Njokuani"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/usa.png",
+                    "alt": "USA",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "USA",
+                  "age": 37,
+                  "gender": "MALE",
+                  "displayReach": "80\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "969",
+                    "text": "Welterweight",
+                    "shortName": "Welterweight",
+                    "slug": "welterweight"
+                  },
+                  "color": "#3C3B6E"
+                },
+                "displayRecord": "25-12-0"
+              },
+              {
+                "id": "3111997",
+                "uid": "s:3301~a:3111997",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "3111997",
+                  "firstName": "Geoff",
+                  "lastName": "Neal",
+                  "displayName": "Geoff Neal",
+                  "fullName": "Geoff Neal",
+                  "shortName": "G. Neal",
+                  "displayHeight": "5' 11\"",
+                  "displayWeight": "170 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/3111997.png",
+                    "alt": "Geoff Neal"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/usa.png",
+                    "alt": "USA",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "USA",
+                  "age": 35,
+                  "gender": "MALE",
+                  "displayReach": "75\"",
+                  "stance": {
+                    "id": "76",
+                    "text": "Southpaw"
+                  },
+                  "weightClass": {
+                    "id": "969",
+                    "text": "Welterweight",
+                    "shortName": "Welterweight",
+                    "slug": "welterweight"
+                  },
+                  "color": "#3C3B6E"
+                },
+                "displayRecord": "16-8-0"
+              }
+            ]
+          },
+          {
+            "id": "401886763",
+            "uid": "s:3301~l:3321~e:600059185~c:401886763",
+            "date": "2026-08-15T23:00:00.000+00:00",
+            "type": {
+              "id": "969",
+              "text": "Welterweight",
+              "abbreviation": "Welterweight"
+            },
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, August 15th at 7:00 PM EDT",
+                "shortDetail": "8/15 - 7:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "174",
+              "name": "prelims1",
+              "description": "Prelims"
+            },
+            "matchNumber": 9,
+            "note": "Welterweight",
+            "competitors": [
+              {
+                "id": "4297311",
+                "uid": "s:3301~a:4297311",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "4297311",
+                  "firstName": "Ramiz",
+                  "lastName": "Brahimaj",
+                  "displayName": "Ramiz Brahimaj",
+                  "fullName": "Ramiz Brahimaj",
+                  "shortName": "R. Brahimaj",
+                  "displayHeight": "5' 10\"",
+                  "displayWeight": "170 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/4297311.png",
+                    "alt": "Ramiz Brahimaj"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/usa.png",
+                    "alt": "USA",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "USA",
+                  "age": 33,
+                  "gender": "MALE",
+                  "displayReach": "72\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "969",
+                    "text": "Welterweight",
+                    "shortName": "Welterweight",
+                    "slug": "welterweight"
+                  },
+                  "color": "#3C3B6E"
+                },
+                "displayRecord": "13-6-0"
+              },
+              {
+                "id": "3001914",
+                "uid": "s:3301~a:3001914",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "3001914",
+                  "firstName": "Neil",
+                  "lastName": "Magny",
+                  "displayName": "Neil Magny",
+                  "fullName": "Neil Magny",
+                  "shortName": "N. Magny",
+                  "displayHeight": "6' 3\"",
+                  "displayWeight": "171 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/3001914.png",
+                    "alt": "Neil Magny"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/usa.png",
+                    "alt": "USA",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "USA",
+                  "age": 38,
+                  "gender": "MALE",
+                  "displayReach": "80\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "969",
+                    "text": "Welterweight",
+                    "shortName": "Welterweight",
+                    "slug": "welterweight"
+                  },
+                  "color": "#3C3B6E"
+                },
+                "displayRecord": "31-15-0"
+              }
+            ]
+          }
+        ],
+        "broadcasts": [
+          {
+            "type": {
+              "id": "4",
+              "shortName": "Streaming",
+              "longName": "Streaming",
+              "slug": "streaming"
+            },
+            "channel": 0,
+            "slug": "paramountplus",
+            "priority": 1,
+            "market": {
+              "id": "1",
+              "type": "National"
+            },
+            "media": {
+              "id": "792",
+              "callLetters": "Paramount+",
+              "name": "Paramount+",
+              "shortName": "Paramount+"
+            },
+            "lang": "en",
+            "region": "us",
+            "competition": {}
+          }
+        ]
+      },
+      "prelims2": {
+        "name": "prelims2",
+        "displayName": "Early Prelims",
+        "cardSegment": "prelims2",
+        "competitions": [
+          {
+            "id": "401869338",
+            "uid": "s:3301~l:3321~e:600059185~c:401869338",
+            "date": "2026-08-15T21:00:00.000+00:00",
+            "type": {
+              "id": "972",
+              "text": "Middleweight",
+              "abbreviation": "Middleweight"
+            },
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, August 15th at 5:00 PM EDT",
+                "shortDetail": "8/15 - 5:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "175",
+              "name": "prelims2",
+              "description": "Early Prelims"
+            },
+            "matchNumber": 8,
+            "note": "Middleweight",
+            "competitors": [
+              {
+                "id": "4815999",
+                "uid": "s:3301~a:4815999",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "4815999",
+                  "firstName": "Tresean",
+                  "lastName": "Gore",
+                  "displayName": "Tresean Gore",
+                  "fullName": "Tresean Gore",
+                  "shortName": "T. Gore",
+                  "displayHeight": "6' 0\"",
+                  "displayWeight": "185 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/4815999.png",
+                    "alt": "Tresean Gore"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/usa.png",
+                    "alt": "USA",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "USA",
+                  "age": 32,
+                  "gender": "MALE",
+                  "displayReach": "75\"",
+                  "stance": {
+                    "id": "80",
+                    "text": "Switch"
+                  },
+                  "weightClass": {
+                    "id": "972",
+                    "text": "Middleweight",
+                    "shortName": "Middleweight",
+                    "slug": "middleweight"
+                  },
+                  "color": "#3C3B6E"
+                },
+                "displayRecord": "7-4-0"
+              },
+              {
+                "id": "3045887",
+                "uid": "s:3301~a:3045887",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "3045887",
+                  "firstName": "Vicente",
+                  "lastName": "Luque",
+                  "displayName": "Vicente Luque",
+                  "fullName": "Vicente Luque",
+                  "shortName": "V. Luque",
+                  "displayHeight": "5' 11\"",
+                  "displayWeight": "185 lbs",
+                  "headshot": {
+                    "href": "https://a.espncdn.com/i/headshots/mma/players/full/3045887.png",
+                    "alt": "Vicente Luque"
+                  },
+                  "flag": {
+                    "href": "https://a.espncdn.com/i/teamlogos/countries/500/bra.png",
+                    "alt": "Brazil",
+                    "rel": [
+                      "country-flag"
+                    ]
+                  },
+                  "country": "Brazil",
+                  "age": 34,
+                  "gender": "MALE",
+                  "displayReach": "75.5\"",
+                  "stance": {
+                    "id": "75",
+                    "text": "Orthodox"
+                  },
+                  "weightClass": {
+                    "id": "972",
+                    "text": "Middleweight",
+                    "shortName": "Middleweight",
+                    "slug": "middleweight"
+                  },
+                  "color": "#FFDF00"
+                },
+                "displayRecord": "24-12-1"
+              }
+            ]
+          }
+        ],
+        "broadcasts": [
+          {
+            "type": {
+              "id": "4",
+              "shortName": "Streaming",
+              "longName": "Streaming",
+              "slug": "streaming"
+            },
+            "channel": 0,
+            "slug": "paramountplus",
+            "priority": 1,
+            "market": {
+              "id": "1",
+              "type": "National"
+            },
+            "media": {
+              "id": "792",
+              "callLetters": "Paramount+",
+              "name": "Paramount+",
+              "shortName": "Paramount+"
+            },
+            "lang": "en",
+            "region": "us",
+            "competition": {}
+          }
+        ]
+      }
+    },
+    "meta": {
+      "gameState": "pre"
+    }
+  },
+  "600060773": {
+    "event": {
+      "id": "600060773",
+      "uid": "s:3301~l:3321~e:600060773",
+      "date": "2026-10-17T21:00:00.000+00:00",
+      "name": "UFC Fight Night: Edmonton",
+      "shortName": "UFC Fight Night"
+    },
+    "season": {
+      "year": 2026,
+      "displayName": "2026",
+      "startDate": "2026-01-01T08:00:00.000+00:00",
+      "endDate": "2026-12-31T08:00:00.000+00:00",
+      "type": {
+        "id": "2",
+        "type": 2,
+        "name": "Regular Season",
+        "startDate": "2026-01-01T08:00:00.000+00:00",
+        "endDate": "2026-12-31T08:00:00.000+00:00",
+        "week": {}
+      }
+    },
+    "venue": {
+      "id": "5282",
+      "fullName": "Rogers Place",
+      "displayNameLocation": "Rogers Place, Edmonton, AB",
+      "address": {
+        "city": "Edmonton",
+        "state": "AB",
+        "country": "Canada"
+      },
+      "grass": false,
+      "indoor": true
+    },
+    "cards": {
+      "main": {
+        "name": "main",
+        "displayName": "Main Card",
+        "cardSegment": "main",
+        "competitions": [
+          {
+            "id": "401897388",
+            "uid": "s:3301~l:3321~e:600060773~c:401897388",
+            "date": "2026-10-18T00:00:00.000+00:00",
+            "type": null,
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, October 17th at 8:00 PM EDT",
+                "shortDetail": "10/17 - 8:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "173",
+              "name": "main",
+              "description": "Main Card"
+            },
+            "matchNumber": 1,
+            "note": "Main Event",
+            "competitors": [
+              {
+                "id": "2431356",
+                "uid": "s:3301~a:2431356",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "2431356",
+                  "firstName": "Opponent",
+                  "lastName": "TBA",
+                  "displayName": "TBA",
+                  "fullName": "TBA",
+                  "shortName": "O. TBA",
+                  "flag": {
+                    "href": "https://www.espn.com/i/teamlogos/countries/500/blank.png",
+                    "alt": "default",
+                    "rel": [
+                      "default-flag"
+                    ]
+                  },
+                  "gender": "MALE",
+                  "stance": {
+                    "id": "0",
+                    "text": "--"
+                  }
+                }
+              },
+              {
+                "id": "4402367",
+                "uid": "s:3301~a:4402367",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "4402367",
+                  "firstName": "Opponent",
+                  "lastName": "TBA",
+                  "displayName": "Opponent TBA",
+                  "fullName": "Opponent TBA",
+                  "shortName": "O. TBA",
+                  "flag": {
+                    "href": "https://www.espn.com/i/teamlogos/countries/500/blank.png",
+                    "alt": "default",
+                    "rel": [
+                      "default-flag"
+                    ]
+                  },
+                  "gender": "MALE",
+                  "stance": {
+                    "id": "0",
+                    "text": "--"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "broadcasts": [
+          {
+            "type": {
+              "id": "4",
+              "shortName": "Streaming",
+              "longName": "Streaming",
+              "slug": "streaming"
+            },
+            "channel": 0,
+            "slug": "paramountplus",
+            "priority": 1,
+            "market": {
+              "id": "1",
+              "type": "National"
+            },
+            "media": {
+              "id": "792",
+              "callLetters": "Paramount+",
+              "name": "Paramount+",
+              "shortName": "Paramount+"
+            },
+            "lang": "en",
+            "region": "us",
+            "competition": {}
+          }
+        ]
+      },
+      "prelims1": {
+        "name": "prelims1",
+        "displayName": "Prelims",
+        "cardSegment": "prelims1",
+        "competitions": [
+          {
+            "id": "401897729",
+            "uid": "s:3301~l:3321~e:600060773~c:401897729",
+            "date": "2026-10-17T21:00:00.000+00:00",
+            "type": null,
+            "recent": false,
+            "status": {
+              "clock": "0.0",
+              "displayClock": "-",
+              "period": 0,
+              "type": {
+                "id": "1",
+                "name": "STATUS_SCHEDULED",
+                "description": "Scheduled",
+                "detail": "Sat, October 17th at 5:00 PM EDT",
+                "shortDetail": "10/17 - 5:00 PM EDT",
+                "state": "pre",
+                "completed": false
+              },
+              "result": {}
+            },
+            "cardSegment": {
+              "id": "174",
+              "name": "prelims1",
+              "description": "Prelims"
+            },
+            "matchNumber": 2,
+            "note": null,
+            "competitors": [
+              {
+                "id": "2431356",
+                "uid": "s:3301~a:2431356",
+                "type": "athlete",
+                "order": 2,
+                "winner": false,
+                "athlete": {
+                  "id": "2431356",
+                  "firstName": "Opponent",
+                  "lastName": "TBA",
+                  "displayName": "TBA",
+                  "fullName": "TBA",
+                  "shortName": "O. TBA",
+                  "flag": {
+                    "href": "https://www.espn.com/i/teamlogos/countries/500/blank.png",
+                    "alt": "default",
+                    "rel": [
+                      "default-flag"
+                    ]
+                  },
+                  "gender": "MALE",
+                  "stance": {
+                    "id": "0",
+                    "text": "--"
+                  }
+                }
+              },
+              {
+                "id": "4402367",
+                "uid": "s:3301~a:4402367",
+                "type": "athlete",
+                "order": 1,
+                "winner": false,
+                "athlete": {
+                  "id": "4402367",
+                  "firstName": "Opponent",
+                  "lastName": "TBA",
+                  "displayName": "Opponent TBA",
+                  "fullName": "Opponent TBA",
+                  "shortName": "O. TBA",
+                  "flag": {
+                    "href": "https://www.espn.com/i/teamlogos/countries/500/blank.png",
+                    "alt": "default",
+                    "rel": [
+                      "default-flag"
+                    ]
+                  },
+                  "gender": "MALE",
+                  "stance": {
+                    "id": "0",
+                    "text": "--"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "broadcasts": [
+          {
+            "type": {
+              "id": "4",
+              "shortName": "Streaming",
+              "longName": "Streaming",
+              "slug": "streaming"
+            },
+            "channel": 0,
+            "slug": "paramountplus",
+            "priority": 1,
+            "market": {
+              "id": "1",
+              "type": "National"
+            },
+            "media": {
+              "id": "792",
+              "callLetters": "Paramount+",
+              "name": "Paramount+",
+              "shortName": "Paramount+"
+            },
+            "lang": "en",
+            "region": "us",
+            "competition": {}
+          }
+        ]
+      }
+    },
+    "meta": {
+      "gameState": "pre"
+    }
+  }
+}

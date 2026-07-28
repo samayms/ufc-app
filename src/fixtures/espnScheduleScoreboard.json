@@ -1,0 +1,714 @@
+{
+  "leagues": [
+    {
+      "id": "3321",
+      "uid": "s:3301~l:3321",
+      "name": "Ultimate Fighting Championship",
+      "displayName": "UFC",
+      "abbreviation": "UFC",
+      "shortName": "UFC",
+      "slug": "ufc",
+      "season": {
+        "year": 2026,
+        "startDate": "2026-01-01T08:00Z",
+        "endDate": "2026-12-31T08:00Z",
+        "displayName": "2026",
+        "type": {
+          "id": "2",
+          "type": 2,
+          "name": "Regular Season",
+          "abbreviation": "reg"
+        }
+      },
+      "logos": [
+        {
+          "href": "https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png",
+          "width": 500,
+          "height": 500,
+          "alt": "",
+          "rel": [
+            "full",
+            "default"
+          ],
+          "lastUpdated": "2018-12-21T18:30Z"
+        },
+        {
+          "href": "https://a.espncdn.com/i/teamlogos/leagues/500/ufc.png",
+          "width": 500,
+          "height": 500,
+          "alt": "",
+          "rel": [
+            "full",
+            "dark"
+          ],
+          "lastUpdated": "2018-12-21T18:30Z"
+        }
+      ],
+      "calendarType": "list",
+      "calendarIsWhitelist": true,
+      "calendarStartDate": "2026-07-28T07:00Z",
+      "calendarEndDate": "2026-12-31T08:00Z",
+      "calendar": [
+        {
+          "label": "UFC Fight Night: Medić vs. Rodriguez",
+          "startDate": "2026-08-01T17:00Z",
+          "endDate": "2026-08-02T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600059339?lang=en&region=us"
+          }
+        },
+        {
+          "label": "UFC Fight Night: Gamrot vs Salkilld",
+          "startDate": "2026-08-08T21:00Z",
+          "endDate": "2026-08-09T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060621?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 1",
+          "startDate": "2026-08-12T03:00Z",
+          "endDate": "2026-08-12T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060732?lang=en&region=us"
+          }
+        },
+        {
+          "label": "UFC 330: Makhachev vs. Machado Garry",
+          "startDate": "2026-08-16T00:00Z",
+          "endDate": "2026-08-16T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600059185?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 2",
+          "startDate": "2026-08-19T03:00Z",
+          "endDate": "2026-08-19T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060733?lang=en&region=us"
+          }
+        },
+        {
+          "label": "UFC Fight Night: Hernandez vs. Rodrigues",
+          "startDate": "2026-08-23T00:00Z",
+          "endDate": "2026-08-23T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060493?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 3",
+          "startDate": "2026-08-26T03:00Z",
+          "endDate": "2026-08-26T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060734?lang=en&region=us"
+          }
+        },
+        {
+          "label": "UFC Fight Night: Nurmagomedov vs. Song",
+          "startDate": "2026-08-29T10:00Z",
+          "endDate": "2026-08-30T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060620?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 4",
+          "startDate": "2026-09-02T03:00Z",
+          "endDate": "2026-09-02T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060735?lang=en&region=us"
+          }
+        },
+        {
+          "label": "UFC Fight Night: Hooker vs. Parnasse",
+          "startDate": "2026-09-05T19:00Z",
+          "endDate": "2026-09-06T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600059993?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 5",
+          "startDate": "2026-09-09T03:00Z",
+          "endDate": "2026-09-09T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060736?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Noche UFC",
+          "startDate": "2026-09-13T00:00Z",
+          "endDate": "2026-09-13T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060772?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 6",
+          "startDate": "2026-09-16T03:00Z",
+          "endDate": "2026-09-16T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060737?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 7",
+          "startDate": "2026-09-23T03:00Z",
+          "endDate": "2026-09-23T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060738?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 8",
+          "startDate": "2026-09-30T03:00Z",
+          "endDate": "2026-09-30T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060739?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 9",
+          "startDate": "2026-10-07T03:00Z",
+          "endDate": "2026-10-07T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060740?lang=en&region=us"
+          }
+        },
+        {
+          "label": "Dana White's Contender Series: Season 10, Week 10",
+          "startDate": "2026-10-14T03:00Z",
+          "endDate": "2026-10-14T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060741?lang=en&region=us"
+          }
+        },
+        {
+          "label": "UFC Fight Night: Edmonton",
+          "startDate": "2026-10-18T00:00Z",
+          "endDate": "2026-10-18T06:59Z",
+          "event": {
+            "$ref": "http://sports.core.api.espn.pvt/v2/sports/mma/leagues/ufc/events/600060773?lang=en&region=us"
+          }
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "600059339",
+      "uid": "s:3301~l:3321~e:600059339",
+      "date": "2026-08-01T14:00Z",
+      "name": "UFC Fight Night: Medić vs. Rodriguez",
+      "shortName": "UFC Fight Night",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": [
+        {
+          "id": "401881924",
+          "uid": "s:3301~l:3321~e:600059339~c:401881924",
+          "date": "2026-08-01T14:00Z",
+          "type": {
+            "id": "1003",
+            "abbreviation": "W Bantamweight"
+          },
+          "venue": {
+            "id": "3115",
+            "fullName": "Belgrade Arena",
+            "address": {
+              "city": "Belgrade",
+              "country": "Serbia"
+            },
+            "indoor": true
+          },
+          "status": {
+            "clock": 0.0,
+            "displayClock": "-",
+            "period": 0,
+            "type": {
+              "id": "1",
+              "name": "STATUS_SCHEDULED",
+              "state": "pre",
+              "completed": false,
+              "description": "Scheduled",
+              "detail": "Sat, August 1st at 10:00 AM EDT",
+              "shortDetail": "8/1 - 10:00 AM EDT"
+            }
+          },
+          "competitors": [
+            {
+              "id": "4374742",
+              "uid": "s:3301~a:4374742",
+              "type": "athlete",
+              "order": 2,
+              "winner": false,
+              "athlete": {
+                "id": null,
+                "fullName": "Hailey Cowan",
+                "displayName": "Hailey Cowan",
+                "shortName": "H. Cowan"
+              }
+            },
+            {
+              "id": "5361791",
+              "uid": "s:3301~a:5361791",
+              "type": "athlete",
+              "order": 1,
+              "winner": false,
+              "athlete": {
+                "id": null,
+                "fullName": "Nina Milošević",
+                "displayName": "Nina Milošević",
+                "shortName": "N. Milošević"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "600060621",
+      "uid": "s:3301~l:3321~e:600060621",
+      "date": "2026-08-08T18:00Z",
+      "name": "UFC Fight Night: Gamrot vs Salkilld",
+      "shortName": "UFC Fight Night",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060732",
+      "uid": "s:3301~l:3321~e:600060732",
+      "date": "2026-08-12T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 1",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600059185",
+      "uid": "s:3301~l:3321~e:600059185",
+      "date": "2026-08-15T21:00Z",
+      "name": "UFC 330: Makhachev vs. Machado Garry",
+      "shortName": "UFC 330",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060733",
+      "uid": "s:3301~l:3321~e:600060733",
+      "date": "2026-08-19T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 2",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060493",
+      "uid": "s:3301~l:3321~e:600060493",
+      "date": "2026-08-22T21:00Z",
+      "name": "UFC Fight Night: Hernandez vs. Rodrigues",
+      "shortName": "UFC Fight Night",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060734",
+      "uid": "s:3301~l:3321~e:600060734",
+      "date": "2026-08-26T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 3",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060620",
+      "uid": "s:3301~l:3321~e:600060620",
+      "date": "2026-08-29T07:00Z",
+      "name": "UFC Fight Night: Nurmagomedov vs. Song",
+      "shortName": "UFC Fight Night",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060735",
+      "uid": "s:3301~l:3321~e:600060735",
+      "date": "2026-09-02T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 4",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600059993",
+      "uid": "s:3301~l:3321~e:600059993",
+      "date": "2026-09-05T16:00Z",
+      "name": "UFC Fight Night: Hooker vs. Parnasse",
+      "shortName": "UFC Fight Night",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060736",
+      "uid": "s:3301~l:3321~e:600060736",
+      "date": "2026-09-09T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 5",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060772",
+      "uid": "s:3301~l:3321~e:600060772",
+      "date": "2026-09-12T21:00Z",
+      "name": "Noche UFC",
+      "shortName": "Noche UFC",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060737",
+      "uid": "s:3301~l:3321~e:600060737",
+      "date": "2026-09-16T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 6",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060738",
+      "uid": "s:3301~l:3321~e:600060738",
+      "date": "2026-09-23T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 7",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060739",
+      "uid": "s:3301~l:3321~e:600060739",
+      "date": "2026-09-30T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 8",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060740",
+      "uid": "s:3301~l:3321~e:600060740",
+      "date": "2026-10-07T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 9",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060741",
+      "uid": "s:3301~l:3321~e:600060741",
+      "date": "2026-10-14T00:00Z",
+      "name": "Dana White's Contender Series: Season 10, Week 10",
+      "shortName": "Dana White's Contender Series",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    },
+    {
+      "id": "600060773",
+      "uid": "s:3301~l:3321~e:600060773",
+      "date": "2026-10-17T21:00Z",
+      "name": "UFC Fight Night: Edmonton",
+      "shortName": "UFC Fight Night",
+      "season": {
+        "year": 2026,
+        "type": 2,
+        "slug": "regular-season"
+      },
+      "status": {
+        "type": {
+          "id": "1",
+          "name": "STATUS_SCHEDULED",
+          "state": "pre",
+          "completed": false,
+          "description": "Scheduled",
+          "detail": "Scheduled",
+          "shortDetail": "Scheduled"
+        }
+      },
+      "competitions": []
+    }
+  ],
+  "provider": {
+    "id": "100",
+    "name": "Draft Kings",
+    "displayName": "Draft Kings",
+    "priority": 1,
+    "logos": [
+      {
+        "href": "https://a.espncdn.com/i/betting/Draftkings_Light.svg",
+        "rel": [
+          "light"
+        ]
+      },
+      {
+        "href": "https://a.espncdn.com/i/betting/Draftkings_Dark.svg",
+        "rel": [
+          "dark"
+        ]
+      }
+    ]
+  }
+}

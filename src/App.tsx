@@ -21,6 +21,7 @@ import {
   type RoundSelection,
 } from "./ui/RoundSelector.tsx";
 import { RoundStatsPanel } from "./ui/RoundStatsPanel.tsx";
+import { ScheduledCardRail } from "./ui/ScheduledCardRail.tsx";
 import { ScorecardFeed } from "./ui/ScorecardFeed.tsx";
 import {
   SectionTabs,
@@ -28,6 +29,8 @@ import {
 } from "./ui/SectionTabs.tsx";
 import { SourceStatus } from "./ui/SourceStatus.tsx";
 import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
+import { UpcomingEventRail } from "./ui/UpcomingEventRail.tsx";
+import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
 import "./ui/dashboard.css";
 
 export default function App() {
@@ -37,6 +40,12 @@ export default function App() {
   const [tab, setTab] = useState<AppTab>("fight");
   const [section, setSection] = useState<FightSection>("summary");
   const [round, setRound] = useState<RoundSelection>(1);
+  // null = the app's current in-memory event (default); otherwise an ESPN event id.
+  const [scheduleSelection, setScheduleSelection] = useState<string | null>(
+    null,
+  );
+  const upcomingEspn = useUpcomingEspnEvents();
+  const espnCard = useEspnCard(scheduleSelection);
 
   useEffect(() => {
     if (!state) return;
@@ -139,6 +148,19 @@ export default function App() {
     setSection("summary");
   };
 
+  // Reflects whichever card the Card tab is currently showing. Undefined while a
+  // future ESPN card is still loading or failed, so the header omits the count
+  // rather than reporting the previous card's.
+  const cardBoutCount =
+    scheduleSelection === null
+      ? event.bouts.length
+      : espnCard.card
+        ? espnCard.card.sections.reduce(
+            (total, sec) => total + sec.fights.length,
+            0,
+          )
+        : undefined;
+
   return (
     <div className="app">
       <TopBar />
@@ -234,13 +256,67 @@ export default function App() {
                   <span className="page-kicker">Bout order</span>
                   <h2 id="card-title">Event card</h2>
                 </div>
-                <span className="num page-count">{event.bouts.length} bouts</span>
+                {cardBoutCount !== undefined && (
+                  <span className="num page-count">{cardBoutCount} bouts</span>
+                )}
               </div>
-              <CardRail
-                bouts={event.bouts}
-                selectedId={selectedId ?? ""}
-                onSelect={selectBout}
+              <UpcomingEventRail
+                currentEvent={{
+                  id: event.id,
+                  name: event.name,
+                  startsAt: event.startsAt,
+                }}
+                events={
+                  upcomingEspn.status === "ready" ? upcomingEspn.events : []
+                }
+                selectedId={scheduleSelection ?? event.id}
+                onSelect={(id) =>
+                  setScheduleSelection(id === event.id ? null : id)
+                }
               />
+              {upcomingEspn.status === "error" && (
+                <div className="state-notice" role="status">
+                  <strong>ESPN unavailable</strong>
+                  <span>
+                    {upcomingEspn.message ??
+                      "Upcoming ESPN events could not be loaded."}
+                  </span>
+                  <button
+                    type="button"
+                    className="retry-button"
+                    onClick={upcomingEspn.reload}
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {scheduleSelection === null ? (
+                <CardRail
+                  bouts={event.bouts}
+                  selectedId={selectedId ?? ""}
+                  onSelect={selectBout}
+                />
+              ) : espnCard.status === "loading" || espnCard.status === "idle" ? (
+                <div className="empty-state">
+                  <strong>Loading card…</strong>
+                  <span>Fetching the ESPN fight card.</span>
+                </div>
+              ) : espnCard.status === "error" ? (
+                <div className="state-notice" role="status">
+                  <strong>Card unavailable</strong>
+                  <span>
+                    {espnCard.message ??
+                      "This event's fight card could not be loaded."}
+                  </span>
+                </div>
+              ) : espnCard.card ? (
+                <ScheduledCardRail card={espnCard.card} />
+              ) : (
+                <div className="empty-state">
+                  <strong>No fight card yet</strong>
+                  <span>ESPN hasn't published matchups for this event.</span>
+                </div>
+              )}
             </section>
           )}
           {tab === "sources" && (

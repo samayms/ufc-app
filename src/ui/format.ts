@@ -35,6 +35,26 @@ export function fmtTime(iso: string): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+export function fmtEventDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export function fmtEventDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.toLocaleDateString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  })}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+}
+
 const METHOD_LABEL: Record<FinishMethod, string> = {
   "ko-tko": "KO/TKO",
   submission: "SUB",

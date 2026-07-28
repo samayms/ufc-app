@@ -1,0 +1,374 @@
+import { describe, expect, it, vi } from "vitest";
+import scoreboardFixture from "../fixtures/espnScheduleScoreboard.json" with {
+  type: "json",
+};
+import fightcenterFixture from "../fixtures/espnFightcenter.json" with {
+  type: "json",
+};
+import {
+  buildEspnFightcenterUrl,
+  buildEspnScheduleUrl,
+  createEspnScheduleSource,
+  parseEspnFightcenterCard,
+  parseEspnScheduleEvents,
+} from "./espnSchedule.ts";
+
+const ufc330Fixture = fightcenterFixture["600059185"];
+const sparseFixture = fightcenterFixture["600060773"];
+
+/** Minimal stand-in for a fetch Response: JSON body, no ReadableStream. */
+function jsonResponse(data: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify(data),
+  } as unknown as Response;
+}
+
+function errorResponse(status: number): Response {
+  return {
+    ok: false,
+    status,
+    text: async () => "",
+  } as unknown as Response;
+}
+
+describe("buildEspnScheduleUrl", () => {
+  it("formats both dates as YYYYMMDD in UTC and sets limit=1000", () => {
+    // Deliberately a UTC late-evening timestamp so a naive local-time
+    // formatter would roll the date forward/back depending on TZ.
+    const start = new Date("2026-07-28T23:30:00Z");
+    const end = new Date("2026-08-01T00:15:00Z");
+
+    const url = buildEspnScheduleUrl(start, end);
+
+    expect(url).toContain("dates=20260728-20260801");
+    expect(url).toContain("limit=1000");
+    expect(() => new URL(url)).not.toThrow();
+  });
+
+  it("accepts the 365-day window that stays under ESPN's 366-day cap", () => {
+    const start = new Date("2026-07-28T00:00:00Z");
+    const end = new Date(start.getTime() + 365 * 24 * 60 * 60 * 1000);
+
+    expect(() => buildEspnScheduleUrl(start, end)).not.toThrow();
+    expect(buildEspnScheduleUrl(start, end)).toContain(
+      "dates=20260728-20270728",
+    );
+  });
+
+  it("throws a TypeError when end is before start", () => {
+    const start = new Date("2026-07-28T00:00:00Z");
+    const end = new Date("2026-07-27T23:59:59Z");
+
+    expect(() => buildEspnScheduleUrl(start, end)).toThrow(TypeError);
+    expect(() => buildEspnScheduleUrl(start, end)).toThrow(/end >= start/);
+  });
+});
+
+describe("buildEspnFightcenterUrl", () => {
+  it("builds a fightcenter URL scoped to the event id", () => {
+    const url = buildEspnFightcenterUrl("600059185");
+
+    expect(url).toBe(
+      "https://site.web.api.espn.com/apis/common/v3/sports/mma/ufc/fightcenter/600059185",
+    );
+  });
+
+  it("rejects an empty event id", () => {
+    expect(() => buildEspnFightcenterUrl("  ")).toThrow(TypeError);
+    expect(() => buildEspnFightcenterUrl("")).toThrow(/non-empty event id/);
+  });
+});
+
+// Regression guard for the shape captured live on 2026-07-28: the real
+// scoreboard returns 18 events for the window 20260728-20261231, 10 of
+// which are Dana White's Contender Series (must be excluded) and one of
+// which is "Noche UFC" (a real UFC event that must survive the filter
+// despite not containing the literal string "UFC").
+describe("parseEspnScheduleEvents", () => {
+  it("excludes all Contender Series events but keeps Noche UFC", () => {
+    const now = new Date("2026-07-28T00:00:00Z");
+    const events = parseEspnScheduleEvents(scoreboardFixture, now);
+
+    expect(events).toHaveLength(8);
+    expect(
+      events.some((event) => /contender series/i.test(event.name)),
+    ).toBe(false);
+    expect(events.some((event) => event.name === "Noche UFC")).toBe(true);
+  });
+
+  it("drops events before now", () => {
+    const now = new Date("2026-08-20T00:00:00Z");
+    const events = parseEspnScheduleEvents(scoreboardFixture, now);
+
+    expect(events.every((event) => new Date(event.startsAt) >= now)).toBe(
+      true,
+    );
+    expect(events.some((event) => event.eventId === "600059185")).toBe(
+      false,
+    );
+  });
+
+  it("de-duplicates by event id", () => {
+    const now = new Date("2026-07-28T00:00:00Z");
+    const duplicated = {
+      events: [
+        ...(scoreboardFixture.events as unknown[]),
+        scoreboardFixture.events[0],
+      ],
+    };
+
+    const events = parseEspnScheduleEvents(duplicated, now);
+    const ids = events.map((event) => event.eventId);
+
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("sorts ascending by date", () => {
+    const now = new Date("2026-07-28T00:00:00Z");
+    const events = parseEspnScheduleEvents(scoreboardFixture, now);
+    const times = events.map((event) => new Date(event.startsAt).getTime());
+
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+  });
+
+  it("returns an empty list rather than throwing on malformed input", () => {
+    expect(parseEspnScheduleEvents(null, new Date())).toEqual([]);
+    expect(parseEspnScheduleEvents({}, new Date())).toEqual([]);
+    expect(parseEspnScheduleEvents({ cards: null }, new Date())).toEqual([]);
+  });
+});
+
+// Regression guard for the shape captured live on 2026-07-28: UFC 330's
+// fightcenter payload has three sections (main, prelims1, prelims2) with
+// the main card's two title fights, and prelims1 carrying three distinct
+// competition dates — an explicit case for the earliest-date-wins section
+// timestamp rule.
+describe("parseEspnFightcenterCard", () => {
+  it("orders sections main-card, prelims, early-prelims", () => {
+    const card = parseEspnFightcenterCard(ufc330Fixture, "600059185");
+
+    expect(card).not.toBeNull();
+    expect(card?.sections.map((section) => section.key)).toEqual([
+      "main",
+      "prelims1",
+      "prelims2",
+    ]);
+    expect(card?.sections.map((section) => section.segment)).toEqual([
+      "main-card",
+      "prelims",
+      "early-prelims",
+    ]);
+    expect(card?.sections.map((section) => section.displayName)).toEqual([
+      "Main Card",
+      "Prelims",
+      "Early Prelims",
+    ]);
+  });
+
+  it("keeps the main card's two fights with the main event first (regression guard)", () => {
+    const card = parseEspnFightcenterCard(ufc330Fixture, "600059185");
+    const mainSection = card?.sections[0];
+
+    expect(mainSection?.fights).toHaveLength(2);
+    expect(mainSection?.fights.map((fight) => fight.matchNumber)).toEqual([
+      1, 2,
+    ]);
+    expect(mainSection?.fights[0]?.mainEvent).toBe(true);
+    expect(mainSection?.fights[1]?.mainEvent).toBe(false);
+    expect(mainSection?.fights[0]?.competitionId).toBe("401869336");
+  });
+
+  it("assigns corners with order === 2 as blue, otherwise red", () => {
+    const card = parseEspnFightcenterCard(ufc330Fixture, "600059185");
+    const mainEventFight = card?.sections[0]?.fights[0];
+
+    expect(mainEventFight?.competitionId).toBe("401869336");
+    expect(mainEventFight?.red.name).toBe("Islam Makhachev");
+    expect(mainEventFight?.blue.name).toBe("Ian Machado Garry");
+  });
+
+  it("marks both main-card fights as title fights", () => {
+    const card = parseEspnFightcenterCard(ufc330Fixture, "600059185");
+
+    expect(card?.sections[0]?.fights.every((fight) => fight.titleFight)).toBe(
+      true,
+    );
+  });
+
+  it("uses the earliest competition date in a section as its startsAt", () => {
+    const card = parseEspnFightcenterCard(ufc330Fixture, "600059185");
+
+    expect(card?.sections[0]?.startsAt).toBe("2026-08-16T01:00:00.000+00:00");
+    expect(card?.sections[1]?.startsAt).toBe("2026-08-15T21:00:00.000+00:00");
+    expect(card?.sections[2]?.startsAt).toBe("2026-08-15T21:00:00.000+00:00");
+  });
+
+  it("handles a sparse event with null type and null note without throwing", () => {
+    const card = parseEspnFightcenterCard(sparseFixture, "600060773");
+
+    expect(card).not.toBeNull();
+    const mainFight = card?.sections[0]?.fights[0];
+    expect(mainFight?.competitionId).toBe("401897388");
+    expect(mainFight?.weightClassLabel).toBeUndefined();
+    expect(mainFight?.note).toBe("Main Event");
+
+    const prelimsFight = card?.sections[1]?.fights[0];
+    expect(prelimsFight?.competitionId).toBe("401897729");
+    expect(prelimsFight?.weightClassLabel).toBeUndefined();
+    expect(prelimsFight?.note).toBeUndefined();
+  });
+
+  it("returns null rather than throwing on malformed input", () => {
+    expect(parseEspnFightcenterCard(null, "600059185")).toBeNull();
+    expect(parseEspnFightcenterCard({}, "600059185")).toBeNull();
+    expect(parseEspnFightcenterCard({ cards: null }, "600059185")).toBeNull();
+  });
+});
+
+describe("createEspnScheduleSource", () => {
+  it("caches listUpcomingEvents within the TTL and shares in-flight requests", async () => {
+    let currentTime = new Date("2026-07-28T00:00:00Z");
+    const fetchImpl = vi.fn(async () => jsonResponse(scoreboardFixture));
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => currentTime,
+      ttlMs: 60_000,
+    });
+
+    const [first, second] = await Promise.all([
+      source.listUpcomingEvents(),
+      source.listUpcomingEvents(),
+    ]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(first).toEqual(second);
+    expect(first.length).toBeGreaterThan(0);
+
+    await source.listUpcomingEvents();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    currentTime = new Date(currentTime.getTime() + 61_000);
+    await source.listUpcomingEvents();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("requests the now -> now+365d window with limit=1000", async () => {
+    const currentTime = new Date("2026-07-28T00:00:00Z");
+    const fetchImpl = vi.fn(async () => jsonResponse(scoreboardFixture));
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => currentTime,
+    });
+
+    await source.listUpcomingEvents();
+
+    const expectedUrl = buildEspnScheduleUrl(
+      currentTime,
+      new Date(currentTime.getTime() + 365 * 24 * 60 * 60 * 1000),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(expectedUrl, expect.anything());
+  });
+
+  it("never caches a failed schedule fetch", async () => {
+    let shouldFail = true;
+    const fetchImpl = vi.fn(async () => {
+      if (shouldFail) {
+        shouldFail = false;
+        return errorResponse(500);
+      }
+      return jsonResponse(scoreboardFixture);
+    });
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => new Date("2026-07-28T00:00:00Z"),
+    });
+
+    await expect(source.listUpcomingEvents()).rejects.toThrow(
+      /Failed to load the ESPN UFC schedule/,
+    );
+    const retried = await source.listUpcomingEvents();
+    expect(retried.length).toBeGreaterThan(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("caches getCard per event id and shares in-flight requests", async () => {
+    let currentTime = new Date("2026-07-28T00:00:00Z");
+    const fetchImpl = vi.fn(async (url: string) => {
+      const eventId = url.split("/").pop();
+      return jsonResponse(
+        eventId === "600059185" ? ufc330Fixture : sparseFixture,
+      );
+    });
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => currentTime,
+      ttlMs: 60_000,
+    });
+
+    const [first, second] = await Promise.all([
+      source.getCard("600059185"),
+      source.getCard("600059185"),
+    ]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(first).toEqual(second);
+
+    await source.getCard("600060773");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+    currentTime = new Date(currentTime.getTime() + 61_000);
+    await source.getCard("600059185");
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("never caches a failed card fetch", async () => {
+    let shouldFail = true;
+    const fetchImpl = vi.fn(async () => {
+      if (shouldFail) {
+        shouldFail = false;
+        return errorResponse(404);
+      }
+      return jsonResponse(ufc330Fixture);
+    });
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => new Date("2026-07-28T00:00:00Z"),
+    });
+
+    await expect(source.getCard("600059185")).rejects.toThrow(
+      /Failed to load the ESPN fight card for event 600059185/,
+    );
+    const retried = await source.getCard("600059185");
+    expect(retried?.eventId).toBe("600059185");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  // Regression guard: the default fetch implementation must keep its
+  // receiver — an unbound `fetch` reference throws "Illegal invocation" in
+  // browsers (hit live on 2026-07-28).
+  it("keeps fetch's receiver when no fetchImpl is provided", async () => {
+    const originalFetch = globalThis.fetch;
+
+    function receiverSensitiveFetch(
+      this: unknown,
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ): Promise<Response> {
+      if (this !== globalThis) {
+        throw new TypeError("Illegal invocation");
+      }
+      return Promise.resolve(jsonResponse(scoreboardFixture));
+    }
+    globalThis.fetch = receiverSensitiveFetch as unknown as typeof fetch;
+
+    try {
+      const source = createEspnScheduleSource({
+        now: () => new Date("2026-07-28T00:00:00Z"),
+      });
+
+      await expect(source.listUpcomingEvents()).resolves.not.toEqual([]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
