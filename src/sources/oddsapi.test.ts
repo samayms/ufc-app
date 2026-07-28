@@ -1,7 +1,12 @@
 import eventFixture from "../fixtures/event.json";
 import type { Bout, Corner, Fighter } from "../schema.ts";
 import { describe, expect, it } from "vitest";
-import { createOddsApiSource } from "./oddsapi.ts";
+import liveOdds from "../fixtures/theOddsApiLive.json" with { type: "json" };
+import {
+  createOddsApiSource,
+  parseTheOddsApiSnapshot,
+  type OddsApiEvent,
+} from "./oddsapi.ts";
 
 function getFixtureBout(boutId: string): Bout {
   const rawBout = eventFixture.bouts.find((bout) => bout.id === boutId);
@@ -118,5 +123,57 @@ describe("createOddsApiSource getTickHistory", () => {
 
   it("returns an empty history when asked for a different source", async () => {
     expect(await source.getTickHistory("bout-main", "odds-api-io")).toEqual([]);
+  });
+});
+
+// Captured live 2026-07-28 from
+// api.the-odds-api.com/v4/sports/mma_mixed_martial_arts/odds (HTTP 200,
+// regions=us&markets=h2h, 1 credit). The live shape matched this parser with
+// no changes; this test is the regression guard on that match.
+describe("parseTheOddsApiSnapshot against the captured live payload", () => {
+  const liveEvent = liveOdds[0];
+  const base = getFixtureBout("bout-main");
+  const liveBout: Bout = {
+    ...base,
+    id: "bout-live",
+    fighters: {
+      red: { ...base.fighters.red, name: liveEvent?.home_team ?? "" },
+      blue: { ...base.fighters.blue, name: liveEvent?.away_team ?? "" },
+    },
+  };
+
+  it("normalizes real bookmaker moneylines for both corners", () => {
+    const snapshot = parseTheOddsApiSnapshot(
+      liveOdds as OddsApiEvent[],
+      liveBout,
+      false,
+    );
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.market).toBe("sportsbook");
+    expect(snapshot?.provenance.synthetic).toBe(false);
+    // Two books in the capture, both corners quoted by each.
+    expect(snapshot?.quotes).toHaveLength(4);
+    expect(
+      snapshot?.quotes.every(
+        (quote) =>
+          quote.native.kind === "american-moneyline" &&
+          Number.isFinite(quote.native.moneyline) &&
+          quote.impliedProbability > 0 &&
+          quote.impliedProbability < 1,
+      ),
+    ).toBe(true);
+    // The snapshot stamps the latest last_update across every book.
+    const latest = (liveEvent?.bookmakers ?? [])
+      .flatMap((book) => book.markets.map((market) => market.last_update))
+      .sort()
+      .at(-1);
+    expect(snapshot?.marketUpdatedAt).toBe(latest);
+  });
+
+  it("returns null for a bout the payload does not cover", () => {
+    expect(
+      parseTheOddsApiSnapshot(liveOdds as OddsApiEvent[], base, false),
+    ).toBeNull();
   });
 });

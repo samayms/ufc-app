@@ -1,0 +1,54 @@
+[
+  {
+    "id": "e40306a02b022785263bfbd431d7ef6a",
+    "sport_key": "mma_mixed_martial_arts",
+    "sport_title": "MMA",
+    "commence_time": "2026-08-01T14:00:00Z",
+    "home_team": "Nina Milošević",
+    "away_team": "Hailey Cowan",
+    "bookmakers": [
+      {
+        "key": "betonlineag",
+        "title": "BetOnline.ag",
+        "last_update": "2026-07-28T14:05:51Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-28T14:05:50Z",
+            "outcomes": [
+              {
+                "name": "Hailey Cowan",
+                "price": 350
+              },
+              {
+                "name": "Nina Milošević",
+                "price": -450
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "betus",
+        "title": "BetUS",
+        "last_update": "2026-07-28T14:06:40Z",
+        "markets": [
+          {
+            "key": "h2h",
+            "last_update": "2026-07-28T14:06:40Z",
+            "outcomes": [
+              {
+                "name": "Hailey Cowan",
+                "price": 339
+              },
+              {
+                "name": "Nina Milošević",
+                "price": -450
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

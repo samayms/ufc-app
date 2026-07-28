@@ -54,7 +54,7 @@ interface OddsApiBookmaker {
   markets: OddsApiMarket[];
 }
 
-interface OddsApiEvent {
+export interface OddsApiEvent {
   home_team: string;
   away_team: string;
   bookmakers: OddsApiBookmaker[];
@@ -83,8 +83,23 @@ function matchesBout(event: OddsApiEvent, bout: Bout): boolean {
   );
 }
 
-function parseSnapshot(bout: Bout): OddsSnapshot | null {
-  const event = oddsEvents.find((candidate) => matchesBout(candidate, bout));
+/**
+ * Pure normalization of a `GET /v4/sports/{sport}/odds` array into a snapshot
+ * for one bout. Verified live 2026-07-28 against
+ * api.the-odds-api.com/v4/sports/mma_mixed_martial_arts/odds?regions=us&markets=h2h
+ * (HTTP 200): the documented shape below — an array of events carrying
+ * home_team/away_team and bookmakers[].markets[].outcomes[] with American
+ * prices — matched this parser exactly, with no changes required.
+ *
+ * `synthetic` is the caller's to declare, since the same shape serves both
+ * the bundled fixture and a live response.
+ */
+export function parseTheOddsApiSnapshot(
+  events: readonly OddsApiEvent[],
+  bout: Bout,
+  synthetic: boolean,
+): OddsSnapshot | null {
+  const event = events.find((candidate) => matchesBout(candidate, bout));
   if (!event) {
     return null;
   }
@@ -132,9 +147,13 @@ function parseSnapshot(bout: Bout): OddsSnapshot | null {
     provenance: {
       source: "odds-api",
       fetchedAt: marketUpdatedAt ?? event.bookmakers[0]?.last_update ?? "",
-      synthetic: true,
+      synthetic,
     },
   };
+}
+
+function parseSnapshot(bout: Bout): OddsSnapshot | null {
+  return parseTheOddsApiSnapshot(oddsEvents, bout, true);
 }
 
 export function createOddsApiSource(config: SourceConfig): TheOddsApiSource {
