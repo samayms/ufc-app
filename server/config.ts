@@ -141,7 +141,13 @@ function parsePort(env: CollectorEnvironment): number {
 }
 
 function parseBookmakers(env: CollectorEnvironment): readonly string[] {
-  const raw = env.ODDS_API_IO_BOOKMAKERS ?? "draftkings,fanduel";
+  // Probed live 2026-07-28: this account's free tier allows exactly two
+  // bookmakers, "Bet365, DraftKings". Requesting FanDuel 403s the *whole*
+  // request rather than degrading, so the previous draftkings,fanduel default
+  // would have failed every live call. Still overridable per the architecture
+  // note that book selection must not be permanently hard-coded; the plan
+  // selection is changed via Odds-API.io's own bookmaker-selection endpoint.
+  const raw = env.ODDS_API_IO_BOOKMAKERS ?? "bet365,draftkings";
   const bookmakers = [
     ...new Set(
       raw

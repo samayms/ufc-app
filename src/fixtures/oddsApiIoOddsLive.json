@@ -1,0 +1,31 @@
+{
+  "id": 73240944,
+  "home": "Spasic, Marina",
+  "away": "Luciano, Stephanie Bruna",
+  "homeId": 1377152,
+  "awayId": 1026595,
+  "date": "2026-08-01T14:00:00Z",
+  "status": "pending",
+  "sport": {
+    "name": "MMA",
+    "slug": "mma"
+  },
+  "league": {
+    "name": "UFC - UFC Fight Night: Medic vs. Rodriguez",
+    "slug": "ufc-ufc-fight-night-medic-vs-rodriguez"
+  },
+  "bookmakers": {
+    "Bet365": [
+      {
+        "name": "ML",
+        "updatedAt": "2026-07-28T14:02:59.494Z",
+        "odds": [
+          {
+            "home": "3.30",
+            "away": "1.35"
+          }
+        ]
+      }
+    ]
+  }
+}

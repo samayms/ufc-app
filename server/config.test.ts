@@ -14,7 +14,7 @@ describe("loadConfig", () => {
       xMode: "embed",
       port: 8600,
       persistencePath: "./data",
-      oddsApiIoBookmakers: ["draftkings", "fanduel"],
+      oddsApiIoBookmakers: ["bet365", "draftkings"],
       xSpendCapUsd: 0,
       sherdog: {
         permissionScope: "none",

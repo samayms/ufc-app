@@ -1,9 +1,18 @@
 import eventFixture from "../fixtures/event.json";
 import type { Bout, Corner, Fighter } from "../schema.ts";
 import { describe, expect, it, vi } from "vitest";
+import liveEvents from "../fixtures/oddsApiIoEventsLive.json" with {
+  type: "json",
+};
+import liveOdds from "../fixtures/oddsApiIoOddsLive.json" with {
+  type: "json",
+};
 import {
   createOddsApiIoSource,
+  decimalToAmerican,
   OddsApiIoRequestError,
+  parseOddsApiIoEventOdds,
+  parseOddsApiIoEvents,
   sportsbookSnapshotToMarketTicks,
 } from "./oddsApiIo.ts";
 
@@ -63,7 +72,7 @@ describe("Odds-API.io source", () => {
     const query = {
       bout,
       externalBoutId: "oai-bout-reyes-volkov",
-      bookmakers: ["draftkings", "fanduel"],
+      bookmakers: ["draftkings", "bet365"],
     };
     const snapshots = [];
     for (let index = 0; index < 3; index += 1) {
@@ -87,8 +96,8 @@ describe("Odds-API.io source", () => {
       ).toEqual([
         "draftkings",
         "draftkings",
-        "fanduel",
-        "fanduel",
+        "bet365",
+        "bet365",
       ]);
     }
   });
@@ -175,5 +184,105 @@ describe("Odds-API.io source", () => {
     expect(
       await source.getTickHistory("bout-main", "the-odds-api"),
     ).toEqual([]);
+  });
+});
+
+// Captured live 2026-07-28 from api.odds-api.io/v3 (both HTTP 200). These
+// guard the live shape, which differs from the synthetic fixture in every
+// dimension: numeric ids, surname-first names, one bout per event, and
+// bookmakers as an object of decimal-string markets.
+describe("Odds-API.io live shapes", () => {
+  const base = fixtureBout("bout-main");
+  const liveBout: Bout = {
+    ...base,
+    id: "bout-live",
+    fighters: {
+      red: { ...base.fighters.red, name: "Marina Spasić" },
+      blue: { ...base.fighters.blue, name: "Stephanie Bruna Luciano" },
+    },
+  };
+
+  it("groups the captured /events payload into cards and bouts", () => {
+    const events = parseOddsApiIoEvents(liveEvents);
+
+    expect(events).toHaveLength(1);
+    const card = events[0];
+    expect(card?.name).toBe("UFC - UFC Fight Night: Medic vs. Rodriguez");
+    expect(card?.bouts.length).toBe(liveEvents.length);
+    // Numeric ids in the payload must survive as string ExternalRefs.
+    expect(card?.bouts[0]?.externalRef).toEqual({
+      source: "odds-api-io",
+      id: String(liveEvents[0]?.id),
+    });
+  });
+
+  it("rejects a non-array /events payload", () => {
+    expect(() => parseOddsApiIoEvents({})).toThrow(/not an array/);
+  });
+
+  it("normalizes captured decimal odds into a snapshot", () => {
+    const snapshot = parseOddsApiIoEventOdds(
+      liveOdds,
+      liveBout,
+      ["Bet365"],
+      "2026-07-28T14:05:00.000Z",
+    );
+
+    expect(snapshot).not.toBeNull();
+    expect(snapshot?.market).toBe("sportsbook");
+    expect(snapshot?.provenance.synthetic).toBe(false);
+    expect(snapshot?.marketUpdatedAt).toBe("2026-07-28T14:02:59.494Z");
+
+    // home "3.30" -> red corner, away "1.35" -> blue corner.
+    const red = snapshot?.quotes.find((q) => q.corner === "red");
+    const blue = snapshot?.quotes.find((q) => q.corner === "blue");
+    expect(red?.native).toEqual({
+      kind: "american-moneyline",
+      moneyline: 230,
+      book: "bet365",
+    });
+    expect(blue?.native).toEqual({
+      kind: "american-moneyline",
+      moneyline: -286,
+      book: "bet365",
+    });
+    expect(red?.impliedProbability).toBeCloseTo(1 / 3.3, 10);
+    expect(blue?.impliedProbability).toBeCloseTo(1 / 1.35, 10);
+  });
+
+  it("maps corners by name regardless of home/away order", () => {
+    const swapped: Bout = {
+      ...liveBout,
+      fighters: { red: liveBout.fighters.blue, blue: liveBout.fighters.red },
+    };
+    const snapshot = parseOddsApiIoEventOdds(
+      liveOdds,
+      swapped,
+      ["Bet365"],
+      "2026-07-28T14:05:00.000Z",
+    );
+
+    expect(
+      snapshot?.quotes.find((q) => q.corner === "blue")?.native,
+    ).toMatchObject({ moneyline: 230 });
+  });
+
+  it("returns null when the payload is a different bout", () => {
+    expect(
+      parseOddsApiIoEventOdds(liveOdds, base, ["Bet365"], "t"),
+    ).toBeNull();
+  });
+
+  it("returns null when the requested bookmaker is absent", () => {
+    expect(
+      parseOddsApiIoEventOdds(liveOdds, liveBout, ["FanDuel"], "t"),
+    ).toBeNull();
+  });
+
+  it("converts decimal odds to american at the even-money boundary", () => {
+    expect(decimalToAmerican(2)).toBe(100);
+    expect(decimalToAmerican(1.5)).toBe(-200);
+    expect(decimalToAmerican(1)).toBeNull();
+    expect(decimalToAmerican(Number.NaN)).toBeNull();
   });
 });

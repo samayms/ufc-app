@@ -1,0 +1,65 @@
+[
+  {
+    "id": 73240944,
+    "home": "Spasic, Marina",
+    "away": "Luciano, Stephanie Bruna",
+    "homeId": 1377152,
+    "awayId": 1026595,
+    "date": "2026-08-01T14:00:00Z",
+    "sport": {
+      "name": "MMA",
+      "slug": "mma"
+    },
+    "league": {
+      "name": "UFC - UFC Fight Night: Medic vs. Rodriguez",
+      "slug": "ufc-ufc-fight-night-medic-vs-rodriguez"
+    },
+    "status": "pending",
+    "scores": {
+      "home": 0,
+      "away": 0
+    }
+  },
+  {
+    "id": 71770202,
+    "home": "Leka, Jovan",
+    "away": "Gimenis, Max",
+    "homeId": 1296449,
+    "awayId": 1298944,
+    "date": "2026-08-01T14:20:00Z",
+    "sport": {
+      "name": "MMA",
+      "slug": "mma"
+    },
+    "league": {
+      "name": "UFC - UFC Fight Night: Medic vs. Rodriguez",
+      "slug": "ufc-ufc-fight-night-medic-vs-rodriguez"
+    },
+    "status": "pending",
+    "scores": {
+      "home": 0,
+      "away": 0
+    }
+  },
+  {
+    "id": 73240940,
+    "home": "Leka, Jovan",
+    "away": "Poppeck, Alexander",
+    "homeId": 1296449,
+    "awayId": 288701,
+    "date": "2026-08-01T14:20:00Z",
+    "sport": {
+      "name": "MMA",
+      "slug": "mma"
+    },
+    "league": {
+      "name": "UFC - UFC Fight Night: Medic vs. Rodriguez",
+      "slug": "ufc-ufc-fight-night-medic-vs-rodriguez"
+    },
+    "status": "pending",
+    "scores": {
+      "home": 0,
+      "away": 0
+    }
+  }
+]
