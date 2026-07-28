@@ -1,0 +1,8 @@
+{
+  "name": "UFC Live Companion",
+  "short_name": "UFC Live",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#14110f",
+  "theme_color": "#14110f"
+}

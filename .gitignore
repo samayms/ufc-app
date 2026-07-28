@@ -17,14 +17,15 @@ __pycache__/
 /skills-lock.json
 
 # Local planning, research, notes, and implementation handoffs
-/BUILD_PLAN.md
 /DESIGN.md
 /PRODUCT.md
 /PROGRESS.md
+/ufc-live-data-architecture.md
 /*PLAN*.md
 /*HANDOFF*.md
 /*NOTES*.md
 /*RESEARCH*.md
+/*ARCHITECTURE*.md
 
 # Local browser/UI test artifacts
 /playwright-report/
