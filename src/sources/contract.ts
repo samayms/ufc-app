@@ -83,6 +83,7 @@ export interface MarketTick {
 }
 
 export type MarketBoundaryType = "provisional" | "confirmed";
+export type MarketSnapshotLabel = "broad-post-round-comparison";
 
 export interface MarketSnapshotOutcome {
   bookmaker?: string;
@@ -114,6 +115,7 @@ export interface MarketSnapshot {
   boutId: string;
   round: number;
   boundaryType: MarketBoundaryType;
+  label?: MarketSnapshotLabel;
   takenAt: string;
   fresh: boolean;
   outcomes: MarketSnapshotOutcome[];

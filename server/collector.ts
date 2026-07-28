@@ -21,7 +21,14 @@ import {
 import type { SourceConfig } from "../src/sources/contract.ts";
 import { createEspnSource } from "../src/sources/espn.ts";
 import { createKalshiSource } from "../src/sources/kalshi.ts";
-import { createOddsApiSource } from "../src/sources/oddsapi.ts";
+import {
+  createOddsApiSource,
+  type TheOddsApiSource,
+} from "../src/sources/oddsapi.ts";
+import {
+  createOddsApiIoSource,
+  type OddsApiIoSource,
+} from "../src/sources/oddsApiIo.ts";
 import { createPolymarketSource } from "../src/sources/polymarket.ts";
 import { createSherdogSource } from "../src/sources/sherdog.ts";
 import { loadFixtureEvent } from "../src/store/fixtureEvent.ts";
@@ -47,6 +54,10 @@ import {
   type ReplayMarketTransport,
   resolveMarketSubscriptions,
 } from "./marketTransport.ts";
+import {
+  OddsApiIoPoller,
+  type OddsApiIoPollTimer,
+} from "./oddsApiIoPoller.ts";
 import {
   createKalshiLiveTransport,
   KalshiFixtureTransport,
@@ -79,6 +90,7 @@ import {
   type MarketSnapshot,
   type TickStoreClock,
 } from "./tickStore.ts";
+import { TheOddsApiRoundJob } from "./theOddsApiJob.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
 export const COLLECTOR_HEALTH_STREAM = "source-health";
@@ -122,6 +134,15 @@ export interface CollectorMarketOptions {
   transports?: readonly MarketTransport[];
 }
 
+export interface CollectorSportsbookOptions {
+  clock?: RoundJobClock;
+  timer?: OddsApiIoPollTimer & RoundJobTimer;
+  random?: () => number;
+  oddsApiIoSource?: OddsApiIoSource;
+  theOddsApiSource?: TheOddsApiSource;
+  oddsApiIoQuotaPolicy?: QuotaPolicy;
+}
+
 export type NormalizedStateLoader = (
   config: CollectorConfig,
 ) => Promise<DashboardState>;
@@ -138,6 +159,7 @@ export interface CreateCollectorOptions {
   >;
   roundStats?: CollectorRoundStatsOptions;
   market?: CollectorMarketOptions;
+  sportsbook?: CollectorSportsbookOptions;
 }
 
 export interface Collector {
@@ -148,6 +170,8 @@ export interface Collector {
   readonly roundStats: RoundStatsPipeline;
   readonly tickStore: MarketTickStore;
   readonly marketTransports: readonly MarketTransport[];
+  readonly oddsApiIoPoller: OddsApiIoPoller;
+  readonly theOddsApiJob: TheOddsApiRoundJob;
   readonly lifecycle: FightLifecycleMachine;
   readonly server: Server;
   start(): Promise<number>;
@@ -300,6 +324,7 @@ function fixtureHealth(state: DashboardState): SourceHealth[] {
     "sherdog",
     "kalshi",
     "polymarket",
+    "odds-api-io",
     "odds-api",
   ];
 
@@ -541,6 +566,10 @@ export async function createCollector(
   });
   tickStore = initializedTickStore;
   const roundStatsOptions = options.roundStats;
+  const roundJobClock =
+    roundStatsOptions?.clock ?? options.sportsbook?.clock;
+  const roundJobTimer =
+    roundStatsOptions?.timer ?? options.sportsbook?.timer;
   const initializedRoundStats = await RoundStatsPipeline.create({
     eventBus,
     storage,
@@ -555,12 +584,12 @@ export async function createCollector(
         record,
       });
     },
-    ...(roundStatsOptions?.clock === undefined
+    ...(roundJobClock === undefined
       ? {}
-      : { clock: roundStatsOptions.clock }),
-    ...(roundStatsOptions?.timer === undefined
+      : { clock: roundJobClock }),
+    ...(roundJobTimer === undefined
       ? {}
-      : { timer: roundStatsOptions.timer }),
+      : { timer: roundJobTimer }),
     ...(roundStatsOptions?.initialDelayMs === undefined
       ? {}
       : { initialDelayMs: roundStatsOptions.initialDelayMs }),
@@ -604,6 +633,25 @@ export async function createCollector(
     manualOverrides: options.manualBoutMappingOverrides,
   });
   boutMappings = initializedBoutMappings;
+  const sourceConfig: SourceConfig = {
+    mode: config.dataMode,
+    credentials: { ...config.credentials },
+  };
+  const initializedOddsApiIoSource =
+    options.sportsbook?.oddsApiIoSource ??
+    createOddsApiIoSource(sourceConfig);
+  if (config.dataMode === "fixture") {
+    for (const discoveredEvent of
+      await initializedOddsApiIoSource.discoverEvents()) {
+      for (const discoveredBout of discoveredEvent.bouts) {
+        await initializedBoutMappings.matchDiscoveredBout({
+          externalRef: discoveredBout.externalRef,
+          redFighter: discoveredBout.redFighter,
+          blueFighter: discoveredBout.blueFighter,
+        });
+      }
+    }
+  }
 
   const kalshiSubscriptions = resolveMarketSubscriptions(
     initializedBoutMappings.getAll(),
@@ -636,6 +684,63 @@ export async function createCollector(
             subscriptions: polymarketSubscriptions,
           }),
         ];
+
+  const sportsbookClock =
+    options.sportsbook?.clock ??
+    options.roundStats?.clock ??
+    options.market?.clock;
+  const sportsbookTimer =
+    options.sportsbook?.timer ?? options.roundStats?.timer;
+  const findBout = (boutId: string) =>
+    loaded.event.bouts.find((bout) => bout.id === boutId);
+  const initializedOddsApiIoPoller = await OddsApiIoPoller.create({
+    eventBus,
+    storage,
+    source: initializedOddsApiIoSource,
+    tickStore: initializedTickStore,
+    resolveBout: (boutId) => {
+      const bout = findBout(boutId);
+      const externalBoutId = initializedBoutMappings
+        .getExternalRefs(boutId)
+        .find((ref) => ref.source === "odds-api-io")?.id;
+      return bout === undefined || externalBoutId === undefined
+        ? undefined
+        : { bout, externalBoutId };
+    },
+    bookmakers: config.oddsApiIoBookmakers,
+    publishTick: async (tick) => {
+      await push.publish("update", {
+        kind: "market-tick",
+        tick,
+      });
+    },
+    ...(sportsbookClock === undefined ? {} : { clock: sportsbookClock }),
+    ...(sportsbookTimer === undefined ? {} : { timer: sportsbookTimer }),
+    ...(options.sportsbook?.oddsApiIoQuotaPolicy === undefined
+      ? {}
+      : {
+          quotaPolicy: options.sportsbook.oddsApiIoQuotaPolicy,
+        }),
+  });
+  const initializedTheOddsApiJob = new TheOddsApiRoundJob({
+    eventBus,
+    scheduler: initializedRoundStats.scheduler,
+    source:
+      options.sportsbook?.theOddsApiSource ??
+      createOddsApiSource(sourceConfig),
+    tickStore: initializedTickStore,
+    getBout: findBout,
+    publishTick: async (tick) => {
+      await push.publish("update", {
+        kind: "market-tick",
+        tick,
+      });
+    },
+    ...(sportsbookClock === undefined ? {} : { clock: sportsbookClock }),
+    ...(options.sportsbook?.random === undefined
+      ? {}
+      : { random: options.sportsbook.random }),
+  });
 
   // Streams remain connected across round breaks. The simple card policy
   // closes them once every bout represented by a market subscription has
@@ -752,6 +857,8 @@ export async function createCollector(
     roundStats: initializedRoundStats,
     tickStore: initializedTickStore,
     marketTransports,
+    oddsApiIoPoller: initializedOddsApiIoPoller,
+    theOddsApiJob: initializedTheOddsApiJob,
     lifecycle,
     server,
     async start() {
@@ -761,11 +868,24 @@ export async function createCollector(
         await Promise.all(
           marketTransports.map((transport) => transport.connect()),
         );
+        for (const lifecycleState of lifecycle.getStates()) {
+          if (
+            lifecycleState.state === "in" &&
+            !lifecycleState.completed
+          ) {
+            initializedOddsApiIoPoller.startActiveBout(
+              lifecycleState.boutId,
+            );
+          }
+        }
+        await initializedOddsApiIoPoller.idle();
       }
       return port;
     },
     async close() {
       for (const unsubscribe of unsubscribers) unsubscribe();
+      await initializedOddsApiIoPoller.close();
+      await initializedTheOddsApiJob.close();
       await Promise.all(
         marketTransports.map((transport) => transport.disconnect()),
       );
@@ -783,6 +903,17 @@ export async function createCollector(
       await Promise.all(
         replayTransports.map((transport) => transport.replay()),
       );
+      if (config.dataMode === "fixture") {
+        for (const bout of loaded.event.bouts) {
+          if (
+            bout.status === "in-round" ||
+            bout.status === "between-rounds"
+          ) {
+            initializedOddsApiIoPoller.startActiveBout(bout.id);
+          }
+        }
+        await initializedOddsApiIoPoller.idle();
+      }
     },
     getBootstrap,
     publishHealth,

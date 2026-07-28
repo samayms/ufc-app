@@ -10,6 +10,10 @@
       {
         "source": "cito",
         "id": "ufc-fixture-night"
+      },
+      {
+        "source": "odds-api-io",
+        "id": "oai-event-ufc-fixture-night"
       }
     ],
     "name": "UFC Fight Night: Reyes vs. Volkov",
@@ -53,6 +57,10 @@
         {
           "source": "polymarket",
           "id": "92713044581400595800357835853269232303150605770758104904550685326314229170572"
+        },
+        {
+          "source": "odds-api-io",
+          "id": "oai-bout-reyes-volkov"
         }
       ],
       "eventId": "evt-fixture-001",
@@ -78,6 +86,10 @@
         {
           "source": "cito",
           "id": "cito-bout-9002"
+        },
+        {
+          "source": "odds-api-io",
+          "id": "oai-bout-castillo-okafor"
         }
       ],
       "eventId": "evt-fixture-001",
@@ -128,6 +140,10 @@
         {
           "source": "polymarket",
           "id": "28187269999806695748093732023113710837149191726672867466290106254508771292081"
+        },
+        {
+          "source": "odds-api-io",
+          "id": "oai-bout-hendricks-saito"
         }
       ],
       "eventId": "evt-fixture-001",
@@ -172,6 +188,10 @@
         {
           "source": "polymarket",
           "id": "67676390829509594863962778258658728064410542253528368892035385411257429890946"
+        },
+        {
+          "source": "odds-api-io",
+          "id": "oai-bout-mbeki-carvalho"
         }
       ],
       "eventId": "evt-fixture-001",
@@ -196,6 +216,10 @@
         {
           "source": "cito",
           "id": "cito-bout-9005"
+        },
+        {
+          "source": "odds-api-io",
+          "id": "oai-bout-novak-tuivasa"
         }
       ],
       "eventId": "evt-fixture-001",

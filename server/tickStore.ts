@@ -2,6 +2,7 @@ import { americanToImpliedProb, devigPair } from "../src/lib/oddsMath.ts";
 import type {
   MarketBoundaryType,
   MarketSnapshot,
+  MarketSnapshotLabel,
   MarketSnapshotOutcome,
   MarketSource,
   MarketTick,
@@ -17,6 +18,7 @@ import type { Storage } from "./storage.ts";
 export type {
   MarketBoundaryType,
   MarketSnapshot,
+  MarketSnapshotLabel,
   MarketSnapshotOutcome,
   MarketSource,
   MarketTick,
@@ -319,6 +321,8 @@ function isMarketSnapshot(value: unknown): value is MarketSnapshot {
     (value.round as number) >= 1 &&
     (value.boundaryType === "provisional" ||
       value.boundaryType === "confirmed") &&
+    (value.label === undefined ||
+      value.label === "broad-post-round-comparison") &&
     typeof value.takenAt === "string" &&
     typeof value.fresh === "boolean" &&
     Array.isArray(value.outcomes) &&
@@ -903,6 +907,30 @@ export class MarketTickStore implements TickHistorySource {
     return operation.then(() => result);
   }
 
+  snapshotSource(
+    boutId: string,
+    round: number,
+    source: MarketSource,
+    boundaryType: MarketBoundaryType,
+    takenAt: string,
+    label?: MarketSnapshotLabel,
+  ): Promise<MarketSnapshot | undefined> {
+    let result: MarketSnapshot | undefined;
+    const operation = this.enqueue(async () => {
+      await this.restore();
+      const snapshots = await this.snapshotBoundary(
+        boutId,
+        round,
+        boundaryType,
+        takenAt,
+        source,
+        label,
+      );
+      result = snapshots[0];
+    });
+    return operation.then(() => result);
+  }
+
   handleProvisionalSupersession(
     supersession: ProvisionalRoundSupersession,
   ): Promise<void> {
@@ -1093,6 +1121,8 @@ export class MarketTickStore implements TickHistorySource {
     round: number,
     boundaryType: MarketBoundaryType,
     takenAt: string,
+    sourceFilter?: MarketSource,
+    label?: MarketSnapshotLabel,
   ): Promise<readonly MarketSnapshot[]> {
     if (!Number.isSafeInteger(round) || round < 1) {
       throw new TypeError("round must be a positive integer");
@@ -1118,6 +1148,7 @@ export class MarketTickStore implements TickHistorySource {
     const produced: MarketSnapshot[] = [];
     const changed: MarketSnapshot[] = [];
     for (const [source, sourceStates] of bySource) {
+      if (sourceFilter !== undefined && source !== sourceFilter) continue;
       const freshAtBoundary = sourceFreshAt(
         this.freshnessHistory,
         source,
@@ -1141,6 +1172,7 @@ export class MarketTickStore implements TickHistorySource {
         boutId,
         round,
         boundaryType,
+        ...(label === undefined ? {} : { label }),
         takenAt,
         fresh:
           outcomes.length > 0 &&
@@ -1162,6 +1194,7 @@ export class MarketTickStore implements TickHistorySource {
         snapshot.boutId === boutId &&
         snapshot.round === round &&
         snapshot.boundaryType === boundaryType &&
+        (sourceFilter === undefined || snapshot.source === sourceFilter) &&
         !producedSources.has(snapshot.source)
       ) {
         this.snapshots.delete(key);

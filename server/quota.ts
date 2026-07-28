@@ -1,6 +1,11 @@
 import type { Storage } from "./storage.ts";
 
 export const DEFAULT_QUOTA_STORAGE_STREAM = "quota-acquisitions";
+export const DEFAULT_ODDS_API_IO_QUOTA_POLICY: QuotaPolicy = {
+  perMinute: 90,
+  perHour: 90,
+  perDay: 450,
+};
 
 export type QuotaWindow = "minute" | "hour" | "day";
 

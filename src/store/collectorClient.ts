@@ -4,6 +4,7 @@ import type {
   RoundStats,
   RoundUpdate,
 } from "../schema.ts";
+import type { MarketSnapshot } from "../sources/contract.ts";
 
 export const DEFAULT_COLLECTOR_PORT = 8600;
 
@@ -57,6 +58,12 @@ export interface CollectorUnifiedRound {
     | "period_transition"
     | "fight_completed";
   citoStats?: CollectorRoundStats;
+  marketAtEnd: {
+    kalshi?: MarketSnapshot;
+    polymarket?: MarketSnapshot;
+    oddsApiIo?: MarketSnapshot;
+    theOddsApi?: MarketSnapshot;
+  };
   provisional: boolean;
   finalizedAt?: string;
 }
@@ -291,6 +298,7 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
       value.endingSignal !== "period_transition" &&
       value.endingSignal !== "fight_completed") ||
     (value.citoStats !== undefined && citoStats === null) ||
+    !isRecord(value.marketAtEnd) ||
     typeof value.provisional !== "boolean" ||
     (value.finalizedAt !== undefined && !isTimestamp(value.finalizedAt))
   ) {
@@ -303,6 +311,7 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
     detectedEndedAt: value.detectedEndedAt,
     endingSignal: value.endingSignal,
     ...(citoStats == null ? {} : { citoStats }),
+    marketAtEnd: value.marketAtEnd as CollectorUnifiedRound["marketAtEnd"],
     provisional: value.provisional,
     ...(value.finalizedAt === undefined
       ? {}

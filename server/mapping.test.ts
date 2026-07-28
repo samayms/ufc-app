@@ -44,6 +44,10 @@ describe("BoutMappingRegistry", () => {
           source: "polymarket",
           id: "92713044581400595800357835853269232303150605770758104904550685326314229170572",
         },
+        {
+          source: "odds-api-io",
+          id: "oai-bout-reyes-volkov",
+        },
       ],
       redFighter: "Danilo Reyes",
       blueFighter: "Artem Volkov",
@@ -71,6 +75,10 @@ describe("BoutMappingRegistry", () => {
     expect(registry.getExternalRefs("bout-comain")).toEqual([
       { source: "espn", id: "401770002" },
       { source: "cito", id: "cito-bout-9002" },
+      {
+        source: "odds-api-io",
+        id: "oai-bout-castillo-okafor",
+      },
     ]);
   });
 

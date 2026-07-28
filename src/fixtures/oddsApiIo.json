@@ -1,0 +1,82 @@
+{
+  "eventDiscovery": [
+    {
+      "id": "oai-event-ufc-fixture-night",
+      "name": "UFC Fight Night: Reyes vs. Volkov",
+      "startsAt": "2026-07-25T23:00:00Z",
+      "bouts": [
+        { "id": "oai-bout-reyes-volkov", "redFighter": "Danilo Reyes", "blueFighter": "Artem Volkov" },
+        { "id": "oai-bout-castillo-okafor", "redFighter": "Marisol Castillo", "blueFighter": "Adaeze Okafor" },
+        { "id": "oai-bout-hendricks-saito", "redFighter": "Cole Hendricks", "blueFighter": "Kenji Saito" },
+        { "id": "oai-bout-mbeki-carvalho", "redFighter": "Sipho Mbeki", "blueFighter": "Rafael Carvalho" },
+        { "id": "oai-bout-novak-tuivasa", "redFighter": "Petr Novak", "blueFighter": "Manaia Tuivasa" }
+      ]
+    }
+  ],
+  "oddsSnapshots": [
+    {
+      "boutId": "oai-bout-reyes-volkov",
+      "updatedAt": "2026-07-26T02:34:45Z",
+      "bookmakers": [
+        { "key": "draftkings", "outcomes": [{ "name": "Danilo Reyes", "price": -172 }, { "name": "Artem Volkov", "price": 142 }] },
+        { "key": "fanduel", "outcomes": [{ "name": "Danilo Reyes", "price": -168 }, { "name": "Artem Volkov", "price": 140 }] }
+      ]
+    },
+    {
+      "boutId": "oai-bout-reyes-volkov",
+      "updatedAt": "2026-07-26T02:39:56Z",
+      "bookmakers": [
+        { "key": "draftkings", "outcomes": [{ "name": "Danilo Reyes", "price": -205 }, { "name": "Artem Volkov", "price": 168 }] },
+        { "key": "fanduel", "outcomes": [{ "name": "Danilo Reyes", "price": -198 }, { "name": "Artem Volkov", "price": 164 }] }
+      ]
+    },
+    {
+      "boutId": "oai-bout-reyes-volkov",
+      "updatedAt": "2026-07-26T02:40:14Z",
+      "bookmakers": [
+        { "key": "draftkings", "outcomes": [{ "name": "Danilo Reyes", "price": -220 }, { "name": "Artem Volkov", "price": 180 }] },
+        { "key": "fanduel", "outcomes": [{ "name": "Danilo Reyes", "price": -215 }, { "name": "Artem Volkov", "price": 176 }] }
+      ]
+    },
+    {
+      "boutId": "oai-bout-reyes-volkov",
+      "updatedAt": "2026-07-26T02:44:58Z",
+      "bookmakers": [
+        { "key": "draftkings", "outcomes": [{ "name": "Danilo Reyes", "price": -190 }, { "name": "Artem Volkov", "price": 158 }] },
+        { "key": "fanduel", "outcomes": [{ "name": "Danilo Reyes", "price": -186 }, { "name": "Artem Volkov", "price": 154 }] }
+      ]
+    },
+    {
+      "boutId": "oai-bout-castillo-okafor",
+      "updatedAt": "2026-07-26T01:58:20Z",
+      "bookmakers": [
+        { "key": "draftkings", "outcomes": [{ "name": "Marisol Castillo", "price": 135 }, { "name": "Adaeze Okafor", "price": -160 }] },
+        { "key": "fanduel", "outcomes": [{ "name": "Marisol Castillo", "price": 132 }, { "name": "Adaeze Okafor", "price": -158 }] }
+      ]
+    },
+    {
+      "boutId": "oai-bout-hendricks-saito",
+      "updatedAt": "2026-07-26T01:22:50Z",
+      "bookmakers": [
+        { "key": "draftkings", "outcomes": [{ "name": "Cole Hendricks", "price": 120 }, { "name": "Kenji Saito", "price": -145 }] },
+        { "key": "fanduel", "outcomes": [{ "name": "Cole Hendricks", "price": 124 }, { "name": "Kenji Saito", "price": -148 }] }
+      ]
+    },
+    {
+      "boutId": "oai-bout-mbeki-carvalho",
+      "updatedAt": "2026-07-26T00:37:52Z",
+      "bookmakers": [
+        { "key": "draftkings", "outcomes": [{ "name": "Sipho Mbeki", "price": -130 }, { "name": "Rafael Carvalho", "price": 108 }] },
+        { "key": "fanduel", "outcomes": [{ "name": "Sipho Mbeki", "price": -126 }, { "name": "Rafael Carvalho", "price": 106 }] }
+      ]
+    },
+    {
+      "boutId": "oai-bout-novak-tuivasa",
+      "updatedAt": "2026-07-25T23:42:11Z",
+      "bookmakers": [
+        { "key": "draftkings", "outcomes": [{ "name": "Petr Novak", "price": -112 }, { "name": "Manaia Tuivasa", "price": -108 }] },
+        { "key": "fanduel", "outcomes": [{ "name": "Petr Novak", "price": -110 }, { "name": "Manaia Tuivasa", "price": -110 }] }
+      ]
+    }
+  ]
+}

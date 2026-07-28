@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_ODDS_API_IO_QUOTA_POLICY,
   RollingQuotaGuard,
   type QuotaClock,
 } from "./quota.ts";
@@ -107,5 +108,33 @@ describe("RollingQuotaGuard", () => {
 
     expect(acquisitions.filter(Boolean)).toHaveLength(9);
     expect(await guard.remaining("cito")).toMatchObject({ minute: 0 });
+  });
+
+  it("persists Odds-API.io hourly and daily soft-cap usage across restart", async () => {
+    const storage = new MemoryStorage();
+    const clock = new TestClock(Date.parse("2026-07-28T00:00:00Z"));
+    const first = await RollingQuotaGuard.create({
+      storage,
+      policies: {
+        "odds-api-io": DEFAULT_ODDS_API_IO_QUOTA_POLICY,
+      },
+      clock,
+    });
+    await first.tryAcquire("odds-api-io");
+    await first.tryAcquire("odds-api-io");
+    await first.tryAcquire("odds-api-io");
+
+    const restored = await RollingQuotaGuard.create({
+      storage,
+      policies: {
+        "odds-api-io": DEFAULT_ODDS_API_IO_QUOTA_POLICY,
+      },
+      clock,
+    });
+    await expect(restored.remaining("odds-api-io")).resolves.toEqual({
+      minute: 87,
+      hour: 87,
+      day: 447,
+    });
   });
 });

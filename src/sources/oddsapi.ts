@@ -8,6 +8,25 @@ import type {
 } from "../schema.ts";
 import type { OddsSource, SourceConfig } from "./contract.ts";
 
+export const THE_ODDS_API_H2H_REQUEST = {
+  sport: "mma_mixed_martial_arts",
+  region: "us",
+  market: "h2h",
+} as const;
+
+export interface TheOddsApiH2hRequest {
+  sport: typeof THE_ODDS_API_H2H_REQUEST.sport;
+  region: typeof THE_ODDS_API_H2H_REQUEST.region;
+  market: typeof THE_ODDS_API_H2H_REQUEST.market;
+}
+
+export interface TheOddsApiSource extends OddsSource {
+  getH2hSnapshot(
+    bout: Bout,
+    request: TheOddsApiH2hRequest,
+  ): Promise<OddsSnapshot | null>;
+}
+
 interface OddsApiOutcome {
   name: string;
   price: number;
@@ -107,14 +126,28 @@ function parseSnapshot(bout: Bout): OddsSnapshot | null {
   };
 }
 
-export function createOddsApiSource(config: SourceConfig): OddsSource {
+export function createOddsApiSource(config: SourceConfig): TheOddsApiSource {
   if (config.mode === "live") {
     throw new Error("odds-api live mode not available yet");
   }
 
+  const getH2hSnapshot = async (
+    bout: Bout,
+    request: TheOddsApiH2hRequest,
+  ): Promise<OddsSnapshot | null> => {
+    if (
+      request.sport !== THE_ODDS_API_H2H_REQUEST.sport ||
+      request.region !== THE_ODDS_API_H2H_REQUEST.region ||
+      request.market !== THE_ODDS_API_H2H_REQUEST.market
+    ) {
+      return null;
+    }
+    return parseSnapshot(bout);
+  };
   return {
+    getH2hSnapshot,
     async getOddsSnapshot(bout: Bout): Promise<OddsSnapshot | null> {
-      return parseSnapshot(bout);
+      return getH2hSnapshot(bout, THE_ODDS_API_H2H_REQUEST);
     },
   };
 }

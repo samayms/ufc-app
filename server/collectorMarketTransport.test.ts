@@ -9,6 +9,50 @@ import { MemoryStorage } from "./storage.ts";
 
 const collectors: Collector[] = [];
 
+class ManualTime {
+  value = Date.parse("2026-07-26T02:40:40Z");
+
+  private nextId = 1;
+
+  private readonly timers = new Map<
+    number,
+    { callback: () => void; dueAt: number }
+  >();
+
+  now(): number {
+    return this.value;
+  }
+
+  setTimeout(callback: () => void, delayMs: number): unknown {
+    const id = this.nextId;
+    this.nextId += 1;
+    this.timers.set(id, {
+      callback,
+      dueAt: this.value + delayMs,
+    });
+    return id;
+  }
+
+  clearTimeout(handle: unknown): void {
+    this.timers.delete(handle as number);
+  }
+
+  advance(milliseconds: number): void {
+    this.value += milliseconds;
+    while (true) {
+      const due = [...this.timers.entries()]
+        .filter(([, timer]) => timer.dueAt <= this.value)
+        .sort(
+          ([leftId, left], [rightId, right]) =>
+            left.dueAt - right.dueAt || leftId - rightId,
+        )[0];
+      if (due === undefined) return;
+      this.timers.delete(due[0]);
+      due[1].callback();
+    }
+  }
+}
+
 afterEach(async () => {
   await Promise.all(
     collectors.splice(0).map((collector) => collector.close()),
@@ -17,9 +61,10 @@ afterEach(async () => {
 
 describe("collector market transport wiring", () => {
   it("constructs dormant fixture replayers and starts them only on replay()", async () => {
+    const storage = new MemoryStorage();
     const collector = await createCollector({
       env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
-      storage: new MemoryStorage(),
+      storage,
       market: {
         clock: { now: () => Date.parse("2026-07-26T02:40:40Z") },
         staleAfterMs: 60_000,
@@ -42,5 +87,144 @@ describe("collector market transport wiring", () => {
     await expect(
       collector.tickStore.getTickHistory("bout-main", "polymarket"),
     ).resolves.toHaveLength(6);
+    await expect(
+      collector.tickStore.getTickHistory("bout-main", "odds-api-io"),
+    ).resolves.toHaveLength(4);
+    expect(collector.getBootstrap()).toMatchObject({
+      boutMappings: expect.arrayContaining([
+        expect.objectContaining({
+          internalBoutId: "bout-main",
+          externalRefs: expect.arrayContaining([
+            {
+              source: "odds-api-io",
+              id: "oai-bout-reyes-volkov",
+            },
+          ]),
+        }),
+      ]),
+      latestMarkets: expect.arrayContaining([
+        expect.objectContaining({
+          source: "odds-api-io",
+          bookmaker: "draftkings",
+          rawOdds: -172,
+        }),
+      ]),
+    });
+    await expect(storage.read("sse-events")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          event: "update",
+          data: {
+            kind: "market-tick",
+            tick: expect.objectContaining({
+              source: "odds-api-io",
+              bookmaker: "draftkings",
+            }),
+          },
+        }),
+      ]),
+    );
+    collector.eventBus.emit({
+      type: "PROVISIONAL_ROUND_ENDED",
+      boutId: "bout-main",
+      round: 2,
+      detectedAt: "2026-07-26T02:40:40Z",
+    });
+    await collector.tickStore.idle();
+    await collector.oddsApiIoPoller.idle();
+    await collector.tickStore.idle();
+    await collector.roundStats.idle();
+    expect(
+      collector.roundStats.getUnifiedRound("bout-main", 2),
+    ).toMatchObject({
+      marketAtEnd: {
+        oddsApiIo: expect.objectContaining({
+          source: "odds-api-io",
+          boundaryType: "provisional",
+        }),
+      },
+    });
+  });
+
+  it("wires the delayed broad-book snapshot into SSE, bootstrap, and the unified round", async () => {
+    const storage = new MemoryStorage();
+    const time = new ManualTime();
+    const collector = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage,
+      market: {
+        clock: time,
+        staleAfterMs: 60_000,
+      },
+      sportsbook: {
+        clock: time,
+        timer: time,
+        random: () => 0,
+      },
+    });
+    collectors.push(collector);
+
+    collector.eventBus.emit({
+      type: "ROUND_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: new Date(time.now()).toISOString(),
+      confirmation: "period_transition",
+    });
+    await collector.roundStats.idle();
+    await collector.theOddsApiJob.idle();
+    time.advance(20_000);
+    await collector.theOddsApiJob.idle();
+    await collector.tickStore.idle();
+    await collector.roundStats.idle();
+
+    expect(collector.getBootstrap()).toMatchObject({
+      latestMarkets: expect.arrayContaining([
+        expect.objectContaining({
+          source: "the-odds-api",
+          bookmaker: "draftkings",
+          rawOdds: -185,
+        }),
+      ]),
+      marketSnapshots: expect.arrayContaining([
+        expect.objectContaining({
+          source: "the-odds-api",
+          label: "broad-post-round-comparison",
+        }),
+      ]),
+      unifiedRounds: expect.arrayContaining([
+        expect.objectContaining({
+          boutId: "bout-main",
+          round: 1,
+          marketAtEnd: {
+            theOddsApi: expect.objectContaining({
+              source: "the-odds-api",
+              label: "broad-post-round-comparison",
+            }),
+          },
+        }),
+      ]),
+    });
+    await expect(storage.read("sse-events")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          data: {
+            kind: "market-tick",
+            tick: expect.objectContaining({
+              source: "the-odds-api",
+            }),
+          },
+        }),
+        expect.objectContaining({
+          data: {
+            kind: "market-snapshot",
+            snapshot: expect.objectContaining({
+              source: "the-odds-api",
+              label: "broad-post-round-comparison",
+            }),
+          },
+        }),
+      ]),
+    );
   });
 });

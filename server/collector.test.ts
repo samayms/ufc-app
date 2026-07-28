@@ -283,7 +283,18 @@ describe.skipIf(!localhostAvailable)(
 
     expect(firstUpdate.id).toBeGreaterThan(bootstrap.id);
     expect(replayed.id).toBe(firstUpdate.id + 1);
-    expect(replayed.data).toMatchObject({
+
+    let lifecycleEnd = replayed;
+    let previousId = replayed.id;
+    while (
+      (lifecycleEnd.data as { event?: { type?: string } }).event?.type !==
+      "FIGHT_ENDED"
+    ) {
+      lifecycleEnd = await resumed.nextEvent();
+      expect(lifecycleEnd.id).toBe(previousId + 1);
+      previousId = lifecycleEnd.id;
+    }
+    expect(lifecycleEnd.data).toMatchObject({
       event: { type: "FIGHT_ENDED" },
     });
   });
