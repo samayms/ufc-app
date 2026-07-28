@@ -46,6 +46,13 @@ class TestSseClient {
     return event;
   }
 
+  async nextEventOfType(eventName: string): Promise<ParsedSseEvent> {
+    while (true) {
+      const event = await this.nextEvent();
+      if (event.event === eventName) return event;
+    }
+  }
+
   async close(): Promise<void> {
     this.controller.abort();
     await this.reader.cancel().catch(() => undefined);
@@ -242,7 +249,7 @@ describe.skipIf(!localhostAvailable)(
       }),
     ).resolves.toBe(true);
 
-    const health = await client.nextEvent();
+    const health = await client.nextEventOfType("health");
     expect(health.event).toBe("health");
     expect(health.data).toMatchObject({
       source: "espn",
