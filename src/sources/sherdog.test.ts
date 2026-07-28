@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Bout, Fighter, Provenance } from "../schema.ts";
-import { createSherdogSource } from "./sherdog.ts";
+import {
+  createSherdogSource,
+  parserVersion,
+  parseSherdogRoundObservations,
+} from "./sherdog.ts";
 
 const fixtureProvenance: Provenance = {
   source: "fixture",
@@ -58,5 +62,34 @@ describe("createSherdogSource", () => {
     await expect(
       source.getRoundUpdates({ ...mainBout, id: "bout-unknown" }),
     ).resolves.toEqual([]);
+  });
+
+  it("stores versioned hashes and strips active or presentational HTML", async () => {
+    const observations = await parseSherdogRoundObservations({
+      boutId: mainBout.id,
+      html:
+        "<h3>Round 1</h3><p>Hello <b>fight</b><script>alert('x')</script>.</p><p>Sherdog scores the round 10-9 Reyes.</p>",
+      sourceUrl: "https://www.sherdog.com/news/fixture",
+      fetchedAt: "2026-07-28T00:00:10Z",
+    });
+
+    expect(observations).toEqual([
+      expect.objectContaining({
+        boutId: mainBout.id,
+        round: 1,
+        commentary: "Hello fight .",
+        scorerCards: [
+          {
+            scorer: "Sherdog",
+            winner: "Reyes",
+            roundScore: "10-9",
+          },
+        ],
+        parserVersion,
+        payloadHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      }),
+    ]);
+    expect(JSON.stringify(observations)).not.toContain("<");
+    expect(JSON.stringify(observations)).not.toContain("alert");
   });
 });

@@ -3,6 +3,7 @@ import type {
   CitoRoundStatsFetcher,
   CitoRoundStatsPayload,
 } from "../src/sources/cito.ts";
+import type { ParsedExpertScore } from "../src/sources/x.ts";
 import type {
   MarketSnapshot,
   MarketSource,
@@ -501,6 +502,38 @@ describe("RoundStatsPipeline", () => {
     expect(maximumActive).toBe(1);
     expect(pipeline.getRoundStats(BOUT_ID, 1)).toBeDefined();
     expect(pipeline.getRoundStats(BOUT_ID, 2)).toBeDefined();
+    await pipeline.close();
+  });
+
+  it("deduplicates expert score replays by source and source post id", async () => {
+    const { bus, pipeline } = await setup(fetcher([payload()]));
+    emitProvisional(bus, 1);
+    emitProvisional(bus, 2);
+    await pipeline.idle();
+    const score: ParsedExpertScore = {
+      source: "x",
+      sourcePostId: "12345",
+      scorer: "MMAJunkie",
+      round: 1,
+      score: { red: 10, blue: 9 },
+      fetchedAt: "2026-07-28T00:00:40Z",
+      parseConfidence: 1,
+      mode: "manual",
+      postUrl: "https://x.com/MMAJunkie/status/12345",
+    };
+
+    await expect(
+      pipeline.setXScores(BOUT_ID, 1, [score, score]),
+    ).resolves.toBe(true);
+    await expect(
+      pipeline.setXScores(BOUT_ID, 1, [score]),
+    ).resolves.toBe(false);
+    await expect(
+      pipeline.setXScores(BOUT_ID, 2, [{ ...score, round: 2 }]),
+    ).resolves.toBe(false);
+
+    expect(pipeline.getUnifiedRound(BOUT_ID, 1)?.xScores).toHaveLength(1);
+    expect(pipeline.getUnifiedRound(BOUT_ID, 2)?.xScores).toBeUndefined();
     await pipeline.close();
   });
 });

@@ -31,6 +31,17 @@ describe("loadConfig", () => {
       ODDS_API_IO_BOOKMAKERS: " FanDuel,betmgm,fanduel ",
       X_MODE: "manual",
       X_SPEND_CAP_USD: "12.50",
+      X_REQUEST_COST_USD: "0.02",
+      X_MANUAL_SCORES_JSON: JSON.stringify([
+        {
+          boutId: "bout-main",
+          sourcePostId: "123",
+          scorer: "MMAJunkie",
+          round: 1,
+          score: { red: 10, blue: 9 },
+          postUrl: "https://x.com/MMAJunkie/status/123",
+        },
+      ]),
       SHERDOG_PERMISSION_SCOPE: "live-blog-read",
       SHERDOG_REQUEST_INTERVAL_MS: "600000",
       STALE_LIFECYCLE_MS: "1000",
@@ -45,6 +56,13 @@ describe("loadConfig", () => {
     ]);
     expect(config.xMode).toBe("manual");
     expect(config.xSpendCapUsd).toBe(12.5);
+    expect(config.xRequestCostUsd).toBe(0.02);
+    expect(config.xManualScores).toEqual([
+      expect.objectContaining({
+        sourcePostId: "123",
+        score: { red: 10, blue: 9 },
+      }),
+    ]);
     expect(config.sherdog).toEqual({
       permissionScope: "live-blog-read",
       requestIntervalMs: 600_000,
@@ -64,6 +82,10 @@ describe("loadConfig", () => {
       CREDENTIAL_ENV_NAMES.filter(
         (name) => name !== "X_BEARER_TOKEN",
       ).map((name) => [name, `secret-${name}`]),
+    );
+
+    expect(() => loadConfig({ X_MODE: "api" })).toThrow(
+      /X_BEARER_TOKEN/,
     );
 
     expect(() =>

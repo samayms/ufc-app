@@ -18,6 +18,7 @@ import { createKalshiSource } from "../sources/kalshi.ts";
 import { createOddsApiSource } from "../sources/oddsapi.ts";
 import { createPolymarketSource } from "../sources/polymarket.ts";
 import { createSherdogSource } from "../sources/sherdog.ts";
+import { createXSource } from "../sources/x.ts";
 import {
   createCollectorClient,
   type CollectorSnapshot,
@@ -59,6 +60,7 @@ export async function assembleDashboard(): Promise<DashboardState> {
   const kalshi = createKalshiSource(config);
   const espn = createEspnSource(config);
   const cito = createCitoSource(config);
+  const x = createXSource({ mode: "embed", fixtureMode: true });
 
   const boutViews: Record<string, BoutView> = {};
   await Promise.all(
@@ -93,7 +95,7 @@ export async function assembleDashboard(): Promise<DashboardState> {
         rounds,
         latestOdds,
         oddsHistory,
-        scorecards: [],
+        scorecards: x.configuredEmbeds(bout.id),
       };
     }),
   );

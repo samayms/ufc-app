@@ -173,6 +173,11 @@ export default function App() {
                     <ScorecardFeed
                       view={view}
                       accounts={state.scorecardAccounts}
+                      records={
+                        dashboard.collector?.unifiedRounds ?? []
+                      }
+                      round={selectedRound}
+                      collector={dashboard.collector}
                     />
                   </>
                 )}

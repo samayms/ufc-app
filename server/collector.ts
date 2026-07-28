@@ -31,6 +31,11 @@ import {
 } from "../src/sources/oddsApiIo.ts";
 import { createPolymarketSource } from "../src/sources/polymarket.ts";
 import { createSherdogSource } from "../src/sources/sherdog.ts";
+import {
+  createXSource,
+  type XApiFetcher,
+  type XScoreSource,
+} from "../src/sources/x.ts";
 import { loadFixtureEvent } from "../src/store/fixtureEvent.ts";
 import {
   credentialValues,
@@ -81,6 +86,11 @@ import {
   type UnifiedRoundRecord,
 } from "./roundStats.ts";
 import {
+  createFixtureSherdogFetcher,
+  SherdogRoundJobs,
+  type SherdogFetcher,
+} from "./sherdogJobs.ts";
+import {
   JsonlStorage,
   type Storage,
 } from "./storage.ts";
@@ -91,6 +101,7 @@ import {
   type TickStoreClock,
 } from "./tickStore.ts";
 import { TheOddsApiRoundJob } from "./theOddsApiJob.ts";
+import { XRoundJobs } from "./xJobs.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
 export const COLLECTOR_HEALTH_STREAM = "source-health";
@@ -143,6 +154,17 @@ export interface CollectorSportsbookOptions {
   oddsApiIoQuotaPolicy?: QuotaPolicy;
 }
 
+export interface CollectorSherdogOptions {
+  fetcher?: SherdogFetcher;
+  random?: () => number;
+  requestTimeoutMs?: number;
+}
+
+export interface CollectorXOptions {
+  source?: XScoreSource;
+  apiFetcher?: XApiFetcher;
+}
+
 export type NormalizedStateLoader = (
   config: CollectorConfig,
 ) => Promise<DashboardState>;
@@ -160,6 +182,8 @@ export interface CreateCollectorOptions {
   roundStats?: CollectorRoundStatsOptions;
   market?: CollectorMarketOptions;
   sportsbook?: CollectorSportsbookOptions;
+  sherdog?: CollectorSherdogOptions;
+  x?: CollectorXOptions;
 }
 
 export interface Collector {
@@ -172,6 +196,8 @@ export interface Collector {
   readonly marketTransports: readonly MarketTransport[];
   readonly oddsApiIoPoller: OddsApiIoPoller;
   readonly theOddsApiJob: TheOddsApiRoundJob;
+  readonly sherdogJobs: SherdogRoundJobs;
+  readonly xJobs: XRoundJobs;
   readonly lifecycle: FightLifecycleMachine;
   readonly server: Server;
   start(): Promise<number>;
@@ -343,7 +369,12 @@ function fixtureHealth(state: DashboardState): SourceHealth[] {
   });
 }
 
-export async function loadFixtureState(): Promise<DashboardState> {
+export async function loadFixtureState(
+  collectorConfig?: Pick<
+    CollectorConfig,
+    "xMode" | "xEmbeds" | "xManualScores"
+  >,
+): Promise<DashboardState> {
   const sourceConfig: SourceConfig = { mode: "fixture" };
   const event = loadFixtureEvent();
   const polymarket = createPolymarketSource(sourceConfig);
@@ -352,6 +383,15 @@ export async function loadFixtureState(): Promise<DashboardState> {
   const kalshi = createKalshiSource(sourceConfig);
   const espn = createEspnSource(sourceConfig);
   const cito = createCitoSource(sourceConfig);
+  const x = createXSource({
+    mode:
+      (collectorConfig?.xMode ?? "embed") === "embed"
+        ? "embed"
+        : "disabled",
+    embeds: collectorConfig?.xEmbeds ?? [],
+    manualScores: collectorConfig?.xManualScores ?? [],
+    fixtureMode: true,
+  });
   const boutViews: Record<string, BoutView> = {};
 
   for (const bout of event.bouts) {
@@ -389,7 +429,7 @@ export async function loadFixtureState(): Promise<DashboardState> {
       rounds,
       latestOdds,
       oddsHistory,
-      scorecards: [],
+      scorecards: x.configuredEmbeds(bout.id),
     };
   }
 
@@ -406,7 +446,7 @@ async function defaultStateLoader(
   config: CollectorConfig,
 ): Promise<DashboardState> {
   if (config.dataMode === "fixture") {
-    return loadFixtureState();
+    return loadFixtureState(config);
   }
 
   throw new Error(
@@ -519,6 +559,26 @@ export async function createCollector(
     ...options.sse,
   });
   await push.restore();
+
+  const publishHealth = async (
+    nextHealth: SourceHealth,
+  ): Promise<boolean> => {
+    validateHealth(nextHealth);
+    const next = copyHealth(nextHealth);
+    const previous = health.get(next.source);
+    if (!healthChanged(previous, next)) {
+      health.set(next.source, next);
+      return false;
+    }
+
+    health.set(next.source, next);
+    await storage.append(COLLECTOR_HEALTH_STREAM, {
+      version: 1,
+      health: next,
+    } satisfies PersistedSourceHealth);
+    await push.publish("health", next);
+    return true;
+  };
 
   const eventBus = new CollectorEventBus();
   const unsubscribers = (
@@ -693,6 +753,66 @@ export async function createCollector(
     options.sportsbook?.timer ?? options.roundStats?.timer;
   const findBout = (boutId: string) =>
     loaded.event.bouts.find((bout) => bout.id === boutId);
+  const initializedSherdogJobs = await SherdogRoundJobs.create({
+    eventBus,
+    scheduler: initializedRoundStats.scheduler,
+    storage,
+    roundStats: initializedRoundStats,
+    fetcher:
+      options.sherdog?.fetcher ??
+      (config.dataMode === "fixture"
+        ? createFixtureSherdogFetcher()
+        : {
+            async fetchBout() {
+              return {
+                status: 503,
+                html: "",
+                sourceUrl: "https://www.sherdog.com/",
+              };
+            },
+          }),
+    getBout: findBout,
+    dataMode: config.dataMode,
+    permissionScope: config.sherdog.permissionScope,
+    requestIntervalMs: config.sherdog.requestIntervalMs,
+    publishHealth,
+    ...(roundJobClock === undefined ? {} : { clock: roundJobClock }),
+    ...(options.sherdog?.random === undefined
+      ? {}
+      : { random: options.sherdog.random }),
+    ...(options.sherdog?.requestTimeoutMs === undefined
+      ? {}
+      : { requestTimeoutMs: options.sherdog.requestTimeoutMs }),
+  });
+  const initializedXSource =
+    options.x?.source ??
+    createXSource({
+      mode: config.xMode,
+      bearerToken: config.credentials.X_BEARER_TOKEN,
+      embeds: config.xEmbeds,
+      manualScores: config.xManualScores,
+      fixtureMode: config.dataMode === "fixture",
+      ...(options.x?.apiFetcher === undefined
+        ? {}
+        : { apiFetcher: options.x.apiFetcher }),
+      ...(roundJobClock === undefined
+        ? {}
+        : {
+            now: () =>
+              new Date(roundJobClock.now()).toISOString(),
+          }),
+    });
+  const initializedXJobs = await XRoundJobs.create({
+    eventBus,
+    scheduler: initializedRoundStats.scheduler,
+    storage,
+    source: initializedXSource,
+    roundStats: initializedRoundStats,
+    getBout: findBout,
+    spendingCapUsd: config.xSpendCapUsd,
+    requestCostUsd: config.xRequestCostUsd,
+    ...(roundJobClock === undefined ? {} : { clock: roundJobClock }),
+  });
   const initializedOddsApiIoPoller = await OddsApiIoPoller.create({
     eventBus,
     storage,
@@ -770,26 +890,6 @@ export async function createCollector(
     }),
   );
 
-  const publishHealth = async (
-    nextHealth: SourceHealth,
-  ): Promise<boolean> => {
-    validateHealth(nextHealth);
-    const next = copyHealth(nextHealth);
-    const previous = health.get(next.source);
-    if (!healthChanged(previous, next)) {
-      health.set(next.source, next);
-      return false;
-    }
-
-    health.set(next.source, next);
-    await storage.append(COLLECTOR_HEALTH_STREAM, {
-      version: 1,
-      health: next,
-    } satisfies PersistedSourceHealth);
-    await push.publish("health", next);
-    return true;
-  };
-
   if (config.dataMode === "fixture") {
     for (const sourceHealth of fixtureHealth(loaded)) {
       await publishHealth(sourceHealth);
@@ -859,6 +959,8 @@ export async function createCollector(
     marketTransports,
     oddsApiIoPoller: initializedOddsApiIoPoller,
     theOddsApiJob: initializedTheOddsApiJob,
+    sherdogJobs: initializedSherdogJobs,
+    xJobs: initializedXJobs,
     lifecycle,
     server,
     async start() {
@@ -886,6 +988,8 @@ export async function createCollector(
       for (const unsubscribe of unsubscribers) unsubscribe();
       await initializedOddsApiIoPoller.close();
       await initializedTheOddsApiJob.close();
+      await initializedSherdogJobs.close();
+      await initializedXJobs.close();
       await Promise.all(
         marketTransports.map((transport) => transport.disconnect()),
       );

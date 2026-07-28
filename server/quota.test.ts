@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ODDS_API_IO_QUOTA_POLICY,
+  RequestIntervalGuard,
   RollingQuotaGuard,
+  SpendingCapGuard,
   type QuotaClock,
 } from "./quota.ts";
 import { MemoryStorage } from "./storage.ts";
@@ -136,5 +138,47 @@ describe("RollingQuotaGuard", () => {
       hour: 87,
       day: 447,
     });
+  });
+
+  it("enforces persisted minimum request intervals", async () => {
+    const storage = new MemoryStorage();
+    const clock = new TestClock(Date.parse("2026-07-28T00:00:00Z"));
+    const first = await RequestIntervalGuard.create({
+      storage,
+      intervalsMs: { sherdog: 30_000 },
+      clock,
+    });
+
+    await expect(first.tryAcquire("sherdog")).resolves.toBe(true);
+    await expect(first.tryAcquire("sherdog")).resolves.toBe(false);
+    clock.advance(29_999);
+    const restored = await RequestIntervalGuard.create({
+      storage,
+      intervalsMs: { sherdog: 30_000 },
+      clock,
+    });
+    await expect(restored.tryAcquire("sherdog")).resolves.toBe(false);
+    clock.advance(1);
+    await expect(restored.tryAcquire("sherdog")).resolves.toBe(true);
+  });
+
+  it("persists paid API spend and refuses the request that crosses the cap", async () => {
+    const storage = new MemoryStorage();
+    const clock = new TestClock(Date.parse("2026-07-28T00:00:00Z"));
+    const first = await SpendingCapGuard.create({
+      storage,
+      capsUsd: { "x-api": 0.02 },
+      clock,
+    });
+
+    await expect(first.trySpend("x-api", 0.01)).resolves.toBe(true);
+    const restored = await SpendingCapGuard.create({
+      storage,
+      capsUsd: { "x-api": 0.02 },
+      clock,
+    });
+    await expect(restored.trySpend("x-api", 0.01)).resolves.toBe(true);
+    await expect(restored.trySpend("x-api", 0.01)).resolves.toBe(false);
+    await expect(restored.spentUsd("x-api")).resolves.toBe(0.02);
   });
 });

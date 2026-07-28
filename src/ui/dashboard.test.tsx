@@ -95,7 +95,7 @@ describe("dashboard state surfaces", () => {
     expect(sources).toContain("Fixture data");
   });
 
-  it("reserves exactly four compact media scorecard slots", async () => {
+  it("shows an honest expert-score empty state without invented posts", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];
     expect(view).toBeDefined();
@@ -104,8 +104,89 @@ describe("dashboard state surfaces", () => {
     const scorecards = renderToStaticMarkup(
       <ScorecardFeed view={view} accounts={state.scorecardAccounts} />,
     );
-    expect(scorecards.match(/class="media-scorecard"/g)).toHaveLength(4);
-    expect(scorecards).toContain("10–9");
-    expect(scorecards).not.toContain("Cleaner counters");
+    expect(scorecards).toContain(
+      "No configured X scorecard posts for this round.",
+    );
+    expect(scorecards).not.toContain('class="media-scorecard"');
+    expect(scorecards).not.toContain("10–9");
+  });
+
+  it("renders collector-delivered Sherdog and X values with separate provenance", async () => {
+    const state = await assembleDashboard();
+    const view = state.boutViews["bout-main"];
+    expect(view).toBeDefined();
+    if (!view) return;
+
+    const scorecards = renderToStaticMarkup(
+      <ScorecardFeed
+        view={view}
+        accounts={state.scorecardAccounts}
+        round={1}
+        records={[
+          {
+            boutId: view.bout.id,
+            round: 1,
+            detectedEndedAt: "2026-07-28T00:00:00Z",
+            endingSignal: "period_transition",
+            sherdog: {
+              boutId: view.bout.id,
+              round: 1,
+              commentary: "Measured exchanges.",
+              scorerCards: [
+                {
+                  scorer: "Sherdog",
+                  winner: "Reyes",
+                  roundScore: "10-9",
+                },
+              ],
+              sourceUrl: "https://www.sherdog.com/news/fixture",
+              publishedAt: "2026-07-28T00:00:09Z",
+              fetchedAt: "2026-07-28T00:00:10Z",
+              parserVersion: "test",
+              payloadHash: "hash",
+            },
+            xScores: [
+              {
+                source: "x",
+                sourcePostId: "123",
+                scorer: "MMAJunkie",
+                round: 1,
+                score: { red: 10, blue: 9 },
+                fetchedAt: "2026-07-28T00:00:40Z",
+                parseConfidence: 1,
+                mode: "embed",
+                postUrl: "https://x.com/MMAJunkie/status/123",
+              },
+            ],
+            marketAtEnd: {},
+            expertConsensus: {
+              sherdog: {
+                source: "sherdog",
+                redVotes: 1,
+                blueVotes: 0,
+                drawVotes: 0,
+                total: 1,
+                leader: "red",
+              },
+              x: {
+                source: "x",
+                redVotes: 1,
+                blueVotes: 0,
+                drawVotes: 0,
+                total: 1,
+                leader: "red",
+              },
+            },
+            provisional: false,
+          },
+        ]}
+      />,
+    );
+
+    expect(scorecards).toContain("Measured exchanges.");
+    expect(scorecards).toContain("Sherdog");
+    expect(scorecards).toContain("X scorecards");
+    expect(scorecards).toContain("official-x-embed");
+    expect(scorecards).toContain("Sherdog and X stay separate");
   });
 });

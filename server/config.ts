@@ -1,4 +1,8 @@
 import { DEFAULT_DATA_DIRECTORY } from "./storage.ts";
+import type {
+  XConfiguredScore,
+  XEmbedMetadata,
+} from "../src/sources/x.ts";
 
 export const CREDENTIAL_ENV_NAMES = [
   "CITO_API_KEY",
@@ -34,6 +38,9 @@ export interface CollectorConfig {
   };
   oddsApiIoBookmakers: readonly string[];
   xSpendCapUsd: number;
+  xRequestCostUsd: number;
+  xEmbeds: readonly XEmbedMetadata[];
+  xManualScores: readonly XConfiguredScore[];
   sherdog: {
     permissionScope: string;
     requestIntervalMs: number;
@@ -147,6 +154,94 @@ function readCredentials(
   return credentials;
 }
 
+function parseXConfiguredScores(
+  env: CollectorEnvironment,
+  name: string,
+): readonly XConfiguredScore[] {
+  const raw = env[name]?.trim();
+  if (!raw) return [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    throw new TypeError(`${name} must be valid JSON`);
+  }
+  if (!Array.isArray(parsed)) {
+    throw new TypeError(`${name} must be a JSON array`);
+  }
+
+  return parsed.map((value, index) => {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      typeof value.boutId !== "string" ||
+      typeof value.sourcePostId !== "string" ||
+      typeof value.scorer !== "string" ||
+      !Number.isSafeInteger(value.round) ||
+      typeof value.score !== "object" ||
+      value.score === null ||
+      !Number.isSafeInteger(value.score.red) ||
+      !Number.isSafeInteger(value.score.blue) ||
+      (value.postUrl !== undefined && typeof value.postUrl !== "string")
+    ) {
+      throw new TypeError(`${name}[${index}] is not a configured X score`);
+    }
+    return {
+      boutId: value.boutId,
+      sourcePostId: value.sourcePostId,
+      scorer: value.scorer,
+      round: value.round as number,
+      score: {
+        red: value.score.red as number,
+        blue: value.score.blue as number,
+      },
+      ...(value.postUrl === undefined
+        ? {}
+        : { postUrl: value.postUrl }),
+    };
+  });
+}
+
+function parseXEmbeds(
+  env: CollectorEnvironment,
+  name: string,
+): readonly XEmbedMetadata[] {
+  const raw = env[name]?.trim();
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    throw new TypeError(`${name} must be valid JSON`);
+  }
+  if (!Array.isArray(parsed)) {
+    throw new TypeError(`${name} must be a JSON array`);
+  }
+  return parsed.map((value, index) => {
+    if (
+      typeof value !== "object" ||
+      value === null ||
+      typeof value.boutId !== "string" ||
+      typeof value.postId !== "string" ||
+      typeof value.scorer !== "string" ||
+      (value.round !== undefined && !Number.isSafeInteger(value.round)) ||
+      (value.postUrl !== undefined && typeof value.postUrl !== "string")
+    ) {
+      throw new TypeError(`${name}[${index}] is not X embed metadata`);
+    }
+    return {
+      boutId: value.boutId,
+      postId: value.postId,
+      scorer: value.scorer,
+      ...(value.round === undefined
+        ? {}
+        : { round: value.round as number }),
+      ...(value.postUrl === undefined ? {} : { postUrl: value.postUrl }),
+    };
+  });
+}
+
 function assertLiveCredentials(
   credentials: Readonly<Partial<Record<CredentialEnvName, string>>>,
   xMode: XMode,
@@ -190,6 +285,9 @@ export function loadConfig(
   );
   const credentials = readCredentials(env);
 
+  if (xMode === "api" && !credentials.X_BEARER_TOKEN) {
+    throw new Error("X API mode requires server credentials: X_BEARER_TOKEN");
+  }
   if (dataMode === "live") {
     assertLiveCredentials(credentials, xMode);
   }
@@ -232,6 +330,16 @@ export function loadConfig(
     },
     oddsApiIoBookmakers: parseBookmakers(env),
     xSpendCapUsd: parseNonNegativeNumber(env, "X_SPEND_CAP_USD", 0),
+    xRequestCostUsd: parseNonNegativeNumber(
+      env,
+      "X_REQUEST_COST_USD",
+      0.01,
+    ),
+    xEmbeds: parseXEmbeds(env, "X_EMBED_POSTS_JSON"),
+    xManualScores: parseXConfiguredScores(
+      env,
+      "X_MANUAL_SCORES_JSON",
+    ),
     sherdog: {
       permissionScope:
         env.SHERDOG_PERMISSION_SCOPE?.trim() || "none",

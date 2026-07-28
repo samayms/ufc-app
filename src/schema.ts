@@ -199,6 +199,41 @@ export interface RoundStats {
   knockdowns?: number;
 }
 
+export interface SherdogScorerCard {
+  scorer: string;
+  winner?: string;
+  roundScore?: string;
+  cumulativeScore?: string;
+}
+
+/** One validated, plain-text observation from the permitted live blog. */
+export interface SherdogRoundObservation {
+  boutId: string;
+  round: number;
+  commentary: string;
+  scorerCards: SherdogScorerCard[];
+  sourceUrl: string;
+  publishedAt?: string;
+  fetchedAt: string;
+  parserVersion: string;
+  payloadHash: string;
+}
+
+export interface ExpertConsensusValue {
+  source: "sherdog" | "x";
+  redVotes: number;
+  blueVotes: number;
+  drawVotes: number;
+  total: number;
+  leader?: Corner | "draw";
+}
+
+/** Source-specific expert reads. These values are deliberately never merged. */
+export interface ExpertConsensus {
+  sherdog?: ExpertConsensusValue;
+  x?: ExpertConsensusValue;
+}
+
 // ---------------------------------------------------------------------------
 // Odds — three market kinds, deliberately kept distinguishable
 // ---------------------------------------------------------------------------

@@ -7,6 +7,10 @@ import {
 } from "./collector.ts";
 import { CREDENTIAL_ENV_NAMES } from "./config.ts";
 import { MemoryStorage } from "./storage.ts";
+import type {
+  RoundJobClock,
+  RoundJobTimer,
+} from "./roundJobs.ts";
 
 interface ParsedSseEvent {
   id: number;
@@ -111,6 +115,44 @@ class TestSseClient {
 
 const collectors: Collector[] = [];
 const clients: TestSseClient[] = [];
+
+class ManualRoundTime implements RoundJobClock, RoundJobTimer {
+  value = Date.parse("2026-07-28T00:00:00Z");
+  private nextId = 1;
+  private readonly timers = new Map<
+    number,
+    { callback: () => void; dueAt: number }
+  >();
+
+  now(): number {
+    return this.value;
+  }
+  setTimeout(callback: () => void, delayMs: number): unknown {
+    const id = this.nextId++;
+    this.timers.set(id, {
+      callback,
+      dueAt: this.value + delayMs,
+    });
+    return id;
+  }
+  clearTimeout(handle: unknown): void {
+    this.timers.delete(handle as number);
+  }
+  advance(milliseconds: number): void {
+    this.value += milliseconds;
+    for (;;) {
+      const next = [...this.timers.entries()]
+        .filter(([, timer]) => timer.dueAt <= this.value)
+        .sort(
+          ([leftId, left], [rightId, right]) =>
+            left.dueAt - right.dueAt || leftId - rightId,
+        )[0];
+      if (next === undefined) return;
+      this.timers.delete(next[0]);
+      next[1].callback();
+    }
+  }
+}
 
 async function canBindLocalhost(): Promise<boolean> {
   const server = createServer((_request, response) => {
@@ -555,5 +597,110 @@ describe("fixture collector loading", () => {
         },
       }),
     ]);
+  });
+
+  it("delivers Sherdog observations through unified bootstrap and SSE records", async () => {
+    const storage = new MemoryStorage();
+    const time = new ManualRoundTime();
+    const collector = await createCollector({
+      env: {
+        DATA_MODE: "fixture",
+        COLLECTOR_PORT: "0",
+        SHERDOG_REQUEST_INTERVAL_MS: "1",
+      },
+      storage,
+      roundStats: { clock: time, timer: time },
+      sherdog: { random: () => 0 },
+    });
+    collectors.push(collector);
+
+    collector.eventBus.emit({
+      type: "PROVISIONAL_ROUND_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: "2026-07-28T00:00:00Z",
+    });
+    await collector.roundStats.idle();
+    time.advance(10_000);
+    await collector.sherdogJobs.idle();
+
+    expect(collector.getBootstrap().unifiedRounds).toEqual([
+      expect.objectContaining({
+        boutId: "bout-main",
+        round: 1,
+        sherdog: expect.objectContaining({
+          commentary: expect.stringContaining(
+            "Reyes takes the center",
+          ),
+          parserVersion: expect.any(String),
+          payloadHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
+        expertConsensus: {
+          sherdog: expect.objectContaining({
+            source: "sherdog",
+          }),
+        },
+      }),
+    ]);
+    await expect(storage.read("sse-events")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          data: {
+            kind: "round",
+            record: expect.objectContaining({
+              boutId: "bout-main",
+              sherdog: expect.objectContaining({ round: 1 }),
+            }),
+          },
+        }),
+      ]),
+    );
+  });
+
+  it("wires configured manual X score links into the unified round", async () => {
+    const collector = await createCollector({
+      env: {
+        DATA_MODE: "fixture",
+        COLLECTOR_PORT: "0",
+        X_MODE: "manual",
+        X_MANUAL_SCORES_JSON: JSON.stringify([
+          {
+            boutId: "bout-main",
+            sourcePostId: "12345",
+            scorer: "MMAJunkie",
+            round: 1,
+            score: { red: 10, blue: 9 },
+            postUrl: "https://x.com/MMAJunkie/status/12345",
+          },
+        ]),
+      },
+      storage: new MemoryStorage(),
+    });
+    collectors.push(collector);
+
+    collector.eventBus.emit({
+      type: "ROUND_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: "2026-07-28T00:00:00Z",
+      confirmation: "period_transition",
+    });
+    await collector.xJobs.idle();
+
+    expect(
+      collector.roundStats.getUnifiedRound("bout-main", 1),
+    ).toMatchObject({
+      xScores: [
+        {
+          source: "x",
+          sourcePostId: "12345",
+          mode: "manual",
+          postUrl: "https://x.com/MMAJunkie/status/12345",
+        },
+      ],
+      expertConsensus: {
+        x: expect.objectContaining({ source: "x", leader: "red" }),
+      },
+    });
   });
 });

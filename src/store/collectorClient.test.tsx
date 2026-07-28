@@ -92,6 +92,54 @@ function roundRecord(provisional: boolean, revision: number) {
       firstObservedAt: "2026-07-28T01:02:04Z",
       lastObservedAt: `2026-07-28T01:02:0${revision + 3}Z`,
     },
+    sherdog: {
+      boutId: "bout-main",
+      round: 2,
+      commentary: "Collector-delivered commentary.",
+      scorerCards: [
+        {
+          scorer: "Sherdog",
+          winner: "Volkov",
+          roundScore: "10-9",
+        },
+      ],
+      sourceUrl: "https://www.sherdog.com/news/fixture",
+      publishedAt: "2026-07-28T01:02:02Z",
+      fetchedAt: "2026-07-28T01:02:05Z",
+      parserVersion: "test",
+      payloadHash: `hash-${revision}`,
+    },
+    xScores: [
+      {
+        source: "x",
+        sourcePostId: "12345",
+        scorer: "MMAJunkie",
+        round: 2,
+        score: { red: 9, blue: 10 },
+        fetchedAt: "2026-07-28T01:02:40Z",
+        parseConfidence: 1,
+        mode: "embed",
+        postUrl: "https://x.com/MMAJunkie/status/12345",
+      },
+    ],
+    expertConsensus: {
+      sherdog: {
+        source: "sherdog",
+        redVotes: 0,
+        blueVotes: 1,
+        drawVotes: 0,
+        total: 1,
+        leader: "blue",
+      },
+      x: {
+        source: "x",
+        redVotes: 0,
+        blueVotes: 1,
+        drawVotes: 0,
+        total: 1,
+        leader: "blue",
+      },
+    },
     marketAtEnd: {},
     provisional,
     ...(provisional
@@ -173,6 +221,21 @@ describe("collector browser client", () => {
         ?.find((update) => update.round === 2)
         ?.stats?.red?.significantStrikes,
     ).toBe(40);
+    expect(
+      bootstrapped.dashboard?.boutViews["bout-main"]?.rounds.sherdog
+        ?.find((update) => update.round === 2)?.summary,
+    ).toBe("Collector-delivered commentary.");
+    expect(
+      bootstrapped.dashboard?.boutViews["bout-main"]?.scorecards,
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ postId: "12345", round: 2 }),
+      ]),
+    );
+    expect(bootstrapped.unifiedRounds[0]?.expertConsensus).toMatchObject({
+      sherdog: { source: "sherdog" },
+      x: { source: "x" },
+    });
     expect(
       getCollectorRoundDelivery(bootstrapped, "bout-main", 2),
     ).toMatchObject({

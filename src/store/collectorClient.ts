@@ -1,10 +1,13 @@
 import type {
   Bout,
   DashboardState,
+  ExpertConsensus,
   RoundStats,
   RoundUpdate,
+  SherdogRoundObservation,
 } from "../schema.ts";
 import type { MarketSnapshot } from "../sources/contract.ts";
+import type { ParsedExpertScore } from "../sources/x.ts";
 
 export const DEFAULT_COLLECTOR_PORT = 8600;
 
@@ -58,12 +61,15 @@ export interface CollectorUnifiedRound {
     | "period_transition"
     | "fight_completed";
   citoStats?: CollectorRoundStats;
+  sherdog?: SherdogRoundObservation;
+  xScores?: ParsedExpertScore[];
   marketAtEnd: {
     kalshi?: MarketSnapshot;
     polymarket?: MarketSnapshot;
     oddsApiIo?: MarketSnapshot;
     theOddsApi?: MarketSnapshot;
   };
+  expertConsensus?: ExpertConsensus;
   provisional: boolean;
   finalizedAt?: string;
 }
@@ -282,12 +288,168 @@ function parseRoundStats(value: unknown): CollectorRoundStats | null {
   };
 }
 
+function parseSherdogObservation(
+  value: unknown,
+): SherdogRoundObservation | null {
+  if (
+    !isRecord(value) ||
+    typeof value.boutId !== "string" ||
+    !Number.isSafeInteger(value.round) ||
+    (value.round as number) < 1 ||
+    typeof value.commentary !== "string" ||
+    /<[^>]*>/.test(value.commentary) ||
+    !Array.isArray(value.scorerCards) ||
+    typeof value.sourceUrl !== "string" ||
+    (value.publishedAt !== undefined &&
+      !isTimestamp(value.publishedAt)) ||
+    !isTimestamp(value.fetchedAt) ||
+    typeof value.parserVersion !== "string" ||
+    typeof value.payloadHash !== "string"
+  ) {
+    return null;
+  }
+  const scorerCards = value.scorerCards.flatMap((card) => {
+    if (
+      !isRecord(card) ||
+      typeof card.scorer !== "string" ||
+      (card.winner !== undefined && typeof card.winner !== "string") ||
+      (card.roundScore !== undefined &&
+        typeof card.roundScore !== "string") ||
+      (card.cumulativeScore !== undefined &&
+        typeof card.cumulativeScore !== "string")
+    ) {
+      return [];
+    }
+    return [
+      {
+        scorer: card.scorer,
+        ...(card.winner === undefined ? {} : { winner: card.winner }),
+        ...(card.roundScore === undefined
+          ? {}
+          : { roundScore: card.roundScore }),
+        ...(card.cumulativeScore === undefined
+          ? {}
+          : { cumulativeScore: card.cumulativeScore }),
+      },
+    ];
+  });
+  if (scorerCards.length !== value.scorerCards.length) return null;
+
+  return {
+    boutId: value.boutId,
+    round: value.round as number,
+    commentary: value.commentary,
+    scorerCards,
+    sourceUrl: value.sourceUrl,
+    ...(value.publishedAt === undefined
+      ? {}
+      : { publishedAt: value.publishedAt }),
+    fetchedAt: value.fetchedAt,
+    parserVersion: value.parserVersion,
+    payloadHash: value.payloadHash,
+  };
+}
+
+function parseExpertScore(value: unknown): ParsedExpertScore | null {
+  if (
+    !isRecord(value) ||
+    value.source !== "x" ||
+    typeof value.sourcePostId !== "string" ||
+    typeof value.scorer !== "string" ||
+    !Number.isSafeInteger(value.round) ||
+    (value.round as number) < 1 ||
+    !isRecord(value.score) ||
+    !Number.isSafeInteger(value.score.red) ||
+    !Number.isSafeInteger(value.score.blue) ||
+    !isTimestamp(value.fetchedAt) ||
+    typeof value.parseConfidence !== "number" ||
+    value.parseConfidence < 0 ||
+    value.parseConfidence > 1 ||
+    (value.mode !== "embed" &&
+      value.mode !== "manual" &&
+      value.mode !== "api") ||
+    typeof value.postUrl !== "string"
+  ) {
+    return null;
+  }
+  return {
+    source: "x",
+    sourcePostId: value.sourcePostId,
+    scorer: value.scorer,
+    round: value.round as number,
+    score: {
+      red: value.score.red as number,
+      blue: value.score.blue as number,
+    },
+    fetchedAt: value.fetchedAt,
+    parseConfidence: value.parseConfidence,
+    mode: value.mode,
+    postUrl: value.postUrl,
+  };
+}
+
+function parseExpertConsensus(value: unknown): ExpertConsensus | null {
+  if (!isRecord(value)) return null;
+  const result: ExpertConsensus = {};
+  for (const source of ["sherdog", "x"] as const) {
+    const candidate = value[source];
+    if (candidate === undefined) continue;
+    if (
+      !isRecord(candidate) ||
+      candidate.source !== source ||
+      !Number.isSafeInteger(candidate.redVotes) ||
+      (candidate.redVotes as number) < 0 ||
+      !Number.isSafeInteger(candidate.blueVotes) ||
+      (candidate.blueVotes as number) < 0 ||
+      !Number.isSafeInteger(candidate.drawVotes) ||
+      (candidate.drawVotes as number) < 0 ||
+      !Number.isSafeInteger(candidate.total) ||
+      (candidate.total as number) < 1 ||
+      (candidate.leader !== undefined &&
+        candidate.leader !== "red" &&
+        candidate.leader !== "blue" &&
+        candidate.leader !== "draw")
+    ) {
+      return null;
+    }
+    result[source] = {
+      source,
+      redVotes: candidate.redVotes as number,
+      blueVotes: candidate.blueVotes as number,
+      drawVotes: candidate.drawVotes as number,
+      total: candidate.total as number,
+      ...(candidate.leader === undefined
+        ? {}
+        : { leader: candidate.leader }),
+    };
+  }
+  return result;
+}
+
 function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
   if (!isRecord(value)) return null;
   const citoStats =
     value.citoStats === undefined
       ? undefined
       : parseRoundStats(value.citoStats);
+  const sherdog =
+    value.sherdog === undefined
+      ? undefined
+      : parseSherdogObservation(value.sherdog);
+  const xScores =
+    value.xScores === undefined
+      ? undefined
+      : Array.isArray(value.xScores)
+        ? value.xScores
+            .map(parseExpertScore)
+            .filter(
+              (score): score is ParsedExpertScore => score !== null,
+            )
+        : null;
+  const expertConsensus =
+    value.expertConsensus === undefined
+      ? undefined
+      : parseExpertConsensus(value.expertConsensus);
 
   if (
     typeof value.boutId !== "string" ||
@@ -298,6 +460,12 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
       value.endingSignal !== "period_transition" &&
       value.endingSignal !== "fight_completed") ||
     (value.citoStats !== undefined && citoStats === null) ||
+    (value.sherdog !== undefined && sherdog === null) ||
+    xScores === null ||
+    (Array.isArray(value.xScores) &&
+      (xScores?.length ?? 0) !== value.xScores.length) ||
+    (value.expertConsensus !== undefined &&
+      expertConsensus === null) ||
     !isRecord(value.marketAtEnd) ||
     typeof value.provisional !== "boolean" ||
     (value.finalizedAt !== undefined && !isTimestamp(value.finalizedAt))
@@ -311,7 +479,10 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
     detectedEndedAt: value.detectedEndedAt,
     endingSignal: value.endingSignal,
     ...(citoStats == null ? {} : { citoStats }),
+    ...(sherdog == null ? {} : { sherdog }),
+    ...(xScores === undefined ? {} : { xScores }),
     marketAtEnd: value.marketAtEnd as CollectorUnifiedRound["marketAtEnd"],
+    ...(expertConsensus == null ? {} : { expertConsensus }),
     provisional: value.provisional,
     ...(value.finalizedAt === undefined
       ? {}
@@ -474,30 +645,121 @@ function applyCollectorRound(
     },
   );
   const view = withLifecycle.boutViews[record.boutId];
-  const stats = record.citoStats;
-  if (view === undefined || stats === undefined) return withLifecycle;
+  if (view === undefined) return withLifecycle;
 
-  const existing = view.rounds.cito ?? [];
-  const previous = existing.find((round) => round.round === record.round);
-  const update: RoundUpdate = {
-    ...(previous ?? {
+  const nextRounds = { ...view.rounds };
+  if (record.citoStats !== undefined) {
+    const stats = record.citoStats;
+    const existing = view.rounds.cito ?? [];
+    const previous = existing.find(
+      (round) => round.round === record.round,
+    );
+    const update: RoundUpdate = {
+      ...(previous ?? {
+        boutId: record.boutId,
+        round: record.round,
+      }),
+      stats: {
+        red: { ...stats.fighterA },
+        blue: { ...stats.fighterB },
+      },
+      provenance: {
+        source: "cito",
+        fetchedAt: stats.lastObservedAt,
+        synthetic: withLifecycle.event.provenance.synthetic,
+      },
+    };
+    nextRounds.cito = [
+      ...existing.filter((round) => round.round !== record.round),
+      update,
+    ].sort((left, right) => left.round - right.round);
+  }
+
+  if (record.sherdog !== undefined) {
+    const observation = record.sherdog;
+    const existing = view.rounds.sherdog ?? [];
+    const scoreCard = observation.scorerCards.find(
+      (card) => card.roundScore !== undefined && card.winner !== undefined,
+    );
+    const scoreMatch = /^(\d+)\s*-\s*(\d+)$/.exec(
+      scoreCard?.roundScore ?? "",
+    );
+    const normalizedWinner = scoreCard?.winner
+      ?.normalize("NFKD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^\p{Letter}\p{Number}]/gu, "")
+      .toLocaleLowerCase("en");
+    const winner = (["red", "blue"] as const).find((corner) => {
+      const name = view.bout.fighters[corner].name;
+      const full = name
+        .normalize("NFKD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[^\p{Letter}\p{Number}]/gu, "")
+        .toLocaleLowerCase("en");
+      const last = name
+        .split(/\s+/)
+        .at(-1)
+        ?.normalize("NFKD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[^\p{Letter}\p{Number}]/gu, "")
+        .toLocaleLowerCase("en");
+      return normalizedWinner === full || normalizedWinner === last;
+    });
+    const high = Number(scoreMatch?.[1]);
+    const low = Number(scoreMatch?.[2]);
+    const update: RoundUpdate = {
       boutId: record.boutId,
       round: record.round,
-    }),
-    stats: {
-      red: { ...stats.fighterA },
-      blue: { ...stats.fighterB },
-    },
-    provenance: {
-      source: "cito",
-      fetchedAt: stats.lastObservedAt,
-      synthetic: withLifecycle.event.provenance.synthetic,
-    },
-  };
-  const rounds = [
-    ...existing.filter((round) => round.round !== record.round),
-    update,
-  ].sort((left, right) => left.round - right.round);
+      ...(observation.commentary.length === 0
+        ? {}
+        : { summary: observation.commentary }),
+      ...(winner === undefined ||
+      !Number.isFinite(high) ||
+      !Number.isFinite(low)
+        ? {}
+        : {
+            score:
+              winner === "red"
+                ? { red: high, blue: low }
+                : { red: low, blue: high },
+          }),
+      provenance: {
+        source: "sherdog",
+        fetchedAt: observation.fetchedAt,
+        synthetic: withLifecycle.event.provenance.synthetic,
+      },
+    };
+    nextRounds.sherdog = [
+      ...existing.filter((round) => round.round !== record.round),
+      update,
+    ].sort((left, right) => left.round - right.round);
+  }
+
+  const scorecards = [
+    ...view.scorecards,
+    ...(record.xScores ?? []).flatMap((score) =>
+      score.mode !== "embed"
+        ? []
+        : [
+            {
+              boutId: record.boutId,
+              handle: score.scorer.replace(/^@/, ""),
+              postId: score.sourcePostId,
+              round: score.round,
+              provenance: {
+                source: "x-embed" as const,
+                fetchedAt: score.fetchedAt,
+                synthetic: withLifecycle.event.provenance.synthetic,
+              },
+            },
+          ],
+    ),
+  ].filter(
+    (scorecard, index, all) =>
+      all.findIndex(
+        (candidate) => candidate.postId === scorecard.postId,
+      ) === index,
+  );
 
   return {
     ...withLifecycle,
@@ -505,10 +767,8 @@ function applyCollectorRound(
       ...withLifecycle.boutViews,
       [record.boutId]: {
         ...view,
-        rounds: {
-          ...view.rounds,
-          cito: rounds,
-        },
+        rounds: nextRounds,
+        scorecards,
       },
     },
   };

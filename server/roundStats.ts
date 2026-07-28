@@ -10,6 +10,11 @@ import type {
   MarketSource,
 } from "../src/sources/contract.ts";
 import type {
+  ExpertConsensus,
+  SherdogRoundObservation,
+} from "../src/schema.ts";
+import type { ParsedExpertScore } from "../src/sources/x.ts";
+import type {
   CollectorEvent,
   CollectorEventBus,
 } from "./eventBus.ts";
@@ -73,7 +78,10 @@ export interface UnifiedRoundRecord {
   detectedEndedAt: string;
   endingSignal: RoundEndingSignal;
   citoStats?: RoundStatsRecord;
+  sherdog?: SherdogRoundObservation;
+  xScores?: ParsedExpertScore[];
   marketAtEnd: MarketAtEnd;
+  expertConsensus?: ExpertConsensus;
   provisional: boolean;
   finalizedAt?: string;
 }
@@ -155,6 +163,77 @@ function isRoundStatsRecord(value: unknown): value is RoundStatsRecord {
   );
 }
 
+function isTimestamp(value: unknown): value is string {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function isSherdogObservation(
+  value: unknown,
+): value is SherdogRoundObservation {
+  return (
+    isRecord(value) &&
+    typeof value.boutId === "string" &&
+    Number.isSafeInteger(value.round) &&
+    (value.round as number) >= 1 &&
+    typeof value.commentary === "string" &&
+    !/<[^>]*>/.test(value.commentary) &&
+    Array.isArray(value.scorerCards) &&
+    value.scorerCards.every(
+      (card) =>
+        isRecord(card) &&
+        typeof card.scorer === "string" &&
+        (card.winner === undefined || typeof card.winner === "string") &&
+        (card.roundScore === undefined ||
+          typeof card.roundScore === "string") &&
+        (card.cumulativeScore === undefined ||
+          typeof card.cumulativeScore === "string"),
+    ) &&
+    typeof value.sourceUrl === "string" &&
+    (value.publishedAt === undefined || isTimestamp(value.publishedAt)) &&
+    isTimestamp(value.fetchedAt) &&
+    typeof value.parserVersion === "string" &&
+    typeof value.payloadHash === "string"
+  );
+}
+
+function isParsedExpertScore(value: unknown): value is ParsedExpertScore {
+  return (
+    isRecord(value) &&
+    value.source === "x" &&
+    typeof value.sourcePostId === "string" &&
+    typeof value.scorer === "string" &&
+    Number.isSafeInteger(value.round) &&
+    (value.round as number) >= 1 &&
+    isRecord(value.score) &&
+    Number.isSafeInteger(value.score.red) &&
+    Number.isSafeInteger(value.score.blue) &&
+    isTimestamp(value.fetchedAt) &&
+    typeof value.parseConfidence === "number" &&
+    value.parseConfidence >= 0 &&
+    value.parseConfidence <= 1 &&
+    (value.mode === "embed" ||
+      value.mode === "manual" ||
+      value.mode === "api") &&
+    typeof value.postUrl === "string"
+  );
+}
+
+function isExpertConsensus(value: unknown): value is ExpertConsensus {
+  if (!isRecord(value)) return false;
+  return ["sherdog", "x"].every((source) => {
+    const consensus = value[source];
+    return (
+      consensus === undefined ||
+      (isRecord(consensus) &&
+        consensus.source === source &&
+        Number.isSafeInteger(consensus.redVotes) &&
+        Number.isSafeInteger(consensus.blueVotes) &&
+        Number.isSafeInteger(consensus.drawVotes) &&
+        Number.isSafeInteger(consensus.total))
+    );
+  });
+}
+
 function isUnifiedRoundRecord(
   value: unknown,
 ): value is UnifiedRoundRecord {
@@ -170,7 +249,14 @@ function isUnifiedRoundRecord(
       value.endingSignal === "fight_completed") &&
     (value.citoStats === undefined ||
       isRoundStatsRecord(value.citoStats)) &&
+    (value.sherdog === undefined ||
+      isSherdogObservation(value.sherdog)) &&
+    (value.xScores === undefined ||
+      (Array.isArray(value.xScores) &&
+        value.xScores.every(isParsedExpertScore))) &&
     isRecord(value.marketAtEnd) &&
+    (value.expertConsensus === undefined ||
+      isExpertConsensus(value.expertConsensus)) &&
     typeof value.provisional === "boolean"
   );
 }
@@ -211,13 +297,53 @@ function copyRoundStats(record: RoundStatsRecord): RoundStatsRecord {
   };
 }
 
+function copySherdog(
+  observation: SherdogRoundObservation,
+): SherdogRoundObservation {
+  return {
+    ...observation,
+    scorerCards: observation.scorerCards.map((card) => ({ ...card })),
+  };
+}
+
+function copyXScores(
+  scores: readonly ParsedExpertScore[],
+): ParsedExpertScore[] {
+  return scores.map((score) => ({
+    ...score,
+    score: { ...score.score },
+  }));
+}
+
+function copyExpertConsensus(
+  consensus: ExpertConsensus,
+): ExpertConsensus {
+  return {
+    ...(consensus.sherdog === undefined
+      ? {}
+      : { sherdog: { ...consensus.sherdog } }),
+    ...(consensus.x === undefined ? {} : { x: { ...consensus.x } }),
+  };
+}
+
 function copyUnified(record: UnifiedRoundRecord): UnifiedRoundRecord {
   return {
     ...record,
     ...(record.citoStats === undefined
       ? {}
       : { citoStats: copyRoundStats(record.citoStats) }),
+    ...(record.sherdog === undefined
+      ? {}
+      : { sherdog: copySherdog(record.sherdog) }),
+    ...(record.xScores === undefined
+      ? {}
+      : { xScores: copyXScores(record.xScores) }),
     marketAtEnd: copyMarketAtEnd(record.marketAtEnd),
+    ...(record.expertConsensus === undefined
+      ? {}
+      : {
+          expertConsensus: copyExpertConsensus(record.expertConsensus),
+        }),
   };
 }
 
@@ -462,6 +588,98 @@ export class RoundStatsPipeline {
           left.boutId.localeCompare(right.boutId) ||
           left.round - right.round,
       );
+  }
+
+  setSherdogObservation(
+    observation: SherdogRoundObservation,
+    expertConsensus?: ExpertConsensus,
+  ): Promise<boolean> {
+    return this.enqueueState(async () => {
+      if (!isSherdogObservation(observation)) {
+        throw new TypeError("Sherdog observation is not normalized");
+      }
+      const key = roundKey(observation.boutId, observation.round);
+      const previous = this.unified.get(key);
+      if (previous === undefined) return false;
+      if (
+        previous.sherdog?.payloadHash === observation.payloadHash &&
+        previous.sherdog.fetchedAt === observation.fetchedAt &&
+        JSON.stringify(previous.expertConsensus) ===
+          JSON.stringify(expertConsensus)
+      ) {
+        return false;
+      }
+      const next: UnifiedRoundRecord = {
+        ...copyUnified(previous),
+        sherdog: copySherdog(observation),
+        ...(expertConsensus === undefined
+          ? {}
+          : {
+              expertConsensus: copyExpertConsensus(expertConsensus),
+            }),
+      };
+      await this.persistUnified(next);
+      return true;
+    });
+  }
+
+  setXScores(
+    boutId: string,
+    round: number,
+    scores: readonly ParsedExpertScore[],
+    expertConsensus?: ExpertConsensus,
+  ): Promise<boolean> {
+    return this.enqueueState(async () => {
+      if (
+        boutId.trim().length === 0 ||
+        !Number.isSafeInteger(round) ||
+        round < 1 ||
+        !scores.every(isParsedExpertScore)
+      ) {
+        throw new TypeError("X scores are not normalized");
+      }
+      const previous = this.unified.get(roundKey(boutId, round));
+      if (previous === undefined) return false;
+      const knownPostIds = new Set(
+        this.getUnifiedRounds().flatMap((record) =>
+          (record.xScores ?? []).map((score) => score.sourcePostId),
+        ),
+      );
+      const currentPostIds = new Set(
+        (previous.xScores ?? []).map((score) => score.sourcePostId),
+      );
+      const unique = new Map<string, ParsedExpertScore>();
+      for (const score of [...(previous.xScores ?? []), ...scores]) {
+        if (
+          score.round !== round ||
+          (knownPostIds.has(score.sourcePostId) &&
+            !currentPostIds.has(score.sourcePostId))
+        ) {
+          continue;
+        }
+        unique.set(`${score.source}:${score.sourcePostId}`, score);
+      }
+      const nextScores = copyXScores([...unique.values()]);
+      if (
+        JSON.stringify(previous.xScores ?? []) ===
+          JSON.stringify(nextScores) &&
+        JSON.stringify(previous.expertConsensus) ===
+          JSON.stringify(expertConsensus)
+      ) {
+        return false;
+      }
+      const next: UnifiedRoundRecord = {
+        ...copyUnified(previous),
+        ...(nextScores.length === 0 ? {} : { xScores: nextScores }),
+        ...(expertConsensus === undefined
+          ? {}
+          : {
+              expertConsensus: copyExpertConsensus(expertConsensus),
+            }),
+      };
+      await this.persistUnified(next);
+      return true;
+    });
   }
 
   setMarketSnapshot(snapshot: MarketSnapshot): Promise<void> {
@@ -846,6 +1064,12 @@ export class RoundStatsPipeline {
         ...(stats === undefined
           ? {}
           : { citoStats: copyRoundStats(stats) }),
+        ...(previous?.sherdog === undefined
+          ? {}
+          : { sherdog: copySherdog(previous.sherdog) }),
+        ...(previous?.xScores === undefined
+          ? {}
+          : { xScores: copyXScores(previous.xScores) }),
         marketAtEnd: this.marketAtEndFor(
           event.boutId,
           event.round,
@@ -853,6 +1077,13 @@ export class RoundStatsPipeline {
             ? "provisional"
             : "confirmed",
         ),
+        ...(previous?.expertConsensus === undefined
+          ? {}
+          : {
+              expertConsensus: copyExpertConsensus(
+                previous.expertConsensus,
+              ),
+            }),
         provisional,
         ...(!provisional
           ? {

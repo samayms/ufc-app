@@ -1,80 +1,312 @@
-import type { BoutView, Corner, ScorecardAccount } from "../schema.ts";
-import { completedRounds } from "./RoundSelector.tsx";
+import type {
+  BoutView,
+  ExpertConsensus,
+  ScorecardAccount,
+} from "../schema.ts";
+import type {
+  CollectorSnapshot,
+  CollectorUnifiedRound,
+  CollectorValueDelivery,
+} from "../store/collectorClient.ts";
+import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
 
-/** Each demo journalist's round-by-round pick, oldest round first. */
-const DEMO_CARDS: { rounds: Corner[] }[] = [
-  { rounds: ["blue", "blue"] },
-  { rounds: ["red", "blue"] },
-  { rounds: ["blue", "red"] },
-  { rounds: ["blue", "blue"] },
-];
+function consensusLabel(
+  consensus: ExpertConsensus | undefined,
+  source: "sherdog" | "x",
+): string | undefined {
+  const value = consensus?.[source];
+  if (value === undefined) return undefined;
+  const leader =
+    value.leader === "red"
+      ? "red corner"
+      : value.leader === "blue"
+        ? "blue corner"
+        : value.leader === "draw"
+          ? "draw"
+          : "split";
+  return `${leader} · ${value.redVotes}–${value.blueVotes}${
+    value.drawVotes > 0 ? `–${value.drawVotes}` : ""
+  }`;
+}
 
-/**
- * Journalist scorecards arrive as X posts and render through the official
- * embed widget in live mode. Until live posts are connected, fixture mode
- * renders four demo cards to exercise the final layout.
- */
+function sourceDelivery(
+  snapshot: CollectorSnapshot | undefined,
+  record: CollectorUnifiedRound,
+  source: "sherdog" | "x",
+): CollectorValueDelivery | undefined {
+  if (source === "sherdog" && record.sherdog !== undefined) {
+    return {
+      source: "Sherdog",
+      ...(record.sherdog.publishedAt === undefined
+        ? {}
+        : { sourceUpdatedAt: record.sherdog.publishedAt }),
+      receivedAt: record.sherdog.fetchedAt,
+      stale:
+        snapshot?.connection !== "connected" ||
+        snapshot.health.sherdog?.fresh === false,
+      provisional: record.provisional,
+    };
+  }
+  const latest = record.xScores
+    ?.map((score) => score.fetchedAt)
+    .sort()
+    .at(-1);
+  if (source === "x" && latest !== undefined) {
+    return {
+      source: "X",
+      sourceUpdatedAt: latest,
+      receivedAt: latest,
+      stale:
+        snapshot?.connection !== "connected" ||
+        snapshot.health["x-embed"]?.fresh === false ||
+        snapshot.health.x?.fresh === false,
+      provisional: record.provisional,
+    };
+  }
+  return undefined;
+}
+
 export function ScorecardFeed({
   view,
   accounts,
+  records = [],
+  round,
+  collector,
 }: {
   view: BoutView;
   accounts: ScorecardAccount[];
+  records?: readonly CollectorUnifiedRound[];
+  round?: number;
+  collector?: CollectorSnapshot;
 }) {
-  const featured = accounts.filter((account) => account.active).slice(0, 4);
-  const roundsSoFar = completedRounds(view).length || 1;
+  const record = records
+    .filter(
+      (candidate) =>
+        candidate.boutId === view.bout.id &&
+        (round === undefined || candidate.round === round),
+    )
+    .sort((left, right) => right.round - left.round)[0];
+  const sherdog = record?.sherdog;
+  const xScores = record?.xScores ?? [];
+  const embeddedPosts = view.scorecards.filter(
+    (post) => round === undefined || post.round === round,
+  );
+  const activeAccounts = new Map(
+    accounts
+      .filter((account) => account.active)
+      .map((account) => [
+        account.handle.toLocaleLowerCase("en"),
+        account.displayName,
+      ]),
+  );
+  const sherdogDelivery =
+    record === undefined
+      ? undefined
+      : sourceDelivery(collector, record, "sherdog");
+  const collectorXDelivery =
+    record === undefined
+      ? undefined
+      : sourceDelivery(collector, record, "x");
+  const latestEmbed = embeddedPosts
+    .map((post) => post.provenance.fetchedAt)
+    .sort()
+    .at(-1);
+  const xDelivery: CollectorValueDelivery | undefined =
+    collectorXDelivery ??
+    (latestEmbed === undefined
+      ? undefined
+      : {
+          source: "X official embed",
+          sourceUpdatedAt: latestEmbed,
+          receivedAt: latestEmbed,
+          stale: collector?.connection === "reconnecting",
+          provisional: false,
+        });
+  const sherdogConsensus =
+    record === undefined
+      ? undefined
+      : consensusLabel(record.expertConsensus, "sherdog");
+  const xConsensus =
+    record === undefined
+      ? undefined
+      : consensusLabel(record.expertConsensus, "x");
 
   return (
-    <section className="panel scorecard-panel" aria-label="Media scorecards">
-      <ul className="media-scorecard-grid">
-        {featured.map((account, index) => {
-          const demo = DEMO_CARDS[index];
-          if (!demo) return null;
-          let red = 0;
-          let blue = 0;
-          for (let round = 0; round < roundsSoFar; round += 1) {
-            const pick = demo.rounds[round] ?? demo.rounds.at(-1);
-            if (pick === "red") {
-              red += 10;
-              blue += 9;
-            } else {
-              red += 9;
-              blue += 10;
-            }
-          }
-          const corner = demo.rounds[roundsSoFar - 1] ?? demo.rounds.at(-1) ?? "red";
-          const favored = view.bout.fighters[corner].name.split(" ").at(-1);
-          const initials = account.displayName
-            .split(/\s+/)
-            .map((part) => part[0])
-            .join("")
-            .slice(0, 2)
-            .toUpperCase();
+    <section className="panel scorecard-panel" aria-label="Expert scorecards">
+      <div className="panel-head expert-panel-head">
+        <h2>Expert scores</h2>
+        <span className="freshness">
+          Sherdog and X stay separate
+        </span>
+      </div>
 
-          return (
-            <li key={account.handle} className="media-scorecard">
-              <span className="media-scorecard-avatar" aria-hidden="true">
-                {initials}
-              </span>
-              <span className="media-scorecard-id">
-                <strong className="media-scorecard-name">
-                  {account.displayName}
-                </strong>
-                <span className="media-scorecard-handle">
-                  @{account.handle}
+      {sherdog !== undefined && (
+        <div className="expert-source-group">
+          <div className="expert-source-head">
+            <div>
+              <strong>Sherdog</strong>
+              {sherdogConsensus && (
+                <span className="expert-consensus num">
+                  Consensus {sherdogConsensus}
                 </span>
+              )}
+            </div>
+            {sherdogDelivery && (
+              <DeliveryFreshness delivery={sherdogDelivery} />
+            )}
+          </div>
+          {sherdog.commentary && (
+            <p className="expert-commentary">{sherdog.commentary}</p>
+          )}
+          {sherdog.scorerCards.length > 0 && (
+            <ul className="media-scorecard-grid">
+              {sherdog.scorerCards.map((card, index) => (
+                <li
+                  className="media-scorecard"
+                  key={`${card.scorer}:${index}`}
+                >
+                  <span className="media-scorecard-id">
+                    <strong className="media-scorecard-name">
+                      {card.scorer}
+                    </strong>
+                    <span className="media-scorecard-handle">
+                      Round {sherdog.round} · Sherdog
+                    </span>
+                  </span>
+                  <span className="media-scorecard-score">
+                    <b className="num">{card.roundScore ?? "Scored"}</b>
+                    {card.winner && <span>{card.winner}</span>}
+                    {card.cumulativeScore && (
+                      <span className="media-scorecard-total num">
+                        ({card.cumulativeScore})
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <div className="expert-source-group">
+        <div className="expert-source-head">
+          <div>
+            <strong>X scorecards</strong>
+            {xConsensus && (
+              <span className="expert-consensus num">
+                Consensus {xConsensus}
               </span>
-              <span className={`media-scorecard-score corner-${corner}`}>
-                <b className="num">10–9</b>
-                <span>{favored}</span>
-                <span className="media-scorecard-total num">
-                  ({red}–{blue})
-                </span>
-              </span>
-            </li>
-          );
-        })}
-      </ul>
+            )}
+          </div>
+          {xDelivery && <DeliveryFreshness delivery={xDelivery} />}
+        </div>
+        {xScores.length === 0 && embeddedPosts.length === 0 ? (
+          <p className="empty expert-empty">
+            No configured X scorecard posts for this round.
+          </p>
+        ) : (
+          <ul className="media-scorecard-grid">
+            {embeddedPosts.map((post) => (
+              <li
+                className="media-scorecard"
+                key={`x-embed:${post.postId}`}
+              >
+                <blockquote
+                  className="twitter-tweet official-x-embed"
+                  data-dnt="true"
+                >
+                  <a
+                    href={`https://x.com/${post.handle}/status/${post.postId}`}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    <span className="media-scorecard-id">
+                      <strong className="media-scorecard-name">
+                        {activeAccounts.get(
+                          post.handle.toLocaleLowerCase("en"),
+                        ) ?? `@${post.handle}`}
+                      </strong>
+                      <span className="media-scorecard-handle">
+                        Official X embed
+                        {post.round === undefined
+                          ? ""
+                          : ` · round ${post.round}`}
+                      </span>
+                    </span>
+                    <span className="media-scorecard-score">
+                      <b>View post</b>
+                    </span>
+                  </a>
+                </blockquote>
+              </li>
+            ))}
+            {xScores.map((score) => {
+              const handle = score.scorer.replace(/^@/, "");
+              const displayName =
+                activeAccounts.get(handle.toLocaleLowerCase("en")) ??
+                score.scorer;
+              const scoreText = `${score.score.red}–${score.score.blue}`;
+              const winner =
+                score.score.red > score.score.blue
+                  ? view.bout.fighters.red.name
+                  : score.score.blue > score.score.red
+                    ? view.bout.fighters.blue.name
+                    : "Even";
+              const content = (
+                <>
+                  <span className="media-scorecard-id">
+                    <strong className="media-scorecard-name">
+                      {displayName}
+                    </strong>
+                    <span className="media-scorecard-handle">
+                      {score.mode} · confidence{" "}
+                      <span className="num">
+                        {Math.round(score.parseConfidence * 100)}%
+                      </span>
+                    </span>
+                  </span>
+                  <span className="media-scorecard-score">
+                    <b className="num">{scoreText}</b>
+                    <span>{winner.split(" ").at(-1)}</span>
+                  </span>
+                </>
+              );
+
+              return (
+                <li
+                  className="media-scorecard"
+                  key={`${score.source}:${score.sourcePostId}`}
+                >
+                  {score.mode === "embed" ? (
+                    <blockquote
+                      className="twitter-tweet official-x-embed"
+                      data-dnt="true"
+                    >
+                      <a
+                        href={score.postUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        {content}
+                      </a>
+                    </blockquote>
+                  ) : (
+                    <a
+                      className="expert-score-link"
+                      href={score.postUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      {content}
+                    </a>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }
