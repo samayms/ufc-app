@@ -36,6 +36,12 @@ export interface CollectorConfig {
     kalshi: number;
     polymarket: number;
   };
+  /** Whether the lifecycle driver polls providers and drives FightLifecycleMachine. */
+  lifecycleDriverEnabled: boolean;
+  /** Consecutive ESPN failures before falling back to the Cito provider. */
+  lifecycleEspnFailureThreshold: number;
+  /** Base URL for Cito's (unverified) live-state endpoint; required to construct a live Cito lifecycle provider. */
+  citoApiBaseUrl?: string;
   oddsApiIoBookmakers: readonly string[];
   xSpendCapUsd: number;
   xRequestCostUsd: number;
@@ -105,6 +111,19 @@ function parsePositiveInteger(
   }
 
   return value;
+}
+
+function parseOptionalBoolean(
+  env: CollectorEnvironment,
+  name: string,
+): boolean | undefined {
+  const raw = env[name]?.trim().toLowerCase();
+  if (!raw) return undefined;
+
+  if (raw === "true" || raw === "1") return true;
+  if (raw === "false" || raw === "0") return false;
+
+  throw new TypeError(`${name} must be "true" or "false"`);
 }
 
 function parsePort(env: CollectorEnvironment): number {
@@ -328,6 +347,17 @@ export function loadConfig(
         5_000,
       ),
     },
+    lifecycleDriverEnabled:
+      parseOptionalBoolean(env, "LIFECYCLE_DRIVER_ENABLED") ??
+      dataMode === "live",
+    lifecycleEspnFailureThreshold: parsePositiveInteger(
+      env,
+      "LIFECYCLE_ESPN_FAILURE_THRESHOLD",
+      3,
+    ),
+    ...(env.CITO_API_BASE_URL?.trim()
+      ? { citoApiBaseUrl: env.CITO_API_BASE_URL.trim() }
+      : {}),
     oddsApiIoBookmakers: parseBookmakers(env),
     xSpendCapUsd: parseNonNegativeNumber(env, "X_SPEND_CAP_USD", 0),
     xRequestCostUsd: parseNonNegativeNumber(

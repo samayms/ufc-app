@@ -465,3 +465,190 @@ export function createEspnSource(
     },
   };
 }
+
+/**
+ * Lifecycle-only ESPN seam: a normalized per-bout snapshot (state, period,
+ * completed, clock) used to drive server/lifecycleDriver.ts. This is
+ * intentionally narrower than FightDataSource — it does not attempt live
+ * event/fighter discovery, which stays unimplemented (see createEspnSource
+ * above) until real credentials and verified endpoints exist.
+ */
+export interface EspnLifecycleEntry {
+  externalId: string;
+  state: "pre" | "in" | "post";
+  period: number;
+  completed: boolean;
+  clockSeconds?: number;
+}
+
+export interface EspnLifecycleFetcher {
+  fetchLifecycle(eventExternalId: string): Promise<EspnLifecycleEntry[]>;
+}
+
+/**
+ * ESPN's public "site API" host (site.api.espn.com) is the well-known
+ * pattern ESPN uses for unauthenticated scoreboard reads across sports. The
+ * exact MMA/UFC scoreboard path below is a best-effort placeholder — verify
+ * it against real traffic before depending on it for a live event.
+ */
+const ESPN_SCOREBOARD_BASE_URL =
+  "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard";
+const ESPN_SCOREBOARD_REQUEST_TIMEOUT_MS = 8_000;
+const ESPN_SCOREBOARD_MAX_RESPONSE_BYTES = 2_000_000;
+
+export function buildEspnScoreboardUrl(eventExternalId: string): string {
+  if (eventExternalId.trim().length === 0) {
+    throw new TypeError("ESPN scoreboard URL requires a non-empty event id");
+  }
+
+  const url = new URL(ESPN_SCOREBOARD_BASE_URL);
+  url.searchParams.set("event", eventExternalId);
+  return url.toString();
+}
+
+function parseDisplayClockSeconds(
+  displayClock: string | undefined,
+): number | undefined {
+  const match = displayClock?.trim().match(/^(\d+):(\d{2})$/);
+  if (!match?.[1] || !match[2]) return undefined;
+
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function parseLifecycleState(
+  status: EspnCompetition["status"],
+): "pre" | "in" | "post" {
+  if (status?.type?.completed || status?.type?.state === "post") return "post";
+  if (status?.type?.state === "in") return "in";
+  return "pre";
+}
+
+/** Pure normalization: raw ESPN scoreboard JSON -> per-bout lifecycle entries. */
+export function parseEspnScoreboardLifecycle(
+  payload: unknown,
+): EspnLifecycleEntry[] {
+  if (typeof payload !== "object" || payload === null) {
+    throw new TypeError("ESPN scoreboard response was not a JSON object");
+  }
+
+  const competitions =
+    (payload as EspnRawPayload).event?.header?.competitions ?? [];
+
+  return competitions.flatMap((competition): EspnLifecycleEntry[] => {
+    if (typeof competition.id !== "string") return [];
+
+    const status = competition.status;
+    const clockSeconds = parseDisplayClockSeconds(status?.displayClock);
+
+    return [
+      {
+        externalId: competition.id,
+        state: parseLifecycleState(status),
+        period: status?.period ?? 0,
+        completed: status?.type?.completed === true,
+        ...(clockSeconds === undefined ? {} : { clockSeconds }),
+      },
+    ];
+  });
+}
+
+async function readWithByteLimit(
+  response: Response,
+  maxBytes: number,
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new Error("response exceeded the maximum allowed size");
+    }
+    return text;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value === undefined) continue;
+
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error("response exceeded the maximum allowed size");
+    }
+    chunks.push(value);
+  }
+
+  const combined = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(combined);
+}
+
+async function fetchJsonWithLimits(
+  url: string,
+  options: {
+    timeoutMs: number;
+    maxBytes: number;
+    fetchImpl: typeof fetch;
+    headers?: Record<string, string>;
+  },
+): Promise<unknown> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(
+    () => controller.abort(),
+    options.timeoutMs,
+  );
+
+  try {
+    const response = await options.fetchImpl(url, {
+      signal: controller.signal,
+      ...(options.headers === undefined ? {} : { headers: options.headers }),
+    });
+    if (!response.ok) {
+      throw new Error(`request failed with HTTP ${response.status}`);
+    }
+
+    const text = await readWithByteLimit(response, options.maxBytes);
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new Error("response was not valid JSON");
+    }
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
+/**
+ * Constructs the live ESPN scoreboard fetcher. Fails closed unless
+ * DATA_MODE=live — never constructed in fixture mode, never invoked by
+ * tests (which exercise buildEspnScoreboardUrl/parseEspnScoreboardLifecycle
+ * as pure functions instead).
+ */
+export function createLiveEspnLifecycleFetcher(
+  config: SourceConfig,
+  fetchImpl: typeof fetch = fetch,
+): EspnLifecycleFetcher {
+  if (config.mode !== "live") {
+    throw new Error("ESPN live lifecycle fetcher requires DATA_MODE=live");
+  }
+
+  return {
+    async fetchLifecycle(eventExternalId) {
+      const payload = await fetchJsonWithLimits(
+        buildEspnScoreboardUrl(eventExternalId),
+        {
+          timeoutMs: ESPN_SCOREBOARD_REQUEST_TIMEOUT_MS,
+          maxBytes: ESPN_SCOREBOARD_MAX_RESPONSE_BYTES,
+          fetchImpl,
+        },
+      );
+      return parseEspnScoreboardLifecycle(payload);
+    },
+  };
+}

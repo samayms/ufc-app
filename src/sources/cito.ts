@@ -413,6 +413,217 @@ export function createLiveCitoRoundStatsFetcher(): CitoRoundStatsFetcher {
   };
 }
 
+/**
+ * Lifecycle-only Cito seam: a normalized per-bout snapshot used as the
+ * fallback source for server/lifecycleDriver.ts when ESPN is unavailable.
+ * Narrower than FightDataSource — full live event/fighter discovery stays
+ * unimplemented (see createCitoSource below) until real credentials and a
+ * verified API exist.
+ */
+export interface CitoLifecycleEntry {
+  externalId: string;
+  state: "pre" | "in" | "post";
+  period: number;
+  completed: boolean;
+  clockSeconds?: number;
+}
+
+export interface CitoLifecycleFetcher {
+  fetchLifecycle(eventExternalId: string): Promise<CitoLifecycleEntry[]>;
+}
+
+interface CitoLiveStateBout {
+  id?: string;
+  status?: string;
+  current_round?: number | null;
+  final_round?: number | null;
+}
+
+interface CitoLiveStatePayload {
+  bouts?: CitoLiveStateBout[];
+}
+
+const CITO_LIVE_STATE_REQUEST_TIMEOUT_MS = 8_000;
+const CITO_LIVE_STATE_MAX_RESPONSE_BYTES = 500_000;
+
+/**
+ * Cito's live-state endpoint shape and host are unverified — no confirmed
+ * API documentation exists (see the file-level note above). `baseUrl` must
+ * be supplied explicitly (e.g. from CITO_API_BASE_URL) once real access is
+ * provisioned; there is no built-in default.
+ */
+export function buildCitoLiveStateUrl(
+  baseUrl: string,
+  eventExternalId: string,
+): string {
+  if (baseUrl.trim().length === 0) {
+    throw new TypeError("Cito live-state URL requires a non-empty base URL");
+  }
+  if (eventExternalId.trim().length === 0) {
+    throw new TypeError("Cito live-state URL requires a non-empty event id");
+  }
+
+  return new URL(
+    `/events/${encodeURIComponent(eventExternalId)}/live`,
+    baseUrl,
+  ).toString();
+}
+
+function citoLifecycleState(status: string | undefined): "pre" | "in" | "post" {
+  switch (status) {
+    case "live":
+    case "between_rounds":
+      return "in";
+    case "completed":
+      return "post";
+    default:
+      return "pre";
+  }
+}
+
+/** Pure normalization: raw Cito live-state JSON -> per-bout lifecycle entries. */
+export function parseCitoLiveStateLifecycle(
+  payload: unknown,
+): CitoLifecycleEntry[] {
+  if (typeof payload !== "object" || payload === null) {
+    throw new TypeError("Cito live-state response was not a JSON object");
+  }
+
+  const bouts = (payload as CitoLiveStatePayload).bouts ?? [];
+
+  return bouts.flatMap((bout): CitoLifecycleEntry[] => {
+    if (typeof bout.id !== "string") return [];
+
+    const completed = bout.status === "completed";
+    const period = (completed ? bout.final_round : bout.current_round) ?? 0;
+
+    return [
+      {
+        externalId: bout.id,
+        state: citoLifecycleState(bout.status),
+        period,
+        completed,
+        ...(bout.status === "between_rounds" ? { clockSeconds: 0 } : {}),
+      },
+    ];
+  });
+}
+
+async function readWithByteLimit(
+  response: Response,
+  maxBytes: number,
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new Error("response exceeded the maximum allowed size");
+    }
+    return text;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value === undefined) continue;
+
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error("response exceeded the maximum allowed size");
+    }
+    chunks.push(value);
+  }
+
+  const combined = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(combined);
+}
+
+async function fetchJsonWithLimits(
+  url: string,
+  options: {
+    timeoutMs: number;
+    maxBytes: number;
+    fetchImpl: typeof fetch;
+    headers?: Record<string, string>;
+  },
+): Promise<unknown> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(
+    () => controller.abort(),
+    options.timeoutMs,
+  );
+
+  try {
+    const response = await options.fetchImpl(url, {
+      signal: controller.signal,
+      ...(options.headers === undefined ? {} : { headers: options.headers }),
+    });
+    if (!response.ok) {
+      throw new Error(`request failed with HTTP ${response.status}`);
+    }
+
+    const text = await readWithByteLimit(response, options.maxBytes);
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      throw new Error("response was not valid JSON");
+    }
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
+/**
+ * Constructs the live Cito live-state fetcher. Fails closed unless
+ * DATA_MODE=live, CITO_API_KEY is present, and a base URL is configured —
+ * never constructed in fixture mode, never invoked by tests (which exercise
+ * buildCitoLiveStateUrl/parseCitoLiveStateLifecycle as pure functions
+ * instead). The API key is used only as a request header; it is never
+ * logged or included in thrown error messages.
+ */
+export function createLiveCitoLifecycleFetcher(
+  config: SourceConfig,
+  options: { baseUrl: string; fetchImpl?: typeof fetch },
+): CitoLifecycleFetcher {
+  const apiKey = config.credentials?.CITO_API_KEY?.trim();
+  if (config.mode !== "live" || !apiKey) {
+    throw new Error(
+      "Cito live lifecycle fetcher requires DATA_MODE=live and CITO_API_KEY",
+    );
+  }
+  if (options.baseUrl.trim().length === 0) {
+    throw new Error(
+      "Cito live lifecycle fetcher requires a configured base URL",
+    );
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const baseUrl = options.baseUrl;
+
+  return {
+    async fetchLifecycle(eventExternalId) {
+      const payload = await fetchJsonWithLimits(
+        buildCitoLiveStateUrl(baseUrl, eventExternalId),
+        {
+          timeoutMs: CITO_LIVE_STATE_REQUEST_TIMEOUT_MS,
+          maxBytes: CITO_LIVE_STATE_MAX_RESPONSE_BYTES,
+          fetchImpl,
+          headers: { Authorization: `Bearer ${apiKey}` },
+        },
+      );
+      return parseCitoLiveStateLifecycle(payload);
+    },
+  };
+}
+
 export function createCitoSource(
   config: SourceConfig,
 ): FightDataSource & FighterRecordSource {

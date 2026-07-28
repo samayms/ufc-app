@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import canonicalFixture from "../fixtures/event.json";
 import {
+  buildCitoLiveStateUrl,
   createCitoSource,
   createFixtureCitoRoundStatsFetcher,
+  createLiveCitoLifecycleFetcher,
   createLiveCitoRoundStatsFetcher,
+  parseCitoLiveStateLifecycle,
 } from "./cito.ts";
 
 describe("createCitoSource", () => {
@@ -143,5 +146,129 @@ describe("createCitoSource", () => {
     await expect(fetcher.fetchAllRounds("bout-main")).rejects.toThrow(
       "not installed",
     );
+  });
+});
+
+describe("buildCitoLiveStateUrl", () => {
+  it("builds a live-state URL under the configured base URL", () => {
+    const url = buildCitoLiveStateUrl(
+      "https://cito.example.invalid/v1",
+      "ufc-fixture-night",
+    );
+
+    expect(url).toBe(
+      "https://cito.example.invalid/events/ufc-fixture-night/live",
+    );
+  });
+
+  it("rejects an empty base URL or event id", () => {
+    expect(() => buildCitoLiveStateUrl("", "ufc-fixture-night")).toThrow(
+      /non-empty base URL/,
+    );
+    expect(() =>
+      buildCitoLiveStateUrl("https://cito.example.invalid", "  "),
+    ).toThrow(/non-empty event id/);
+  });
+});
+
+describe("parseCitoLiveStateLifecycle", () => {
+  it("normalizes a realistic live-state payload into lifecycle entries", () => {
+    const payload = {
+      bouts: [
+        {
+          id: "cito-bout-9001",
+          status: "between_rounds",
+          current_round: 2,
+          final_round: null,
+        },
+        {
+          id: "cito-bout-9002",
+          status: "completed",
+          current_round: null,
+          final_round: 2,
+        },
+        {
+          id: "cito-bout-9003",
+          status: "scheduled",
+          current_round: null,
+          final_round: null,
+        },
+      ],
+    };
+
+    expect(parseCitoLiveStateLifecycle(payload)).toEqual([
+      {
+        externalId: "cito-bout-9001",
+        state: "in",
+        period: 2,
+        completed: false,
+        clockSeconds: 0,
+      },
+      {
+        externalId: "cito-bout-9002",
+        state: "post",
+        period: 2,
+        completed: true,
+      },
+      {
+        externalId: "cito-bout-9003",
+        state: "pre",
+        period: 0,
+        completed: false,
+      },
+    ]);
+  });
+
+  it("skips bouts without an id", () => {
+    const payload = { bouts: [{ status: "live", current_round: 1 }] };
+
+    expect(parseCitoLiveStateLifecycle(payload)).toEqual([]);
+  });
+
+  it("rejects a non-object payload", () => {
+    expect(() => parseCitoLiveStateLifecycle(null)).toThrow(/JSON object/);
+    expect(() => parseCitoLiveStateLifecycle(42)).toThrow(/JSON object/);
+  });
+
+  it("returns an empty array when the payload has no bouts", () => {
+    expect(parseCitoLiveStateLifecycle({})).toEqual([]);
+  });
+});
+
+describe("createLiveCitoLifecycleFetcher", () => {
+  it("fails closed outside of live mode", () => {
+    expect(() =>
+      createLiveCitoLifecycleFetcher(
+        { mode: "fixture" },
+        { baseUrl: "https://cito.example.invalid" },
+      ),
+    ).toThrow(/DATA_MODE=live/);
+  });
+
+  it("fails closed without CITO_API_KEY", () => {
+    expect(() =>
+      createLiveCitoLifecycleFetcher(
+        { mode: "live", credentials: {} },
+        { baseUrl: "https://cito.example.invalid" },
+      ),
+    ).toThrow(/CITO_API_KEY/);
+  });
+
+  it("fails closed without a configured base URL", () => {
+    expect(() =>
+      createLiveCitoLifecycleFetcher(
+        { mode: "live", credentials: { CITO_API_KEY: "secret" } },
+        { baseUrl: "" },
+      ),
+    ).toThrow(/base URL/);
+  });
+
+  it("constructs once mode, key, and base URL are all present", () => {
+    expect(() =>
+      createLiveCitoLifecycleFetcher(
+        { mode: "live", credentials: { CITO_API_KEY: "secret" } },
+        { baseUrl: "https://cito.example.invalid" },
+      ),
+    ).not.toThrow();
   });
 });

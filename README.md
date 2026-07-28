@@ -72,6 +72,45 @@ Live credentials are server-only: `CITO_API_KEY`, `ODDS_API_IO_KEY`,
 `X_BEARER_TOKEN` is required only when `X_MODE=api`. Live transports are not
 enabled yet.
 
+#### Lifecycle driver
+
+`server/lifecycleDriver.ts` is the poll loop that feeds per-bout
+observations into the fight lifecycle state machine (`server/lifecycle.ts`),
+which in turn drives every downstream round job (round stats, Sherdog, X,
+The Odds API, Odds-API.io). It is constructed on every collector startup and
+stopped on `close()`, but it is **not started automatically in fixture
+mode** — set `LIFECYCLE_DRIVER_ENABLED=true` to turn it on for a manual
+fixture-mode demo run. It defaults to on automatically once `DATA_MODE=live`
+(live transports are not implemented yet, so this has no effect today).
+
+This default exists because the bundled fixture event already has a bout
+"between rounds" (`bout-main`, round 2, clock `0:00`); a poll loop that's on
+by default would, on its second poll, detect that static clock-zero state as
+a fresh round boundary and fire `PROVISIONAL_ROUND_ENDED` — which collides
+with `server/replay.ts`'s own hand-choreographed lifecycle walkthrough (used
+by its tests and by `npm run replay`) and with tests that emit lifecycle
+events directly on the event bus. Gating the driver keeps both paths
+deterministic: `npm run replay` remains the fixture demonstration of the
+full round-by-round pipeline, while `LIFECYCLE_DRIVER_ENABLED=true npm run
+collector` demonstrates the poll-driven path against the same static
+fixture.
+
+Other lifecycle driver settings:
+
+| Setting | Default |
+| --- | --- |
+| `LIFECYCLE_DRIVER_ENABLED` | `true` in live mode, `false` in fixture mode |
+| `LIFECYCLE_ESPN_FAILURE_THRESHOLD` | `3` |
+| `CITO_API_BASE_URL` | unset (required to construct the live Cito fallback provider) |
+
+After `LIFECYCLE_ESPN_FAILURE_THRESHOLD` consecutive ESPN polling failures,
+the driver falls back to polling Cito (at `POLL_CITO_MS`) until ESPN
+succeeds again. ESPN and Cito live fetchers (`src/sources/espn.ts`,
+`src/sources/cito.ts`) are only constructed under `DATA_MODE=live`, are
+never invoked by tests, and fail closed without `CITO_API_KEY` /
+`CITO_API_BASE_URL`. Their endpoint shapes are best-effort placeholders —
+see the "unverified" notes in those files — pending real API access.
+
 ## Keep it running with tmux
 
 Create a named session and start the app:

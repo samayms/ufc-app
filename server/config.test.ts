@@ -71,6 +71,44 @@ describe("loadConfig", () => {
     expect(config.pollingMs.espn).toBe(2000);
   });
 
+  it("defaults the lifecycle driver on for live mode and off for fixture mode", () => {
+    expect(loadConfig({}).lifecycleDriverEnabled).toBe(false);
+    expect(loadConfig({}).lifecycleEspnFailureThreshold).toBe(3);
+    expect(loadConfig({}).citoApiBaseUrl).toBeUndefined();
+
+    const base = Object.fromEntries(
+      CREDENTIAL_ENV_NAMES.filter((name) => name !== "X_BEARER_TOKEN").map(
+        (name) => [name, `secret-${name}`],
+      ),
+    );
+    expect(
+      loadConfig({ ...base, DATA_MODE: "live" }).lifecycleDriverEnabled,
+    ).toBe(true);
+  });
+
+  it("parses an explicit LIFECYCLE_DRIVER_ENABLED override in either mode", () => {
+    expect(
+      loadConfig({ LIFECYCLE_DRIVER_ENABLED: "true" }).lifecycleDriverEnabled,
+    ).toBe(true);
+    expect(
+      loadConfig({ LIFECYCLE_DRIVER_ENABLED: "false" })
+        .lifecycleDriverEnabled,
+    ).toBe(false);
+    expect(() =>
+      loadConfig({ LIFECYCLE_DRIVER_ENABLED: "sometimes" }),
+    ).toThrow(/LIFECYCLE_DRIVER_ENABLED/);
+  });
+
+  it("parses the ESPN failure threshold and Cito base URL", () => {
+    const config = loadConfig({
+      LIFECYCLE_ESPN_FAILURE_THRESHOLD: "5",
+      CITO_API_BASE_URL: "https://cito.example.invalid",
+    });
+
+    expect(config.lifecycleEspnFailureThreshold).toBe(5);
+    expect(config.citoApiBaseUrl).toBe("https://cito.example.invalid");
+  });
+
   it("fails closed when live data credentials are absent", () => {
     expect(() => loadConfig({ DATA_MODE: "live" })).toThrow(
       /CITO_API_KEY.*ODDS_API_IO_KEY.*THE_ODDS_API_KEY.*KALSHI_API_KEY_ID.*KALSHI_PRIVATE_KEY_PATH/,

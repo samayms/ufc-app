@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Bout } from "../schema.ts";
-import { createEspnSource } from "./espn.ts";
+import {
+  buildEspnScoreboardUrl,
+  createEspnSource,
+  createLiveEspnLifecycleFetcher,
+  parseEspnScoreboardLifecycle,
+} from "./espn.ts";
 
 const espn = createEspnSource({ mode: "fixture" });
 
@@ -103,5 +108,140 @@ describe("createEspnSource", () => {
         externalRefs: [],
       } as unknown as Bout),
     ).resolves.toEqual([]);
+  });
+});
+
+describe("buildEspnScoreboardUrl", () => {
+  it("builds a scoreboard URL scoped to the requested event", () => {
+    const url = buildEspnScoreboardUrl("600051234");
+
+    expect(url).toContain("event=600051234");
+    expect(() => new URL(url)).not.toThrow();
+  });
+
+  it("rejects an empty event id", () => {
+    expect(() => buildEspnScoreboardUrl("  ")).toThrow(/non-empty event id/);
+  });
+});
+
+describe("parseEspnScoreboardLifecycle", () => {
+  it("normalizes a realistic scoreboard payload into lifecycle entries", () => {
+    const payload = {
+      event: {
+        header: {
+          id: "600051234",
+          competitions: [
+            {
+              id: "401770001",
+              status: {
+                period: 2,
+                displayClock: "0:00",
+                type: {
+                  name: "STATUS_HALFTIME",
+                  state: "in",
+                  completed: false,
+                },
+              },
+            },
+            {
+              id: "401770002",
+              status: {
+                period: 2,
+                displayClock: "3:17",
+                type: { name: "STATUS_FINAL", state: "post", completed: true },
+              },
+            },
+            {
+              id: "401770003",
+              status: {
+                period: 0,
+                displayClock: "5:00",
+                type: {
+                  name: "STATUS_SCHEDULED",
+                  state: "pre",
+                  completed: false,
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    expect(parseEspnScoreboardLifecycle(payload)).toEqual([
+      {
+        externalId: "401770001",
+        state: "in",
+        period: 2,
+        completed: false,
+        clockSeconds: 0,
+      },
+      {
+        externalId: "401770002",
+        state: "post",
+        period: 2,
+        completed: true,
+        clockSeconds: 197,
+      },
+      {
+        externalId: "401770003",
+        state: "pre",
+        period: 0,
+        completed: false,
+        clockSeconds: 300,
+      },
+    ]);
+  });
+
+  it("skips competitions without an id and omits an unparseable clock", () => {
+    const payload = {
+      event: {
+        header: {
+          competitions: [
+            { status: { period: 1, type: { state: "in" } } },
+            {
+              id: "401770099",
+              status: {
+                period: 1,
+                displayClock: "--",
+                type: { state: "in" },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    expect(parseEspnScoreboardLifecycle(payload)).toEqual([
+      {
+        externalId: "401770099",
+        state: "in",
+        period: 1,
+        completed: false,
+      },
+    ]);
+  });
+
+  it("rejects a non-object payload", () => {
+    expect(() => parseEspnScoreboardLifecycle(null)).toThrow(/JSON object/);
+    expect(() => parseEspnScoreboardLifecycle("nope")).toThrow(/JSON object/);
+  });
+
+  it("returns an empty array when the payload has no competitions", () => {
+    expect(parseEspnScoreboardLifecycle({})).toEqual([]);
+  });
+});
+
+describe("createLiveEspnLifecycleFetcher", () => {
+  it("fails closed outside of live mode", () => {
+    expect(() =>
+      createLiveEspnLifecycleFetcher({ mode: "fixture" }),
+    ).toThrow(/DATA_MODE=live/);
+  });
+
+  it("constructs without requiring credentials in live mode", () => {
+    expect(() =>
+      createLiveEspnLifecycleFetcher({ mode: "live" }),
+    ).not.toThrow();
   });
 });

@@ -479,6 +479,50 @@ describe.skipIf(!localhostAvailable)(
       },
     });
   });
+
+  it("leaves the lifecycle driver stopped by default in fixture mode", async () => {
+    const { collector } = await startCollector();
+
+    expect(collector.lifecycleDriver.isStarted()).toBe(false);
+  });
+
+  it("drives the lifecycle machine from the fixture provider once enabled, and stops cleanly on close", async () => {
+    const time = new ManualRoundTime();
+    const collector = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage: new MemoryStorage(),
+      sse: { heartbeatMs: 50 },
+      lifecycle: { enabled: true, clock: time, timer: time },
+    });
+    collectors.push(collector);
+
+    await collector.start();
+    expect(collector.lifecycleDriver.isStarted()).toBe(true);
+    // The fixture bout-main is already "between-rounds" at round 2; the
+    // first poll only establishes that baseline, so no events fire yet.
+    expect(collector.lifecycle.getState("bout-main")).toMatchObject({
+      state: "in",
+      period: 2,
+      clockSeconds: 0,
+    });
+    expect(collector.eventBus.getEventLog()).toEqual([]);
+
+    time.advance(collector.config.pollingMs.espn);
+    await collector.lifecycleDriver.idle();
+
+    expect(collector.eventBus.getEventLog()).toEqual([
+      expect.objectContaining({
+        type: "PROVISIONAL_ROUND_ENDED",
+        boutId: "bout-main",
+        round: 2,
+      }),
+    ]);
+
+    await collector.close();
+    // Closing stops the poll loop; further time advances do nothing.
+    time.advance(collector.config.pollingMs.espn * 5);
+    expect(collector.eventBus.getEventLog()).toHaveLength(1);
+  });
   },
 );
 

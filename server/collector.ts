@@ -56,6 +56,15 @@ import {
 } from "./health.ts";
 import { FightLifecycleMachine } from "./lifecycle.ts";
 import {
+  createFixtureLifecycleProvider,
+  createLiveCitoLifecycleProvider,
+  createLiveEspnLifecycleProvider,
+  LifecycleDriver,
+  type LifecycleDriverClock,
+  type LifecycleDriverTimer,
+  type LifecycleObservationProvider,
+} from "./lifecycleDriver.ts";
+import {
   createBoutMappingRegistry,
   type BoutMapping,
   type BoutMappingRegistry,
@@ -164,6 +173,15 @@ export interface CollectorXOptions {
   apiFetcher?: XApiFetcher;
 }
 
+export interface CollectorLifecycleDriverOptions {
+  /** Overrides config.lifecycleDriverEnabled (defaults to live mode only; see README). */
+  enabled?: boolean;
+  espnProvider?: LifecycleObservationProvider;
+  citoProvider?: LifecycleObservationProvider;
+  clock?: LifecycleDriverClock;
+  timer?: LifecycleDriverTimer;
+}
+
 export type NormalizedStateLoader = (
   config: CollectorConfig,
 ) => Promise<DashboardState>;
@@ -183,6 +201,7 @@ export interface CreateCollectorOptions {
   sportsbook?: CollectorSportsbookOptions;
   sherdog?: CollectorSherdogOptions;
   x?: CollectorXOptions;
+  lifecycle?: CollectorLifecycleDriverOptions;
   health?: {
     now?: () => string;
     persistIntervalMs?: number;
@@ -204,6 +223,7 @@ export interface Collector {
   readonly sherdogJobs: SherdogRoundJobs;
   readonly xJobs: XRoundJobs;
   readonly lifecycle: FightLifecycleMachine;
+  readonly lifecycleDriver: LifecycleDriver;
   readonly health: SourceHealthRegistry;
   readonly review: ReviewRegistry;
   readonly server: Server;
@@ -746,6 +766,60 @@ export async function createCollector(
     mode: config.dataMode,
     credentials: { ...config.credentials },
   };
+
+  const lifecycleGetBouts = () => loaded.event.bouts;
+  const requiredEventExternalId = (source: "espn" | "cito"): string => {
+    const id = loaded.event.externalRefs.find(
+      (ref) => ref.source === source,
+    )?.id;
+    if (id === undefined) {
+      throw new Error(
+        `Live lifecycle driver requires a "${source}" external ref on the event`,
+      );
+    }
+    return id;
+  };
+  const lifecycleEspnProvider =
+    options.lifecycle?.espnProvider ??
+    (config.dataMode === "fixture"
+      ? createFixtureLifecycleProvider(
+          lifecycleGetBouts,
+          options.lifecycle?.clock,
+        )
+      : createLiveEspnLifecycleProvider(
+          sourceConfig,
+          requiredEventExternalId("espn"),
+          lifecycleGetBouts,
+          { clock: options.lifecycle?.clock },
+        ));
+  const lifecycleCitoProvider =
+    options.lifecycle?.citoProvider ??
+    (config.dataMode === "live" && config.citoApiBaseUrl !== undefined
+      ? createLiveCitoLifecycleProvider(
+          sourceConfig,
+          requiredEventExternalId("cito"),
+          lifecycleGetBouts,
+          { baseUrl: config.citoApiBaseUrl, clock: options.lifecycle?.clock },
+        )
+      : undefined);
+  const lifecycleDriver = new LifecycleDriver({
+    machine: lifecycle,
+    espnProvider: lifecycleEspnProvider,
+    ...(lifecycleCitoProvider === undefined
+      ? {}
+      : { citoProvider: lifecycleCitoProvider }),
+    espnPollingMs: config.pollingMs.espn,
+    citoPollingMs: config.pollingMs.cito,
+    espnFailureThreshold: config.lifecycleEspnFailureThreshold,
+    ...(options.lifecycle?.clock === undefined
+      ? {}
+      : { clock: options.lifecycle.clock }),
+    ...(options.lifecycle?.timer === undefined
+      ? {}
+      : { timer: options.lifecycle.timer }),
+    metrics: healthRegistry,
+  });
+
   const initializedOddsApiIoSource =
     options.sportsbook?.oddsApiIoSource ??
     createOddsApiIoSource(sourceConfig);
@@ -1084,12 +1158,18 @@ export async function createCollector(
     sherdogJobs: initializedSherdogJobs,
     xJobs: initializedXJobs,
     lifecycle,
+    lifecycleDriver,
     health: healthRegistry,
     review,
     server,
     async start() {
       startPromise ??= listen(server, config.port, host);
       const port = await startPromise;
+      const lifecycleDriverEnabled =
+        options.lifecycle?.enabled ?? config.lifecycleDriverEnabled;
+      if (lifecycleDriverEnabled) {
+        await lifecycleDriver.start();
+      }
       if (config.dataMode === "live") {
         await Promise.all(
           marketTransports.map((transport) => transport.connect()),
@@ -1110,6 +1190,7 @@ export async function createCollector(
     },
     async close() {
       for (const unsubscribe of unsubscribers) unsubscribe();
+      await lifecycleDriver.close();
       await initializedOddsApiIoPoller.close();
       await initializedTheOddsApiJob.close();
       await initializedSherdogJobs.close();
