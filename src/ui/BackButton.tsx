@@ -1,3 +1,4 @@
+import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -24,9 +25,7 @@ export function BackButton({
       aria-label={label ?? "Back"}
       className={`gap-1.5 px-2 text-foreground/80 hover:text-foreground${className ? ` ${className}` : ""}`}
     >
-      <span aria-hidden="true" className="text-base leading-none font-semibold">
-        {"<"}
-      </span>
+      <ChevronLeft aria-hidden="true" className="size-4" />
       {label && <span>{label}</span>}
     </Button>
   );

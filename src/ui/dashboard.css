@@ -1371,7 +1371,7 @@
 
 .page-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   margin: 3px 1px 12px;
@@ -1393,8 +1393,10 @@
 }
 
 .page-count {
+  flex: none;
   color: var(--text-faint);
   font-size: 0.58rem;
+  white-space: nowrap;
 }
 
 .rail {

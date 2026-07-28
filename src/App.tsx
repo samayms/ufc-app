@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDashboard } from "./store/useDashboard.ts";
 import {
   getCollectorMarketDelivery,
@@ -53,12 +53,9 @@ export default function App() {
   const [scheduleSelection, setScheduleSelection] = useState<string | null>(
     null,
   );
-  // Whether the currently open Fight tab was reached by drilling into an
-  // event from the Event tab (shows a back arrow) vs. opened directly from
-  // the bottom nav (no "back" to go to).
-  const [cameFromEvent, setCameFromEvent] = useState(false);
   const [selectedFutureFight, setSelectedFutureFight] =
     useState<EspnScheduledFight | null>(null);
+  const mainContentRef = useRef<HTMLElement>(null);
 
   const upcomingEspn = useUpcomingEspnEvents();
   const currentEventId = state?.event.id;
@@ -84,6 +81,14 @@ export default function App() {
     const nextView = id ? state.boutViews[id] : undefined;
     if (nextView) setRound(defaultRoundSelection(nextView));
   }, [selected, state]);
+
+  // Reset scroll position whenever the visible screen changes — otherwise
+  // .app-content keeps its previous scroll offset and a freshly drilled-into
+  // screen (e.g. an event's bout order) can load already scrolled past its
+  // own heading.
+  useEffect(() => {
+    mainContentRef.current?.scrollTo({ top: 0 });
+  }, [tab, scheduleSelection, selected, selectedFutureFight]);
 
   if (dashboard.status === "loading") {
     return (
@@ -169,27 +174,29 @@ export default function App() {
       }
     : undefined;
 
-  const selectBout = (id: string, opts?: { fromEvent?: boolean }) => {
+  const selectBout = (id: string) => {
     setSelected(id);
     setTab("fight");
     setSection("summary");
     setSelectedFutureFight(null);
-    setCameFromEvent(opts?.fromEvent ?? false);
   };
 
   const selectFutureFight = (fight: EspnScheduledFight) => {
     setSelectedFutureFight(fight);
     setTab("fight");
-    setCameFromEvent(true);
   };
 
-  // Back arrow from the Fight tab: returns to the event's drilled fight
-  // list (scheduleSelection is left as-is, so Event tab shows the same
-  // drilled-in list rather than jumping back to the top-level events list).
+  // Back arrow from the Fight tab: returns to the fight's own event's
+  // drilled bout-order screen. When the fight was reached by drilling in
+  // from the Event tab, scheduleSelection already names that event, so it's
+  // left as-is. When the Fight tab was opened directly (e.g. from the
+  // bottom nav), scheduleSelection may still be null or point elsewhere, so
+  // it's set to the current live event — the only event a directly-opened
+  // fight can belong to.
   const backToEventFromFight = () => {
     setTab("event");
+    setScheduleSelection((prev) => prev ?? event.id);
     setSelectedFutureFight(null);
-    setCameFromEvent(false);
   };
 
   // Back arrow within the Event tab's drilled fight-list screen: returns to
@@ -202,7 +209,6 @@ export default function App() {
   // drill-down/back-arrow state left over from the Event tab.
   const handleNavTabChange = (next: AppTab) => {
     setTab(next);
-    setCameFromEvent(false);
     setSelectedFutureFight(null);
   };
 
@@ -282,6 +288,8 @@ export default function App() {
         leading={
           tab === "event" && scheduleSelection !== null ? (
             <BackButton onClick={backToEventList} />
+          ) : tab === "fight" ? (
+            <BackButton onClick={backToEventFromFight} />
           ) : undefined
         }
       />
@@ -301,16 +309,12 @@ export default function App() {
             />
           </aside>
         )}
-        <main className="app-content" id="main-content">
+        <main className="app-content" id="main-content" ref={mainContentRef}>
           {tab === "fight" &&
             (selectedFutureFight ? (
-              <ScheduledFightPreview
-                fight={selectedFutureFight}
-                onBack={backToEventFromFight}
-              />
+              <ScheduledFightPreview fight={selectedFutureFight} />
             ) : view ? (
               <div className="fight-screen">
-                {cameFromEvent && <BackButton onClick={backToEventFromFight} />}
                 <BoutHeader bout={view.bout} />
                 {lifecycleDelivery && (
                   <div className="delivery-notice" role="status">
@@ -429,7 +433,7 @@ export default function App() {
                   <CardRail
                     bouts={event.bouts}
                     selectedId={selectedId ?? ""}
-                    onSelect={(id) => selectBout(id, { fromEvent: true })}
+                    onSelect={selectBout}
                     photosByBoutId={photosByBoutId}
                   />
                 ) : espnCard.status === "loading" || espnCard.status === "idle" ? (

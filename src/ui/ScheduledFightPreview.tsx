@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import type { EspnScheduledFight, EspnScheduledFighter } from "../sources/espnSchedule.ts";
 
-import { BackButton } from "./BackButton.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
 import "./newComponents.css";
 
@@ -27,9 +26,9 @@ function PreviewFighter({
   const showImg = fighter.headshotUrl && !imgFailed;
   const lastName = fighter.name.split(" ").at(-1) ?? fighter.name;
   return (
-    <div className="scheduled-preview-fighter">
+    <div className={`tot-fighter tot-${corner}`}>
       <span
-        className={`scheduled-preview-photo fighter-photo-${corner}`}
+        className={`fighter-photo fighter-photo-${corner}`}
         aria-hidden={showImg ? undefined : "true"}
       >
         {showImg ? (
@@ -43,10 +42,10 @@ function PreviewFighter({
           initialsOf(fighter.name)
         )}
       </span>
-      <span className={`scheduled-preview-name corner-${corner}`} title={fighter.name}>
+      <span className={`tot-name corner-${corner}`} title={fighter.name}>
         {lastName}
       </span>
-      {fighter.record && <span className="scheduled-preview-record num">{fighter.record}</span>}
+      {fighter.record && <span className="tot-record num">{fighter.record}</span>}
     </div>
   );
 }
@@ -135,27 +134,23 @@ function StatsSection() {
  */
 export function ScheduledFightPreview({
   fight,
-  onBack,
 }: {
   fight: EspnScheduledFight;
-  onBack: () => void;
 }) {
   const [active, setActive] = useState<FightSection>("tale");
 
   return (
     <div className="scheduled-preview">
-      <BackButton onClick={onBack} />
-
       <section className="tot" aria-label="Tale of the tape">
-        <div className="scheduled-preview-head">
-          <span className="scheduled-preview-class">
-            {fight.weightClassLabel ?? ""}
-            {fight.titleFight ? " · Title fight" : ""}
-          </span>
+        <div className="tot-class">
+          {fight.weightClassLabel ?? ""}
+          {fight.titleFight ? " · Title fight" : ""}
         </div>
-        <div className="scheduled-preview-grid">
+        <div className="tot-grid">
           <PreviewFighter fighter={fight.red} corner="red" />
-          <span className="scheduled-preview-vs">vs</span>
+          <div className="tot-center">
+            <span className="tot-round-label">Upcoming</span>
+          </div>
           <PreviewFighter fighter={fight.blue} corner="blue" />
         </div>
       </section>
