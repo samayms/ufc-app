@@ -377,6 +377,8 @@ export async function loadFixtureState(
     const sportsbookTicks = await oddsApi.getTickHistory(bout.id);
     const latestOdds: BoutView["latestOdds"] = {};
     const oddsHistory: BoutView["oddsHistory"] = {};
+    // Populated from the tick store's pre-fight boundary snapshots.
+    const preFightOdds: BoutView["preFightOdds"] = {};
 
     const recordOdds = (
       market: OddsSnapshot["market"],
@@ -413,6 +415,7 @@ export async function loadFixtureState(
       rounds,
       latestOdds,
       oddsHistory,
+      preFightOdds,
       marketMoves,
       scorecards: x.configuredEmbeds(bout.id),
     };

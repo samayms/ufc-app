@@ -90,6 +90,8 @@ export async function assembleDashboard(): Promise<DashboardState> {
 
       const latestOdds: BoutView["latestOdds"] = {};
       const oddsHistory: BoutView["oddsHistory"] = {};
+      // Populated from the collector's pre-fight snapshots.
+      const preFightOdds: BoutView["preFightOdds"] = {};
       const record = (market: OddsSnapshot["market"], snap: OddsSnapshot | null) => {
         if (!snap) return;
         latestOdds[market] = snap;
@@ -122,6 +124,7 @@ export async function assembleDashboard(): Promise<DashboardState> {
         latestOdds,
         oddsHistory,
         marketMoves,
+        preFightOdds,
         scorecards: x.configuredEmbeds(bout.id),
       };
     }),

@@ -82,8 +82,21 @@ export interface MarketTick {
   stale: boolean;
 }
 
-export type MarketBoundaryType = "provisional" | "confirmed";
-export type MarketSnapshotLabel = "broad-post-round-comparison";
+/**
+ * Which moment a snapshot pins.
+ *
+ * `pre-fight` is the opening line for the whole card, taken once when the
+ * event starts rather than at a round boundary. It always carries `round: 0`,
+ * which keeps the (boutId, round, source, boundaryType) key unambiguous
+ * against the round-boundary snapshots that start at round 1.
+ */
+export type MarketBoundaryType = "provisional" | "confirmed" | "pre-fight";
+export type MarketSnapshotLabel =
+  | "broad-post-round-comparison"
+  | "pre-fight-open";
+
+/** The round number reserved for pre-fight (card-open) snapshots. */
+export const PRE_FIGHT_ROUND = 0;
 
 export interface MarketSnapshotOutcome {
   bookmaker?: string;

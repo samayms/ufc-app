@@ -352,6 +352,12 @@ export interface BoutView {
   oddsHistory: Partial<Record<OddsSnapshot["market"], OddsSnapshot[]>>;
   /** Per-corner movement since the prior tick, per market kind. Missing entries mean no prior tick, not zero movement. */
   marketMoves: Partial<Record<OddsSnapshot["market"], Partial<Record<Corner, MarketMove>>>>;
+  /**
+   * The opening line per market kind, captured once when the card started.
+   * A missing entry means no pre-fight snapshot was taken for that market —
+   * render absence, never substitute the current price as if it were opening.
+   */
+  preFightOdds: Partial<Record<OddsSnapshot["market"], OddsSnapshot>>;
   scorecards: ScorecardEmbed[];
 }
 
