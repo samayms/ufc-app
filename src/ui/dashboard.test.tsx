@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import type { BoutView } from "../schema.ts";
 import {
   assembleDashboard,
   dashboardDemoState,
@@ -15,6 +16,23 @@ import { RoundStatsPanel } from "./RoundStatsPanel.tsx";
 import { ScorecardFeed } from "./ScorecardFeed.tsx";
 import { SourceStatus } from "./SourceStatus.tsx";
 import { EventSubheader, TopBar } from "./TopBar.tsx";
+
+function toOddsPanelProps(view: BoutView) {
+  const redName = view.bout.fighters.red.name.split(" ").at(-1) ?? view.bout.fighters.red.name;
+  const blueName = view.bout.fighters.blue.name.split(" ").at(-1) ?? view.bout.fighters.blue.name;
+  return {
+    redName,
+    blueName,
+    latestOdds: view.latestOdds,
+    preFightOdds: view.preFightOdds,
+    emptyText:
+      view.bout.status === "final"
+        ? "Bout is final."
+        : view.bout.status === "canceled" || view.bout.status === "postponed"
+          ? `Bout ${view.bout.status}.`
+          : undefined,
+  };
+}
 
 describe("dashboard state surfaces", () => {
   it("parses only supported visual demo states", () => {
@@ -197,7 +215,7 @@ describe("dashboard state surfaces", () => {
     expect(view).toBeDefined();
     if (!view) return;
 
-    const panel = renderToStaticMarkup(<OddsPanel view={view} />);
+    const panel = renderToStaticMarkup(<OddsPanel {...toOddsPanelProps(view)} />);
     expect(panel).toContain("Kalshi");
     expect(panel).toContain("Polymarket");
     expect(panel).toContain("Sportsbooks");
@@ -205,33 +223,37 @@ describe("dashboard state surfaces", () => {
     expect(panel).not.toContain("delivery-freshness");
   });
 
-  it("surfaces per-market movement deltas from tick history in amber", async () => {
+  it("computes per-market movement deltas from tick history, even though OddsPanel no longer renders them", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];
     expect(view).toBeDefined();
     if (!view) return;
 
+    // The store still computes this (see oddsMath.test.ts for the math itself) —
+    // the odds panel just doesn't display it anymore.
     expect(view.marketMoves.kalshi?.red?.direction).toBe("up");
     expect(view.marketMoves.kalshi?.blue?.direction).toBe("down");
-
-    const panel = renderToStaticMarkup(<OddsPanel view={view} />);
-    expect(panel).toContain("market-move-up");
-    expect(panel).toContain("market-move-down");
-    expect(panel).toContain("pp");
   });
 
-  it("renders an honest no-history state instead of a fabricated delta when a market has no ticks", async () => {
+  it("renders the same market-bar layout with '—' for a market with no snapshot", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-3"];
     expect(view).toBeDefined();
     if (!view) return;
 
-    // bout-3 has kalshi/polymarket odds snapshots but no tick history fixture.
-    expect(view.marketMoves.kalshi).toBeUndefined();
-
-    const panel = renderToStaticMarkup(<OddsPanel view={view} />);
-    expect(panel).toContain("market-move-empty");
-    expect(panel).toContain("no history yet");
+    const { polymarket: _droppedPolymarket, ...latestOddsWithoutPolymarket } = view.latestOdds;
+    const panel = renderToStaticMarkup(
+      <OddsPanel
+        {...toOddsPanelProps({ ...view, latestOdds: latestOddsWithoutPolymarket })}
+      />,
+    );
+    const polySection = panel.slice(
+      panel.indexOf('aria-label="Polymarket odds"'),
+      panel.indexOf('aria-label="Sportsbooks odds"'),
+    );
+    // Same market-bar/market-side layout as a populated block, just "—" for the numbers.
+    expect(polySection).toContain("market-bar");
+    expect(polySection).toContain(">—<");
   });
 
   it("surfaces collector delivery freshness (source, receipt time, stale) on live odds", async () => {
@@ -242,7 +264,7 @@ describe("dashboard state surfaces", () => {
 
     const panel = renderToStaticMarkup(
       <OddsPanel
-        view={view}
+        {...toOddsPanelProps(view)}
         deliveries={{
           kalshi: {
             source: "Kalshi",

@@ -289,6 +289,17 @@
   background: radial-gradient(circle at 35% 20%, var(--blue-corner-dim), var(--surface-2) 68%);
 }
 
+.tot-firstname {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: #D3D3D3;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tot-name {
   display: block;
   max-width: 100%;
@@ -305,6 +316,31 @@
 .tot-record {
   color: var(--text-faint);
   font-size: 0.57rem;
+}
+
+.tot-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.rank-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1em;
+  aspect-ratio: 1 / 1;
+  padding: 2px 4px;
+  background: #AAB0B6;
+  color: var(--bg);
+  font-family: var(--font-event-title);
+  font-size: 0.62rem;
+}
+
+.rank-badge-champion {
+  background: #BEAD5A;
 }
 
 .tot-center {
@@ -390,7 +426,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(91px, auto) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  margin-top: -6px;
+  margin-top: -9px;
   padding: 0 0 6px;
   border: none;
   border-radius: 0;
@@ -411,6 +447,15 @@
   font-family: var(--font-display);
   font-size: 1.55rem;
   line-height: 1;
+}
+
+.market-strip-prefight {
+  margin-top: 3px;
+  color: var(--text-faint);
+  font-family: var(--font-stat-label);
+  font-size: 0.55rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .market-strip-divider {
@@ -1089,10 +1134,15 @@
 }
 
 /*
- * Per-market accent, reserved for markets without their own live data yet
- * (see the future-fight preview's placeholder market slots). Kalshi has no
- * override here on purpose — it keeps the default amber above.
+ * Per-market accent — each market colors its own header and movement
+ * arrows with its reserved accent instead of the shared default amber.
+ * Applies whether the block has live data or is a future-fight
+ * placeholder (see ScheduledFightPreview's reuse of OddsPanel).
  */
+.market[data-market-accent="kalshi"] .market-head h3 {
+  color: var(--market-color-kalshi);
+}
+
 .market[data-market-accent="polymarket"] .market-head h3 {
   color: var(--market-color-polymarket);
 }
@@ -1137,29 +1187,6 @@
   text-transform: uppercase;
 }
 
-/*
- * Market movement — the amber reservation from DESIGN.md's Amber-Is-Money
- * rule, exercised here for the first time. Amber marks the delta itself,
- * never the fighter side it sits next to (.market-pct/.market-native stay
- * neutral text color either way).
- */
-.market-move {
-  margin-top: 2px;
-  font-size: 0.58rem;
-  font-weight: 600;
-}
-
-.market-move-up,
-.market-move-down {
-  color: var(--market);
-}
-
-.market-move-flat,
-.market-move-empty {
-  color: var(--text-faint);
-  font-weight: 500;
-}
-
 .split {
   height: 9px;
   flex: 1;
@@ -1177,17 +1204,23 @@
   background: var(--blue-corner);
 }
 
-.market-note {
-  margin: 6px 0 0;
-  color: var(--text-faint);
-  font-size: 0.58rem;
-  line-height: 1.4;
+/* Neutral fill used in place of red/blue when a side's probability is
+   unknown ("—") — no data to visualize, so no market color either. */
+.split-neutral {
+  background: var(--border);
+}
+
+.split-neutral:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.split-neutral:last-child {
+  border-radius: 0 4px 4px 0;
 }
 
 /*
  * Opening (pre-fight) line — reuses .market-head/.market-bar/.market-side
- * verbatim (see OpeningLine in OddsPanel.tsx); the only new rule is this
- * wrapper's spacing, matching .market-note's margin-top above.
+ * verbatim (see OpeningLine in OddsPanel.tsx).
  */
 .market-open {
   margin-top: 6px;
@@ -1259,14 +1292,6 @@
   font-size: 0.64rem;
 }
 
-.profile-fullname {
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: 0.62rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .profile-nick {
   overflow: hidden;
   color: var(--text-faint);
@@ -1310,7 +1335,7 @@
   font-family: var(--font-stat-label);
   font-size: 0.57rem;
   letter-spacing: 0.05em;
-  text-transform: lowercase;
+  text-transform: none;
 }
 
 .profile-row > span:last-child {
@@ -1396,7 +1421,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin: 3px 1px 12px;
+  margin: 3px 1px 6px;
 }
 
 .page-kicker {
@@ -1409,13 +1434,14 @@
 
 .page-heading h2 {
   margin: -1px 0 0;
-  font-family: var(--font-display);
+  font-family: var(--font-event-title);
   font-size: 1.6rem;
   line-height: 1;
 }
 
 .page-heading h2.event-title {
   font-family: var(--font-event-title);
+  line-height: 0.85;
 }
 
 .page-count {
@@ -1767,12 +1793,16 @@
   }
 
   .market-strip {
-    margin-top: -4px;
+    margin-top: -6px;
     padding: 0 0 4px;
   }
 
   .market-strip-side strong {
     font-size: 1.25rem;
+  }
+
+  .market-strip-prefight {
+    font-size: 0.5rem;
   }
 
   .section-tabs {

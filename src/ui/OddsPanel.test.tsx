@@ -4,6 +4,23 @@ import type { BoutView, OddsSnapshot } from "../schema.ts";
 import { assembleDashboard } from "../store/useDashboard.ts";
 import { OddsPanel } from "./OddsPanel.tsx";
 
+function toOddsPanelProps(view: BoutView) {
+  const redName = view.bout.fighters.red.name.split(" ").at(-1) ?? view.bout.fighters.red.name;
+  const blueName = view.bout.fighters.blue.name.split(" ").at(-1) ?? view.bout.fighters.blue.name;
+  return {
+    redName,
+    blueName,
+    latestOdds: view.latestOdds,
+    preFightOdds: view.preFightOdds,
+    emptyText:
+      view.bout.status === "final"
+        ? "Bout is final."
+        : view.bout.status === "canceled" || view.bout.status === "postponed"
+          ? `Bout ${view.bout.status}.`
+          : undefined,
+  };
+}
+
 /** A hand-built opening (pre-fight) Kalshi snapshot, distinct from the fixture's current price. */
 function openKalshiSnapshot(boutId: string): OddsSnapshot {
   return {
@@ -47,7 +64,7 @@ function currentKalshiSnapshot(boutId: string): OddsSnapshot {
 }
 
 describe("OddsPanel pre-fight (opening line) rendering", () => {
-  it("renders the opening price and the move from open to now when a pre-fight snapshot exists", async () => {
+  it("renders the opening price alongside the current price when a pre-fight snapshot exists", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];
     expect(view).toBeDefined();
@@ -56,11 +73,10 @@ describe("OddsPanel pre-fight (opening line) rendering", () => {
     const withOpen: BoutView = {
       ...view,
       latestOdds: { ...view.latestOdds, kalshi: currentKalshiSnapshot(view.bout.id) },
-      marketMoves: { ...view.marketMoves, kalshi: {} },
       preFightOdds: { ...view.preFightOdds, kalshi: openKalshiSnapshot(view.bout.id) },
     };
 
-    const panel = renderToStaticMarkup(<OddsPanel view={withOpen} />);
+    const panel = renderToStaticMarkup(<OddsPanel {...toOddsPanelProps(withOpen)} />);
     expect(panel).toContain("Opening line");
     expect(panel).toContain("opened");
     // Opening prices, distinct from the 70%/30% current prices rendered above.
@@ -68,12 +84,9 @@ describe("OddsPanel pre-fight (opening line) rendering", () => {
     expect(panel).toContain("60%");
     expect(panel).toContain("70%");
     expect(panel).toContain("30%");
-    // Red opened at 40%, now 70% -> up; blue opened at 60%, now 30% -> down.
-    expect(panel).toContain("market-move-up");
-    expect(panel).toContain("market-move-down");
   });
 
-  it("renders an honest empty state, with no fabricated delta, when no pre-fight snapshot was captured", async () => {
+  it("renders the same market-bar layout with '—' placeholders when no pre-fight snapshot was captured", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];
     expect(view).toBeDefined();
@@ -83,14 +96,16 @@ describe("OddsPanel pre-fight (opening line) rendering", () => {
     // so preFightOdds stays the empty stub straight out of assembleDashboard().
     expect(view.preFightOdds).toEqual({});
 
-    const panel = renderToStaticMarkup(<OddsPanel view={view} />);
-    expect(panel).toContain("No opening line captured for this market.");
-    // Never substitute the current price as if it were the opening one, and
-    // never fabricate a delta from a price we don't have.
-    expect(panel).not.toContain("Opening line");
+    const panel = renderToStaticMarkup(<OddsPanel {...toOddsPanelProps(view)} />);
+    // Still renders the "Opening line" bar shape — just with no numbers to show.
+    expect(panel).toContain("Opening line");
+    expect(panel).toContain("market-open");
+    expect(panel).toContain(">—<");
+    // No fabricated "opened <time>" freshness text when there's no timestamp.
+    expect(panel).not.toContain("opened");
   });
 
-  it("never fabricates a delta when an opening line exists but there is no current price to compare it to", async () => {
+  it("renders '—' for the opening price when an opening line exists but a corner's quote is incomplete", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];
     expect(view).toBeDefined();
@@ -105,17 +120,15 @@ describe("OddsPanel pre-fight (opening line) rendering", () => {
       preFightOdds: { ...view.preFightOdds, kalshi: openKalshiSnapshot(view.bout.id) },
     };
 
-    const panel = renderToStaticMarkup(<OddsPanel view={withOpenOnly} />);
-    // Scope to the Kalshi section — Polymarket/Sportsbooks legitimately have
-    // their own unrelated market-move-up/down from fixture tick history.
+    const panel = renderToStaticMarkup(<OddsPanel {...toOddsPanelProps(withOpenOnly)} />);
+    // Scope to the Kalshi section.
     const kalshiSection = panel.slice(
       panel.indexOf('aria-label="Kalshi odds"'),
       panel.indexOf('aria-label="Polymarket odds"'),
     );
     expect(kalshiSection).toContain("Opening line");
     expect(kalshiSection).toContain("40%");
-    expect(kalshiSection).toContain("current price unavailable");
-    expect(kalshiSection).not.toContain("market-move-up");
-    expect(kalshiSection).not.toContain("market-move-down");
+    // No current Kalshi snapshot -> the live market-bar renders "—" for both sides.
+    expect(kalshiSection).toContain(">—<");
   });
 });

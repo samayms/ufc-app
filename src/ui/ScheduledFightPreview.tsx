@@ -5,12 +5,13 @@ import type { Corner, Fighter, FightRecord } from "../schema.ts";
 
 import { BoutHeader } from "./BoutHeader.tsx";
 import { FighterProfile } from "./FighterProfile.tsx";
+import { MarketStrip } from "./MarketStrip.tsx";
 import { OddsPanel } from "./OddsPanel.tsx";
 import { RecentForm } from "./RecentForm.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
 import "./newComponents.css";
 
-const PREVIEW_SECTIONS: FightSection[] = ["odds", "tale"];
+const PREVIEW_SECTIONS: FightSection[] = ["tale", "odds"];
 
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -64,25 +65,18 @@ function toFighter(fighter: EspnScheduledFighter): Fighter {
  * Odds tab for a future (not-yet-started) fight. No real data pipeline
  * connects future ESPN fights to any market yet, so this renders the exact
  * same `OddsPanel` the live Fight tab uses, with empty `latestOdds` /
- * `marketMoves` / `preFightOdds` — its established empty state ("Odds
- * aren't available yet." / "No opening line captured for this market.")
- * — which guarantees this view is pixel-identical to the live Odds tab
- * (same component, not a hand-duplicated copy) and means a future prompt
- * wiring up real Kalshi/Polymarket/sportsbook data only has to pass
- * snapshots in, not rebuild this layout.
+ * `preFightOdds` — which guarantees this view is pixel-identical to the
+ * live Odds tab (same component, not a hand-duplicated copy) and means a
+ * future prompt wiring up real Kalshi/Polymarket/sportsbook data only has
+ * to pass snapshots in, not rebuild this layout. Missing numbers render as
+ * "—" in the same bar layout the live tab uses, rather than swapping to a
+ * different empty-state message.
  */
 function OddsSection({ fight }: { fight: EspnScheduledFight }) {
   const redName = fight.red.name.split(" ").at(-1) ?? fight.red.name;
   const blueName = fight.blue.name.split(" ").at(-1) ?? fight.blue.name;
   return (
-    <OddsPanel
-      redName={redName}
-      blueName={blueName}
-      latestOdds={{}}
-      marketMoves={{}}
-      preFightOdds={{}}
-      emptyText="Odds aren't available yet."
-    />
+    <OddsPanel redName={redName} blueName={blueName} latestOdds={{}} preFightOdds={{}} />
   );
 }
 
@@ -167,6 +161,7 @@ export function ScheduledFightPreview({
           blue: fight.blue.headshotUrl,
         }}
       />
+      <MarketStrip latestOdds={{}} preFightOdds={{}} onOpen={() => setActive("odds")} />
 
       <SectionTabs active={active} onChange={setActive} sections={PREVIEW_SECTIONS} />
 

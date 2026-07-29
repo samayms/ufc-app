@@ -2,6 +2,20 @@ import { useState } from "react";
 import type { BoutResult, BoutStatus, Corner, Fighter } from "../schema.ts";
 import { fmtMethod, fmtRecord } from "./format.ts";
 
+/**
+ * Turns an ESPN-sourced `Fighter.ranking` string (see `parseEspnRankings`
+ * in espnSchedule.ts: either "${division} Champion" or "#${current}
+ * ${division}") into the short badge text to render, or `null` when the
+ * fighter is unranked or the string doesn't match a recognized shape —
+ * absence over a fabricated badge.
+ */
+function rankingBadge(ranking: string | undefined): string | null {
+  if (ranking === undefined) return null;
+  if (/champion/i.test(ranking)) return "C";
+  const match = ranking.match(/^#(\d+)/);
+  return match?.[1] ?? null;
+}
+
 function FighterBlock({
   fighter,
   corner,
@@ -18,7 +32,9 @@ function FighterBlock({
     .map((part) => part[0])
     .join("")
     .slice(0, 2);
+  const firstName = fighter.name.split(" ")[0] ?? fighter.name;
   const lastName = fighter.name.split(" ").at(-1) ?? fighter.name;
+  const badge = rankingBadge(fighter.ranking);
 
   return (
     <div className={`tot-fighter tot-${corner}`}>
@@ -37,8 +53,16 @@ function FighterBlock({
           initials
         )}
       </span>
-      <span className={`tot-name corner-${corner}`} title={fighter.name}>
-        {lastName}
+      <span className="tot-firstname">{firstName}</span>
+      <span className="tot-name-row">
+        <span className={`tot-name corner-${corner}`} title={fighter.name}>
+          {lastName}
+        </span>
+        {badge && (
+          <span className={`rank-badge${badge === "C" ? " rank-badge-champion" : ""}`}>
+            {badge}
+          </span>
+        )}
       </span>
       <span className="tot-record num">{fmtRecord(fighter.record)}</span>
     </div>
@@ -106,7 +130,7 @@ function CenterStatus({
   return (
     <>
       <span className="tot-live-label tot-upcoming">Upcoming</span>
-      <span className="tot-round-label num">{scheduledRounds} rounds</span>
+      <span className="tot-round-label num">{scheduledRounds} ROUNDS</span>
       <span className="tot-substate">not started</span>
     </>
   );

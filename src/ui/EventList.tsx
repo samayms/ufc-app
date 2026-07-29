@@ -49,7 +49,7 @@ function EventCardFighter({
           initialsOf(fighter.name)
         )}
       </span>
-      <span className="event-card-fighter-name">{fighter.name.split(" ").at(-1)}</span>
+      <span className="event-card-fighter-name">{fighter.name}</span>
     </div>
   );
 }
@@ -70,14 +70,14 @@ function EventCard({
       onClick={() => onSelect(entry.id)}
       aria-current={isSelected ? "true" : undefined}
     >
+      <div className="event-card-header">
+        <span className="event-card-name">{entry.name}</span>
+        <span className="event-card-date num">{fmtEventDate(entry.startsAt)}</span>
+      </div>
       <div className="event-card-matchup">
         <EventCardFighter fighter={entry.redFighter} corner="red" />
         <span className="event-card-vs">vs</span>
         <EventCardFighter fighter={entry.blueFighter} corner="blue" />
-      </div>
-      <div className="event-card-meta">
-        <span className="event-card-name">{entry.name}</span>
-        <span className="event-card-date num">{fmtEventDate(entry.startsAt)}</span>
       </div>
     </button>
   );

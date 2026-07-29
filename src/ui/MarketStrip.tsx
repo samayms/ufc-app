@@ -2,28 +2,45 @@ import { averageImpliedProbability } from "../lib/oddsMath.ts";
 import type { BoutView, OddsSnapshot } from "../schema.ts";
 import { fmtPct } from "./format.ts";
 
-function firstUsable(view: BoutView): OddsSnapshot | null {
+type LatestOdds = BoutView["latestOdds"];
+
+function firstUsable(latestOdds: LatestOdds): OddsSnapshot | null {
   return (
-    view.latestOdds.kalshi ??
-    view.latestOdds.polymarket ??
-    view.latestOdds.sportsbook ??
-    null
+    latestOdds.kalshi ?? latestOdds.polymarket ?? latestOdds.sportsbook ?? null
   );
 }
 
+/**
+ * The at-a-glance win-probability bar shown directly under the fighters in
+ * BoutHeader. Takes just the odds map (not a whole BoutView) so the exact
+ * same component renders for both a live bout and a not-yet-started
+ * ScheduledFightPreview (which passes `{}` — no market pipeline exists for
+ * future fights yet, so every side falls back to "—"). One component, one
+ * set of edits, both call sites.
+ */
 export function MarketStrip({
-  view,
+  latestOdds,
+  preFightOdds,
   onOpen,
 }: {
-  view: BoutView;
+  latestOdds: LatestOdds;
+  preFightOdds: LatestOdds;
   onOpen: () => void;
 }) {
-  const snapshot = firstUsable(view);
+  const snapshot = firstUsable(latestOdds);
   const red = snapshot
     ? averageImpliedProbability(snapshot, "red")
     : null;
   const blue = snapshot
     ? averageImpliedProbability(snapshot, "blue")
+    : null;
+
+  const preFightSnapshot = firstUsable(preFightOdds);
+  const preFightRed = preFightSnapshot
+    ? averageImpliedProbability(preFightSnapshot, "red")
+    : null;
+  const preFightBlue = preFightSnapshot
+    ? averageImpliedProbability(preFightSnapshot, "blue")
     : null;
 
   return (
@@ -35,10 +52,16 @@ export function MarketStrip({
     >
       <span className="market-strip-side">
         <strong className="num">{red == null ? "—" : fmtPct(red)}</strong>
+        <span className="market-strip-prefight">
+          Prefight odds: <span className="num">{preFightRed == null ? "—" : fmtPct(preFightRed)}</span>
+        </span>
       </span>
       <span className="market-strip-divider" aria-hidden="true" />
       <span className="market-strip-side">
         <strong className="num">{blue == null ? "—" : fmtPct(blue)}</strong>
+        <span className="market-strip-prefight">
+          Prefight odds: <span className="num">{preFightBlue == null ? "—" : fmtPct(preFightBlue)}</span>
+        </span>
       </span>
     </button>
   );

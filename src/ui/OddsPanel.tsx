@@ -1,124 +1,55 @@
-import type { BoutView, Corner, MarketMove, OddsSnapshot } from "../schema.ts";
+import type { OddsSnapshot } from "../schema.ts";
 import { averageImpliedProbability } from "../lib/oddsMath.ts";
 import type { CollectorValueDelivery } from "../store/collectorClient.ts";
 import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
-import { fmtMoneyline, fmtMove, fmtNative, fmtPct, fmtTime } from "./format.ts";
-
-/**
- * One corner's movement since the prior tick — the market-amber reservation
- * (DESIGN.md's Amber-Is-Money rule) exercised for the first time. Renders an
- * honest "no history yet" dash rather than a fabricated zero when there's no
- * prior tick to compare against. `emptyLabel` lets callers with a different
- * reason for "no delta" (e.g. no opening line to compare against) say so
- * without inventing a second visual language for the same kind of absence.
- */
-function MarketMoveTag({
-  move,
-  emptyLabel = "no history yet",
-}: {
-  move?: MarketMove;
-  emptyLabel?: string;
-}) {
-  if (!move) {
-    return <span className="market-move market-move-empty">{emptyLabel}</span>;
-  }
-  if (move.direction === "flat") {
-    return <span className="market-move market-move-flat">flat</span>;
-  }
-  const arrow = move.direction === "up" ? "▲" : "▼";
-  return (
-    <span className={`market-move market-move-${move.direction} num`}>
-      {arrow} {fmtMove(move.deltaProbability)}
-    </span>
-  );
-}
-
-/**
- * Movement from the opening line to the current price, in the same
- * MarketMove shape market-tick movement uses — same math (average implied
- * probability per corner, no de-vig), just anchored on the pre-fight
- * snapshot instead of the prior tick. Null — never a fabricated delta —
- * when either side is missing a usable quote for the corner.
- */
-function openToNowMove(
-  open: OddsSnapshot,
-  current: OddsSnapshot,
-  corner: Corner,
-): MarketMove | null {
-  const previousProbability = averageImpliedProbability(open, corner);
-  const currentProbability = averageImpliedProbability(current, corner);
-  if (previousProbability == null || currentProbability == null) return null;
-  const deltaProbability = currentProbability - previousProbability;
-  const direction =
-    deltaProbability > 0 ? "up" : deltaProbability < 0 ? "down" : "flat";
-  return { direction, deltaProbability, previousProbability, currentProbability };
-}
+import { fmtMoneyline, fmtNative, fmtPct, fmtTime } from "./format.ts";
 
 /**
  * The opening (pre-fight) line for one market, shown alongside the current
  * price so the owner can actually check pre-fight odds — the dashboard's
- * primary ask. A missing `open` snapshot is rendered as a plain, honest
- * absence (schema.ts's contract: no pre-fight snapshot means no opening
- * line, never the current price standing in for it).
+ * primary ask. Missing pieces (no snapshot at all, or a snapshot with an
+ * incomplete quote) render the same bar layout as a populated line, with
+ * "—" standing in for any number that isn't known.
  */
 function OpeningLine({
   open,
-  current,
   redName,
   blueName,
 }: {
   open: OddsSnapshot | null;
-  current: OddsSnapshot | null;
   redName: string;
   blueName: string;
 }) {
-  if (!open) {
-    return (
-      <div className="market-open">
-        <p className="market-note">No opening line captured for this market.</p>
-      </div>
-    );
-  }
-  const red = averageImpliedProbability(open, "red");
-  const blue = averageImpliedProbability(open, "blue");
-  if (red == null || blue == null) {
-    return (
-      <div className="market-open">
-        <p className="market-note">Opening line captured but incomplete.</p>
-      </div>
-    );
-  }
-  const singleBook = open.market !== "sportsbook";
-  const redQuote = open.quotes.find((q) => q.corner === "red");
-  const blueQuote = open.quotes.find((q) => q.corner === "blue");
-  const moveRed = current ? openToNowMove(open, current, "red") : null;
-  const moveBlue = current ? openToNowMove(open, current, "blue") : null;
-  const emptyLabel = current ? "no history yet" : "current price unavailable";
+  const red = open ? averageImpliedProbability(open, "red") : null;
+  const blue = open ? averageImpliedProbability(open, "blue") : null;
+  const singleBook = open ? open.market !== "sportsbook" : false;
+  const redQuote = open?.quotes.find((q) => q.corner === "red");
+  const blueQuote = open?.quotes.find((q) => q.corner === "blue");
 
   return (
     <div className="market-open">
       <div className="market-head">
         <span className="freshness">Opening line</span>
-        <span className="freshness">
-          opened <span className="num">{fmtTime(open.provenance.fetchedAt)}</span>
-        </span>
+        {open && (
+          <span className="freshness">
+            opened <span className="num">{fmtTime(open.provenance.fetchedAt)}</span>
+          </span>
+        )}
       </div>
       <div className="market-bar">
         <span className="market-side">
-          <span className="market-pct num">{fmtPct(red)}</span>
+          <span className="market-pct num">{red == null ? "—" : fmtPct(red)}</span>
           <span className="market-name">{redName}</span>
           {singleBook && redQuote && (
             <span className="market-native num">{fmtNative(redQuote.native)}</span>
           )}
-          <MarketMoveTag move={moveRed ?? undefined} emptyLabel={emptyLabel} />
         </span>
         <span className="market-side market-side-blue">
-          <span className="market-pct num">{fmtPct(blue)}</span>
+          <span className="market-pct num">{blue == null ? "—" : fmtPct(blue)}</span>
           <span className="market-name">{blueName}</span>
           {singleBook && blueQuote && (
             <span className="market-native num">{fmtNative(blueQuote.native)}</span>
           )}
-          <MarketMoveTag move={moveBlue ?? undefined} emptyLabel={emptyLabel} />
         </span>
       </div>
     </div>
@@ -130,6 +61,8 @@ function OpeningLine({
  * right, 2px surface gap between them (dataviz spacer rule). Probabilities
  * may not sum to 1 (vig, spread) — the gap position uses the red share of
  * the red+blue total, and the raw numbers are always printed beside it.
+ * Either side may be `null` (no usable quote) — the bar then renders a
+ * neutral, uncolored 50/50 split rather than fabricating a lean.
  */
 function SplitBar({
   red,
@@ -137,32 +70,38 @@ function SplitBar({
   redName,
   blueName,
 }: {
-  red: number;
-  blue: number;
+  red: number | null;
+  blue: number | null;
   redName: string;
   blueName: string;
 }) {
-  const total = red + blue;
-  const redShare = total > 0 ? (red / total) * 100 : 50;
+  const hasData = red != null && blue != null;
+  const total = (red ?? 0) + (blue ?? 0);
+  const redShare = hasData && total > 0 ? ((red as number) / total) * 100 : 50;
+  const label = hasData
+    ? `${redName} ${fmtPct(red as number)}, ${blueName} ${fmtPct(blue as number)}`
+    : `${redName} vs ${blueName}, odds unavailable`;
   return (
-    <div
-      className="split"
-      role="img"
-      aria-label={`${redName} ${fmtPct(red)}, ${blueName} ${fmtPct(blue)}`}
-    >
-      <span className="split-red" style={{ width: `calc(${redShare}% - 1px)` }} />
-      <span className="split-blue" style={{ width: `calc(${100 - redShare}% - 1px)` }} />
+    <div className="split" role="img" aria-label={label}>
+      <span
+        className={hasData ? "split-red" : "split-neutral"}
+        style={{ width: `calc(${redShare}% - 1px)` }}
+      />
+      <span
+        className={hasData ? "split-blue" : "split-neutral"}
+        style={{ width: `calc(${100 - redShare}% - 1px)` }}
+      />
     </div>
   );
 }
 
 /**
  * Market slots render amber (`--market`) by default, matching the live
- * panel's existing look. `accent` lets a caller opt a slot into its
- * reserved color instead — used by the future-fight preview to keep
- * Kalshi/Polymarket/Sportsbooks visually distinct even before real data
- * exists for any of them. Kalshi intentionally has no accent value: it
- * keeps the existing default amber, per product direction.
+ * panel's existing look. `accent` lets a caller opt a slot into its own
+ * reserved color instead — Kalshi, Polymarket, and Sportsbooks each get a
+ * distinct accent (see `--market-color-*` in index.css and the
+ * `data-market-accent` rules in dashboard.css) so the three blocks stay
+ * visually distinct whether a fight is live or still upcoming.
  */
 export function MarketBlock({
   title,
@@ -170,18 +109,16 @@ export function MarketBlock({
   snapshot,
   emptyText,
   delivery,
-  moves,
   preFight,
   redName,
   blueName,
   children,
 }: {
   title: string;
-  accent?: "polymarket" | "sportsbook";
+  accent?: "kalshi" | "polymarket" | "sportsbook";
   snapshot: OddsSnapshot | null;
-  emptyText: string;
+  emptyText?: string;
   delivery?: CollectorValueDelivery;
-  moves?: Partial<Record<Corner, MarketMove>>;
   preFight: OddsSnapshot | null;
   redName: string;
   blueName: string;
@@ -191,63 +128,55 @@ export function MarketBlock({
     <section className="market" data-market-accent={accent} aria-label={`${title} odds`}>
       <div className="market-head">
         <h3>{title}</h3>
-        {snapshot &&
-          (delivery ? (
+        {snapshot ? (
+          delivery ? (
             <DeliveryFreshness delivery={delivery} />
           ) : (
             <span className="freshness">
               as of <span className="num">{fmtTime(snapshot.provenance.fetchedAt)}</span>
             </span>
-          ))}
+          )
+        ) : (
+          emptyText && <span className="freshness">{emptyText}</span>
+        )}
       </div>
-      {snapshot ? (
-        <>
-          <MarketBar snapshot={snapshot} moves={moves} redName={redName} blueName={blueName} />
-          {children}
-        </>
-      ) : (
-        <p className="empty">{emptyText}</p>
-      )}
-      <OpeningLine open={preFight} current={snapshot} redName={redName} blueName={blueName} />
+      <MarketBar snapshot={snapshot} redName={redName} blueName={blueName} />
+      {children}
+      <OpeningLine open={preFight} redName={redName} blueName={blueName} />
     </section>
   );
 }
 
 function MarketBar({
   snapshot,
-  moves,
   redName,
   blueName,
 }: {
-  snapshot: OddsSnapshot;
-  moves?: Partial<Record<Corner, MarketMove>>;
+  snapshot: OddsSnapshot | null;
   redName: string;
   blueName: string;
 }) {
-  const red = averageImpliedProbability(snapshot, "red");
-  const blue = averageImpliedProbability(snapshot, "blue");
-  if (red == null || blue == null) return <p className="empty">Incomplete quotes.</p>;
-  const singleBook = snapshot.market !== "sportsbook";
-  const redQuote = snapshot.quotes.find((q) => q.corner === "red");
-  const blueQuote = snapshot.quotes.find((q) => q.corner === "blue");
+  const red = snapshot ? averageImpliedProbability(snapshot, "red") : null;
+  const blue = snapshot ? averageImpliedProbability(snapshot, "blue") : null;
+  const singleBook = snapshot ? snapshot.market !== "sportsbook" : false;
+  const redQuote = snapshot?.quotes.find((q) => q.corner === "red");
+  const blueQuote = snapshot?.quotes.find((q) => q.corner === "blue");
   return (
     <div className="market-bar">
       <span className="market-side">
-        <span className="market-pct num">{fmtPct(red)}</span>
+        <span className="market-pct num">{red == null ? "—" : fmtPct(red)}</span>
         <span className="market-name">{redName}</span>
         {singleBook && redQuote && (
           <span className="market-native num">{fmtNative(redQuote.native)}</span>
         )}
-        <MarketMoveTag move={moves?.red} />
       </span>
       <SplitBar red={red} blue={blue} redName={redName} blueName={blueName} />
       <span className="market-side market-side-blue">
-        <span className="market-pct num">{fmtPct(blue)}</span>
+        <span className="market-pct num">{blue == null ? "—" : fmtPct(blue)}</span>
         <span className="market-name">{blueName}</span>
         {singleBook && blueQuote && (
           <span className="market-native num">{fmtNative(blueQuote.native)}</span>
         )}
-        <MarketMoveTag move={moves?.blue} />
       </span>
     </div>
   );
@@ -305,56 +234,52 @@ function BookRows({
 }
 
 export function OddsPanel({
-  view,
+  redName,
+  blueName,
+  latestOdds,
+  preFightOdds,
+  emptyText,
   deliveries,
 }: {
-  view: BoutView;
+  redName: string;
+  blueName: string;
+  latestOdds: Partial<Record<OddsSnapshot["market"], OddsSnapshot>>;
+  preFightOdds: Partial<Record<OddsSnapshot["market"], OddsSnapshot>>;
+  emptyText?: string;
   deliveries?: Partial<Record<OddsSnapshot["market"], CollectorValueDelivery>>;
 }) {
-  const { latestOdds, marketMoves, preFightOdds, bout } = view;
-  const finalText =
-    bout.status === "final"
-      ? "Market settled — bout is final."
-      : bout.status === "canceled" || bout.status === "postponed"
-        ? `Market unavailable — bout ${bout.status}.`
-        : "No market for this bout yet.";
   const sportsbook = latestOdds.sportsbook ?? null;
-  const redName = bout.fighters.red.name.split(" ").at(-1) ?? bout.fighters.red.name;
-  const blueName = bout.fighters.blue.name.split(" ").at(-1) ?? bout.fighters.blue.name;
   return (
     <section className="panel" aria-label="Odds comparison">
       <div className="panel-head">
         <h2>Markets</h2>
-        <span className="freshness">
-          implied win probability, {redName} vs {blueName}
-        </span>
       </div>
       <MarketBlock
         title="Kalshi"
+        accent="kalshi"
         snapshot={latestOdds.kalshi ?? null}
-        emptyText={finalText}
+        emptyText={emptyText}
         delivery={deliveries?.kalshi}
-        moves={marketMoves.kalshi}
         preFight={preFightOdds.kalshi ?? null}
         redName={redName}
         blueName={blueName}
       />
       <MarketBlock
         title="Polymarket"
+        accent="polymarket"
         snapshot={latestOdds.polymarket ?? null}
-        emptyText={finalText}
+        emptyText={emptyText}
         delivery={deliveries?.polymarket}
-        moves={marketMoves.polymarket}
         preFight={preFightOdds.polymarket ?? null}
         redName={redName}
         blueName={blueName}
       />
       <MarketBlock
         title="Sportsbooks"
+        accent="sportsbook"
         snapshot={sportsbook}
-        emptyText={finalText}
+        emptyText={emptyText}
         delivery={deliveries?.sportsbook}
-        moves={marketMoves.sportsbook}
         preFight={preFightOdds.sportsbook ?? null}
         redName={redName}
         blueName={blueName}

@@ -35,7 +35,7 @@ function FightStatusChip({ fight }: { fight: EspnScheduledFight }) {
     default:
       return (
         <span className="chip chip-upcoming">
-          {fight.titleFight ? "TITLE" : "UPCOMING"}
+          UPCOMING
         </span>
       );
   }

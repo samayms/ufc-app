@@ -124,14 +124,15 @@ describe("ScheduledCardRail", () => {
     expect(markup).not.toContain("Early Prelims · from");
   });
 
-  it("labels chips TITLE for title fights and UPCOMING for everything else scheduled, never MAIN", () => {
+  it("labels every scheduled fight's chip UPCOMING, never TITLE or MAIN", () => {
     const markup = renderToStaticMarkup(
       <ScheduledCardRail card={card} onSelect={() => undefined} />,
     );
-    expect(markup).toContain(">TITLE<");
     expect(markup).toContain(">UPCOMING<");
-    // c2 is a non-title main event — regression guard for the removed
-    // "MAIN" chip label, which is now folded into "UPCOMING".
+    // Regression guard: a scheduled fight's chip always reads UPCOMING,
+    // even for title fights or the non-title main event (c2) — it never
+    // says TITLE or MAIN.
+    expect(markup).not.toContain(">TITLE<");
     expect(markup).not.toContain(">MAIN<");
   });
 

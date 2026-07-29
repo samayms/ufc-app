@@ -857,6 +857,17 @@ const CHAMPION_TYPE_SUFFIX = "-champions";
  * prefers "Champion" over a numbered rank. Never throws on malformed input —
  * an unrecognized shape just yields an empty map, matching this file's other
  * parsers' "no data" convention.
+ *
+ * Quirk: for most divisions, ESPN's numbered "ranks" list redundantly
+ * includes that division's own champion (usually at `current: 1`, but not
+ * always) ahead of the real numbered contenders. Because the champion group
+ * is always processed first, that duplicate entry gets skipped here (its id
+ * is already in `result`) — but its raw `current` field is NOT a reliable
+ * display rank for the contenders that follow it, since trusting `current`
+ * verbatim would shift every real contender's number up by one. Instead,
+ * the display rank is derived from each entry's position among the
+ * non-duplicate entries, numbered 1, 2, 3... in ESPN's existing (correct)
+ * array order.
  */
 export function parseEspnRankings(payload: unknown): Map<string, string> {
   const result = new Map<string, string>();
@@ -874,21 +885,30 @@ export function parseEspnRankings(payload: unknown): Map<string, string> {
     const isChampion = typeof group.type === "string" && group.type.endsWith(CHAMPION_TYPE_SUFFIX);
     const ranks = Array.isArray(group.ranks) ? group.ranks : [];
 
+    if (isChampion) {
+      for (const entry of ranks) {
+        if (typeof entry !== "object" || entry === null) continue;
+        const athleteId = entry.athlete?.id;
+        if (typeof athleteId !== "string" || athleteId.length === 0) continue;
+        if (result.has(athleteId)) continue;
+        result.set(athleteId, `${division} Champion`);
+      }
+      continue;
+    }
+
+    let displayRank = 0;
     for (const entry of ranks) {
       if (typeof entry !== "object" || entry === null) continue;
 
       const athleteId = entry.athlete?.id;
       if (typeof athleteId !== "string" || athleteId.length === 0) continue;
-      if (result.has(athleteId)) continue;
-
-      if (isChampion) {
-        result.set(athleteId, `${division} Champion`);
-        continue;
-      }
 
       const current = entry.current;
       if (typeof current !== "number" || !Number.isFinite(current)) continue;
-      result.set(athleteId, `#${current} ${division}`);
+      if (result.has(athleteId)) continue;
+
+      displayRank += 1;
+      result.set(athleteId, `#${displayRank} ${division}`);
     }
   }
 

@@ -588,6 +588,35 @@ describe("parseEspnRankings", () => {
     expect(rankings.get("same-id")).toBe("Welterweight Champion");
   });
 
+  it("derives contender rank from position, not ESPN's raw current field, when a division's numbered list redundantly includes its own champion", () => {
+    // Mirrors the real live payload (verified 2026-07-28): the numbered
+    // group redundantly lists the champion (usually at current: 1) ahead of
+    // the actual numbered contenders, so `current` itself is off by one for
+    // every real contender.
+    const rankings = parseEspnRankings({
+      rankings: [
+        {
+          type: "welterweight-champions",
+          weightClass: { text: "Welterweight" },
+          ranks: [{ current: 1, athlete: { id: "champ-id" } }],
+        },
+        {
+          type: "welterweight",
+          weightClass: { text: "Welterweight" },
+          ranks: [
+            { current: 1, athlete: { id: "champ-id" } }, // duplicate of the champion
+            { current: 2, athlete: { id: "contender-1" } },
+            { current: 3, athlete: { id: "contender-2" } },
+          ],
+        },
+      ],
+    });
+
+    expect(rankings.get("champ-id")).toBe("Welterweight Champion");
+    expect(rankings.get("contender-1")).toBe("#1 Welterweight");
+    expect(rankings.get("contender-2")).toBe("#2 Welterweight");
+  });
+
   it("skips groups with no weightClass, entries with no athlete id, and numbered entries with no current rank", () => {
     const rankings = parseEspnRankings({
       rankings: [

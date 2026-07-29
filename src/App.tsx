@@ -338,7 +338,11 @@ export default function App() {
                     </span>
                   </div>
                 )}
-                <MarketStrip view={view} onOpen={() => setSection("odds")} />
+                <MarketStrip
+                  latestOdds={view.latestOdds}
+                  preFightOdds={view.preFightOdds}
+                  onOpen={() => setSection("odds")}
+                />
                 <SectionTabs active={section} onChange={setSection} />
                 {(section === "summary" || section === "stats") && (
                   <RoundSelector
@@ -376,7 +380,20 @@ export default function App() {
                   </>
                 )}
                 {section === "odds" && (
-                  <OddsPanel view={view} deliveries={marketDeliveries} />
+                  <OddsPanel
+                    redName={view.bout.fighters.red.name.split(" ").at(-1) ?? view.bout.fighters.red.name}
+                    blueName={view.bout.fighters.blue.name.split(" ").at(-1) ?? view.bout.fighters.blue.name}
+                    latestOdds={view.latestOdds}
+                    preFightOdds={view.preFightOdds}
+                    emptyText={
+                      view.bout.status === "final"
+                        ? "Bout is final."
+                        : view.bout.status === "canceled" || view.bout.status === "postponed"
+                          ? `Bout ${view.bout.status}.`
+                          : undefined
+                    }
+                    deliveries={marketDeliveries}
+                  />
                 )}
                 {section === "tale" && (
                   <>
