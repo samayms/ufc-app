@@ -1290,6 +1290,7 @@
 
 .upcoming-odds-panel .market[data-market-accent="polymarket"] .market-head h3 img {
   height: 18px;
+  transform: translateY(4px);
 }
 
 .upcoming-odds-panel .market[data-market-accent="sportsbook"] .market-head {
