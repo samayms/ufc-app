@@ -496,10 +496,12 @@ export interface EspnLifecycleFetcher {
 }
 
 /**
- * ESPN's public "site API" host (site.api.espn.com) is the well-known
- * pattern ESPN uses for unauthenticated scoreboard reads across sports. The
- * exact MMA/UFC scoreboard path below is a best-effort placeholder — verify
- * it against real traffic before depending on it for a live event.
+ * ESPN's public "site API" host, used for unauthenticated scoreboard reads.
+ * This is the same path `espnSchedule.ts` reads the card from, and it was
+ * verified live on 2026-07-28 (see `parseEspnScoreboardLifecycle` below for
+ * the payload shape that verification established). What remains unverified is
+ * timing, not addressing: whether the clock actually reaches `0:00` between
+ * rounds. See LIVE_CARD_VALIDATION.md.
  */
 const ESPN_SCOREBOARD_BASE_URL =
   "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard";

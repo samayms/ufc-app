@@ -44,6 +44,12 @@ Every item below should end with an observation written into this file
       delay; if it is routinely longer, the retry window is wrong.
 - [ ] **Cito revision behavior.** Confirm corrected rounds actually arrive as
       revisions, and that the payload-hash comparison catches them.
+- [ ] **Cito `liveBouts` field names.** The base URL is verified (it returned
+      HTTP 200), but the captured response had an **empty `liveBouts` array** —
+      there was no live event at capture time — so every per-bout field name
+      inside it is a guess. The parser skips what it cannot match rather than
+      throwing, so a wrong guess degrades quietly instead of crashing, which
+      also means it will not announce itself. Check this first on a live card.
 - [ ] **Cito live SSE quota semantics.** Treated as unverified by §7 and not
       depended on. Confirm before any future work relies on it.
 - [ ] **Cito serialization below 10/min.** Verified in tests against the quota
