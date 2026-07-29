@@ -371,8 +371,8 @@ export default function App() {
                 )}
                 {section === "tale" && (
                   <>
-                    <FighterProfile bout={view.bout} />
-                    <RecentForm bout={view.bout} />
+                    <FighterProfile fighters={view.bout.fighters} />
+                    <RecentForm fighters={view.bout.fighters} />
                   </>
                 )}
               </div>

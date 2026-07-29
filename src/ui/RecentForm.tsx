@@ -1,4 +1,4 @@
-import type { Bout, Corner, Fighter, PastBout } from "../schema.ts";
+import type { Corner, Fighter, PastBout } from "../schema.ts";
 import { fmtMethod, fmtTime } from "./format.ts";
 
 const RESULT_LETTER: Record<PastBout["result"], string> = {
@@ -36,10 +36,10 @@ function FormColumn({ fighter, corner }: { fighter: Fighter; corner: Corner }) {
 }
 
 /** Cached recent history for both corners — fetch-once data, no polling. */
-export function RecentForm({ bout }: { bout: Bout }) {
+export function RecentForm({ fighters }: { fighters: Record<Corner, Fighter> }) {
   const hasAny =
-    (bout.fighters.red.recentBouts?.length ?? 0) > 0 ||
-    (bout.fighters.blue.recentBouts?.length ?? 0) > 0;
+    (fighters.red.recentBouts?.length ?? 0) > 0 ||
+    (fighters.blue.recentBouts?.length ?? 0) > 0;
   if (!hasAny) return null;
   return (
     <section className="panel" aria-label="Recent form">
@@ -47,12 +47,12 @@ export function RecentForm({ bout }: { bout: Bout }) {
         <h2>Recent form</h2>
         <span className="freshness">
           cached fighter history · fetched{" "}
-          <span className="num">{fmtTime(bout.fighters.red.provenance.fetchedAt)}</span>
+          <span className="num">{fmtTime(fighters.red.provenance.fetchedAt)}</span>
         </span>
       </div>
       <div className="form-grid">
-        <FormColumn fighter={bout.fighters.red} corner="red" />
-        <FormColumn fighter={bout.fighters.blue} corner="blue" />
+        <FormColumn fighter={fighters.red} corner="red" />
+        <FormColumn fighter={fighters.blue} corner="blue" />
       </div>
     </section>
   );

@@ -1,4 +1,4 @@
-import type { Bout, Corner, Fighter } from "../schema.ts";
+import type { Corner, Fighter } from "../schema.ts";
 import { fmtRecord, fmtTime } from "./format.ts";
 
 function value(value: string | number | undefined, suffix = "") {
@@ -22,8 +22,8 @@ function Profile({
   );
 }
 
-export function FighterProfile({ bout }: { bout: Bout }) {
-  const { red, blue } = bout.fighters;
+export function FighterProfile({ fighters }: { fighters: Record<Corner, Fighter> }) {
+  const { red, blue } = fighters;
   const rows = [
     ["Age", value(red.age), value(blue.age)],
     ["Height", value(red.heightCm, " cm"), value(blue.heightCm, " cm")],
