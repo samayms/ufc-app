@@ -1213,6 +1213,17 @@
   font-weight: 700;
 }
 
+.market-moneyline {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.market-moneyline-pct {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
 .market-native {
   color: var(--text-muted);
   font-size: 0.55rem;
@@ -2042,14 +2053,6 @@
 .upcoming-status[data-status="unmatched"] {
   color: var(--danger);
   border-color: var(--border-strong);
-}
-
-/* Dim the whole block when it carries no price, so a card of mostly
-   unavailable providers reads as absence at a glance. */
-.market[data-upcoming-status="not_listed"] .market-bar,
-.market[data-upcoming-status="unmatched"] .market-bar,
-.market[data-upcoming-status="provider_error"] .market-bar {
-  opacity: 0.45;
 }
 
 .upcoming-foot {

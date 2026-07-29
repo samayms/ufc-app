@@ -1,7 +1,7 @@
 /**
  * The whole upcoming-odds path in one test:
  *
- *   ESPN fixture + four provider fixtures
+ *   ESPN fixture + provider fixtures
  *     -> shared matcher -> persistence -> /api/upcoming-odds -> frontend
  *
  * This is the test that would have caught the two live breakages found while
@@ -56,7 +56,7 @@ function fixtureCard() {
 }
 
 describe("upcoming odds, ESPN fixture through to the frontend", () => {
-  it("carries all four providers from discovery to rendered markup", async () => {
+  it("carries all providers from discovery to rendered markup", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ufc-upcoming-e2e-"));
     try {
       const card = fixtureCard();
@@ -114,9 +114,10 @@ describe("upcoming odds, ESPN fixture through to the frontend", () => {
 
       expect(html).toContain("Kalshi");
       expect(html).toContain("Polymarket");
-      expect(html).toContain("Odds-API.io");
-      expect(html).toContain("The Odds API");
-      expect(html).toContain("69%");
+      expect(html).toContain("Sportsbooks");
+      expect(html).not.toContain("Odds-API.io");
+      expect(html).not.toContain("The Odds API");
+      expect(html).not.toContain("69%");
       expect(html.match(/Not listed/g)).toBeNull();
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -151,7 +152,9 @@ describe("upcoming odds, ESPN fixture through to the frontend", () => {
         nowMs={NOW_MS}
       />,
     );
-    expect(html.match(/Not listed/g)).toHaveLength(4);
+    expect(html.match(/class="market"/g)).toHaveLength(3);
+    expect(html.match(/class="market-pct num">—/g)).toHaveLength(4);
+    expect(html.match(/class="market-moneyline num">—/g)).toHaveLength(2);
     expect(html).not.toMatch(/market-pct num">\d/);
   });
 
