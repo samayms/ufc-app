@@ -106,8 +106,8 @@ function CenterStatus({
   return (
     <>
       <span className="tot-live-label tot-upcoming">Upcoming</span>
-      <span className="tot-round-label num">{scheduledRounds}×5</span>
-      <span className="tot-substate">rounds · not started</span>
+      <span className="tot-round-label num">{scheduledRounds} rounds</span>
+      <span className="tot-substate">not started</span>
     </>
   );
 }

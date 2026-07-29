@@ -1289,7 +1289,7 @@
   font-family: var(--font-stat-label);
   font-size: 0.57rem;
   letter-spacing: 0.05em;
-  text-transform: uppercase;
+  text-transform: lowercase;
 }
 
 .profile-row > span:last-child {
