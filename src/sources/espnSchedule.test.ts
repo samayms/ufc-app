@@ -298,6 +298,118 @@ describe("parseEspnFightcenterCard", () => {
     expect(fight?.red.heightCm).toBeUndefined();
     expect(fight?.red.reachCm).toBeUndefined();
   });
+
+  // Regression guard: ScheduledCardRail must be able to show a live/final
+  // status for a fight the user is already looking at instead of a stale
+  // "upcoming" — verified straight off parseEspnFightcenterCard rather than
+  // through the UI layer, since that's where ESPN's status/result shape
+  // actually gets translated.
+  it("parses a scheduled (not yet started) competition as status upcoming with no result", () => {
+    const card = parseEspnFightcenterCard(ufc330Fixture, "600059185");
+    const fight = card?.sections[0]?.fights[0];
+
+    expect(fight?.status).toBe("upcoming");
+    expect(fight?.currentRound).toBeUndefined();
+    expect(fight?.result).toBeUndefined();
+  });
+
+  it("parses a live in-round competition's status and current round", () => {
+    const live = {
+      event: { id: "1", name: "Test Event" },
+      cards: {
+        main: {
+          competitions: [
+            {
+              id: "c1",
+              matchNumber: 1,
+              status: { period: 2, type: { state: "in" } },
+              competitors: [
+                { order: 1, athlete: { id: "a1", displayName: "Fighter One" } },
+                { order: 2, athlete: { id: "a2", displayName: "Fighter Two" } },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const card = parseEspnFightcenterCard(live, "1");
+    const fight = card?.sections[0]?.fights[0];
+
+    expect(fight?.status).toBe("in-round");
+    expect(fight?.currentRound).toBe(2);
+    expect(fight?.result).toBeUndefined();
+  });
+
+  it("parses a completed competition's status and result, mapping the winning competitor to its corner", () => {
+    const final = {
+      event: { id: "1", name: "Test Event" },
+      cards: {
+        main: {
+          competitions: [
+            {
+              id: "c1",
+              matchNumber: 1,
+              status: {
+                period: 3,
+                displayClock: "2:14",
+                type: { state: "post", completed: true },
+              },
+              result: { method: { displayName: "Submission" } },
+              competitors: [
+                { order: 1, athlete: { id: "a1", displayName: "Fighter One" } },
+                {
+                  order: 2,
+                  winner: true,
+                  athlete: { id: "a2", displayName: "Fighter Two" },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const card = parseEspnFightcenterCard(final, "1");
+    const fight = card?.sections[0]?.fights[0];
+
+    expect(fight?.status).toBe("final");
+    expect(fight?.currentRound).toBeUndefined();
+    expect(fight?.result).toEqual({
+      winner: "blue",
+      method: "submission",
+      round: 3,
+      time: "2:14",
+    });
+  });
+
+  it("treats a draw (no winning competitor) as a draw result rather than throwing", () => {
+    const final = {
+      event: { id: "1", name: "Test Event" },
+      cards: {
+        main: {
+          competitions: [
+            {
+              id: "c1",
+              matchNumber: 1,
+              status: { type: { completed: true } },
+              result: { method: { name: "decision---majority" } },
+              competitors: [
+                { order: 1, athlete: { id: "a1", displayName: "Fighter One" } },
+                { order: 2, athlete: { id: "a2", displayName: "Fighter Two" } },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const card = parseEspnFightcenterCard(final, "1");
+    const fight = card?.sections[0]?.fights[0];
+
+    expect(fight?.result?.winner).toBe("draw");
+    expect(fight?.result?.method).toBe("decision-majority");
+  });
 });
 
 // Regression guard for the shape captured live on 2026-07-28 from

@@ -11,7 +11,7 @@
  * createLiveEspnLifecycleFetcher gates on SourceConfig.
  */
 
-import type { FinishMethod, PastBout } from "../schema.ts";
+import type { BoutResult, BoutStatus, FinishMethod, PastBout } from "../schema.ts";
 
 /** Recognized fight-card sections, in display order. */
 export type ScheduledSegment = "main-card" | "prelims" | "early-prelims";
@@ -52,6 +52,18 @@ export interface EspnScheduledFight {
   mainEvent: boolean;
   red: EspnScheduledFighter;
   blue: EspnScheduledFighter;
+  /**
+   * ESPN's fightcenter payload carries live competition status regardless
+   * of this app's own collector — a user who drills into an event's card
+   * before it starts and stays on that screen will see fights go live and
+   * final in place, not a stale "upcoming" forever. Always present;
+   * "upcoming" is the default when ESPN hasn't started the clock yet.
+   */
+  status: BoutStatus;
+  /** Only present while status is "in-round"/"between-rounds". */
+  currentRound?: number;
+  /** Only present once status is "final". */
+  result?: BoutResult;
 }
 
 export interface EspnScheduledSection {
@@ -192,6 +204,27 @@ interface RawEspnFightcenterCardSegmentObject {
   description?: string;
 }
 
+interface RawEspnFightcenterStatusType {
+  name?: string;
+  state?: string;
+  completed?: boolean;
+}
+
+interface RawEspnFightcenterStatus {
+  period?: number;
+  displayClock?: string;
+  type?: RawEspnFightcenterStatusType;
+}
+
+interface RawEspnFightcenterResultMethod {
+  name?: string;
+  displayName?: string;
+}
+
+interface RawEspnFightcenterResult {
+  method?: RawEspnFightcenterResultMethod;
+}
+
 interface RawEspnFightcenterCompetition {
   id?: string;
   date?: string;
@@ -201,6 +234,8 @@ interface RawEspnFightcenterCompetition {
   matchNumber?: number;
   note?: string | null;
   competitors?: RawEspnFightcenterCompetitor[];
+  status?: RawEspnFightcenterStatus;
+  result?: RawEspnFightcenterResult;
 }
 
 interface RawEspnFightcenterSection {
@@ -451,6 +486,50 @@ function buildFighter(
   };
 }
 
+/**
+ * Mirrors espn.ts's private parseStatus — same status.type.state/completed
+ * checks, duplicated locally per this file's established convention rather
+ * than imported.
+ */
+function parseFightStatus(competition: RawEspnFightcenterCompetition): BoutStatus {
+  const status = competition.status;
+
+  if (status?.type?.completed || status?.type?.state === "post") return "final";
+  if (status?.type?.name === "STATUS_HALFTIME") return "between-rounds";
+  if (status?.type?.state === "in") return "in-round";
+  return "upcoming";
+}
+
+/**
+ * Mirrors espn.ts's private parseResult, reusing this file's own
+ * parseAthleteBioMethod (defined below) for method normalization instead
+ * of a third local copy of the same lowercase/substring matching.
+ */
+function parseFightResult(
+  competition: RawEspnFightcenterCompetition,
+): BoutResult | undefined {
+  if (parseFightStatus(competition) !== "final") return undefined;
+
+  const winnerRaw = (competition.competitors ?? []).find(
+    (competitor) => competitor.winner === true,
+  );
+  const winnerCorner = winnerRaw ? cornerForRawCompetitor(winnerRaw) : "draw";
+  const method = parseAthleteBioMethod(
+    competition.result?.method?.displayName ?? competition.result?.method?.name,
+  );
+
+  return {
+    winner: method === "nc" ? "nc" : winnerCorner,
+    method,
+    ...(competition.status?.period === undefined
+      ? {}
+      : { round: competition.status.period }),
+    ...(competition.status?.displayClock === undefined
+      ? {}
+      : { time: competition.status.displayClock }),
+  };
+}
+
 function buildFight(raw: RawEspnFightcenterCompetition): EspnScheduledFight | null {
   if (typeof raw.id !== "string" || raw.id.length === 0) return null;
 
@@ -477,6 +556,10 @@ function buildFight(raw: RawEspnFightcenterCompetition): EspnScheduledFight | nu
     typeof raw.note === "string" && /title fight/i.test(raw.note);
   const titleFight = hasTitleTypeEntry === true || noteMentionsTitle;
 
+  const status = parseFightStatus(raw);
+  const result = parseFightResult(raw);
+  const currentRound = raw.status?.period;
+
   return {
     competitionId: raw.id,
     ...(raw.matchNumber === undefined ? {} : { matchNumber: raw.matchNumber }),
@@ -487,6 +570,12 @@ function buildFight(raw: RawEspnFightcenterCompetition): EspnScheduledFight | nu
     mainEvent: raw.matchNumber === 1,
     red,
     blue,
+    status,
+    ...((status === "in-round" || status === "between-rounds") &&
+    currentRound !== undefined
+      ? { currentRound }
+      : {}),
+    ...(result === undefined ? {} : { result }),
   };
 }
 

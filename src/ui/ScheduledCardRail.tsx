@@ -4,13 +4,41 @@ import type {
   EspnScheduledFight,
   EspnScheduledFighter,
 } from "../sources/espnSchedule.ts";
-import { fmtTime } from "./format.ts";
+import { fmtMethod, fmtTime } from "./format.ts";
 import "./newComponents.css";
 
-function fightChipLabel(fight: EspnScheduledFight): string {
-  if (fight.titleFight) return "TITLE";
-  if (fight.mainEvent) return "MAIN";
-  return "UPCOMING";
+/**
+ * Mirrors CardRail.tsx's StatusChip: ESPN's fightcenter status is real for
+ * every card, not just the one this app's collector tracks, so a fight a
+ * user is already looking at can go live or final without the chip lying
+ * and saying "upcoming" forever.
+ */
+function FightStatusChip({ fight }: { fight: EspnScheduledFight }) {
+  switch (fight.status) {
+    case "in-round":
+      return <span className="chip chip-live">LIVE R{fight.currentRound}</span>;
+    case "between-rounds":
+      return <span className="chip chip-live">END R{fight.currentRound}</span>;
+    case "final": {
+      const r = fight.result;
+      return (
+        <span className="chip chip-final">
+          {r ? `${fmtMethod(r.method)}${r.round ? ` R${r.round}` : ""}` : "FINAL"}
+        </span>
+      );
+    }
+    case "canceled":
+    case "postponed":
+      return (
+        <span className="chip chip-canceled">{fight.status.toUpperCase()}</span>
+      );
+    default:
+      return (
+        <span className="chip chip-upcoming">
+          {fight.titleFight ? "TITLE" : "UPCOMING"}
+        </span>
+      );
+  }
 }
 
 function initialsOf(name: string): string {
@@ -86,9 +114,7 @@ export function ScheduledCardRail({
                 <span className="rail-name corner-blue">{fight.blue.name}</span>
               </span>
               <span className="rail-meta">
-                <span className="chip chip-upcoming">
-                  {fightChipLabel(fight)}
-                </span>
+                <FightStatusChip fight={fight} />
                 {fight.weightClassLabel && (
                   <span className="rail-weight">{fight.weightClassLabel}</span>
                 )}

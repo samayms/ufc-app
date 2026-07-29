@@ -22,7 +22,7 @@ function fight(
     blue: EspnScheduledFighter;
   },
 ): EspnScheduledFight {
-  return { titleFight: false, mainEvent: false, ...overrides };
+  return { titleFight: false, mainEvent: false, status: "upcoming", ...overrides };
 }
 
 /** Built directly from the contract types — deliberately not the data layer's own fixtures. */
@@ -51,7 +51,7 @@ const card: EspnScheduledCard = {
         fight({
           competitionId: "c2",
           matchNumber: 2,
-          mainEvent: false,
+          mainEvent: true,
           // A per-fight startsAt should never be rendered — only the section's.
           startsAt: "2026-08-16T01:20:00.000+00:00",
           weightClassLabel: "Middleweight",
@@ -124,12 +124,56 @@ describe("ScheduledCardRail", () => {
     expect(markup).not.toContain("Early Prelims · from");
   });
 
-  it("labels chips TITLE / MAIN / UPCOMING per fight", () => {
+  it("labels chips TITLE for title fights and UPCOMING for everything else scheduled, never MAIN", () => {
     const markup = renderToStaticMarkup(
       <ScheduledCardRail card={card} onSelect={() => undefined} />,
     );
     expect(markup).toContain(">TITLE<");
     expect(markup).toContain(">UPCOMING<");
+    // c2 is a non-title main event — regression guard for the removed
+    // "MAIN" chip label, which is now folded into "UPCOMING".
+    expect(markup).not.toContain(">MAIN<");
+  });
+
+  it("labels a live or final fight's chip from its ESPN status instead of TITLE/UPCOMING", () => {
+    const liveCard: EspnScheduledCard = {
+      ...card,
+      sections: [
+        {
+          ...card.sections[0]!,
+          fights: [
+            fight({
+              competitionId: "live1",
+              matchNumber: 1,
+              status: "in-round",
+              currentRound: 2,
+              red: fighter("Live Red"),
+              blue: fighter("Live Blue"),
+            }),
+            fight({
+              competitionId: "final1",
+              matchNumber: 2,
+              status: "final",
+              result: {
+                winner: "red",
+                method: "ko-tko",
+                round: 1,
+              },
+              red: fighter("Final Red"),
+              blue: fighter("Final Blue"),
+            }),
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <ScheduledCardRail card={liveCard} onSelect={() => undefined} />,
+    );
+
+    expect(markup).toContain(">LIVE R2<");
+    expect(markup).toContain(">KO/TKO R1<");
+    expect(markup).not.toContain(">UPCOMING<");
   });
 
   it("never renders a per-fight timestamp, only the section's", () => {
