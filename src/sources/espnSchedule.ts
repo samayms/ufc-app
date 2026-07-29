@@ -1,15 +1,17 @@
 /**
  * ESPN "future cards" schedule source: the public scoreboard (list of
- * upcoming events) and fightcenter (full fight card for one event)
- * endpoints. Unlike espn.ts's live lifecycle fetcher, this source is NOT
- * gated behind `mode: "live"` / DATA_MODE=live. Both endpoints below are
- * ESPN's public, unauthenticated "site API" surface (no API key, no
- * credentials, same class of endpoint sports sites embed on public pages)
- * — there is nothing to mock and no licensing concern, so the feature
- * fetches them directly even in the default fixture-mode `npm run dev`
- * app. If that ever changes, gate this the same way
+ * upcoming events), fightcenter (full fight card for one event), and
+ * per-athlete bio endpoints. Unlike espn.ts's live lifecycle fetcher, this
+ * source is NOT gated behind `mode: "live"` / DATA_MODE=live. All endpoints
+ * below are ESPN's public, unauthenticated "site API" surface (no API key,
+ * no credentials, same class of endpoint sports sites embed on public
+ * pages) — there is nothing to mock and no licensing concern, so the
+ * feature fetches them directly even in the default fixture-mode
+ * `npm run dev` app. If that ever changes, gate this the same way
  * createLiveEspnLifecycleFetcher gates on SourceConfig.
  */
+
+import type { FinishMethod, PastBout } from "../schema.ts";
 
 /** Recognized fight-card sections, in display order. */
 export type ScheduledSegment = "main-card" | "prelims" | "early-prelims";
@@ -27,6 +29,17 @@ export interface EspnScheduledFighter {
   record?: string;
   country?: string;
   headshotUrl?: string;
+  /** Fightcenter's per-competitor career-average stat line, ESPN's labels verbatim. */
+  stats?: { name: string; label: string; displayValue: string }[];
+  /** From the per-athlete bio endpoint, merged in by getCard(); absent when that fetch failed or the fighter has no athleteId. */
+  nickname?: string;
+  age?: number;
+  heightCm?: number;
+  reachCm?: number;
+  /** e.g. "Orthodox" | "Southpaw" | "Switch" — ESPN's label verbatim. */
+  stance?: string;
+  /** From the per-athlete bio endpoint, newest first, capped at 5. */
+  recentBouts?: PastBout[];
 }
 
 export interface EspnScheduledFight {
@@ -130,6 +143,10 @@ interface RawEspnAthleteHeadshot {
   alt?: string;
 }
 
+interface RawEspnFightcenterAthleteStance {
+  text?: string;
+}
+
 interface RawEspnFightcenterAthlete {
   id?: string;
   displayName?: string;
@@ -137,6 +154,16 @@ interface RawEspnFightcenterAthlete {
   country?: string;
   headshot?: RawEspnAthleteHeadshot;
   weightClass?: RawEspnAthleteWeightClass;
+  age?: number;
+  displayHeight?: string;
+  displayReach?: string;
+  stance?: RawEspnFightcenterAthleteStance;
+}
+
+interface RawEspnFightcenterCompetitorStat {
+  name?: string;
+  shortDisplayName?: string;
+  displayValue?: string;
 }
 
 interface RawEspnFightcenterCompetitor {
@@ -145,6 +172,7 @@ interface RawEspnFightcenterCompetitor {
   winner?: boolean;
   displayRecord?: string;
   athlete?: RawEspnFightcenterAthlete;
+  stats?: RawEspnFightcenterCompetitorStat[];
 }
 
 interface RawEspnFightcenterCompetitionType {
@@ -188,6 +216,38 @@ interface RawEspnFightcenterResponse {
   cards?: Record<string, RawEspnFightcenterSection>;
 }
 
+interface RawEspnAthleteBioAthlete {
+  id?: string;
+  nickname?: string;
+}
+
+interface RawEspnAthleteBioStatusResult {
+  name?: string;
+  displayName?: string;
+}
+
+interface RawEspnAthleteBioStatus {
+  period?: number;
+  result?: RawEspnAthleteBioStatusResult;
+}
+
+interface RawEspnAthleteBioOpponent {
+  displayName?: string;
+}
+
+interface RawEspnAthleteBioEvent {
+  name?: string;
+  gameDate?: string;
+  gameResult?: string;
+  status?: RawEspnAthleteBioStatus;
+  opponent?: RawEspnAthleteBioOpponent;
+}
+
+interface RawEspnAthleteBioResponse {
+  athlete?: RawEspnAthleteBioAthlete;
+  eventsMap?: Record<string, RawEspnAthleteBioEvent>;
+}
+
 // ---------------------------------------------------------------------------
 // URL builders
 // ---------------------------------------------------------------------------
@@ -196,6 +256,8 @@ const ESPN_SCHEDULE_BASE_URL =
   "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard";
 const ESPN_FIGHTCENTER_BASE_URL =
   "https://site.web.api.espn.com/apis/common/v3/sports/mma/ufc/fightcenter";
+const ESPN_ATHLETE_BIO_BASE_URL =
+  "https://site.web.api.espn.com/apis/common/v3/sports/mma/ufc/athletes";
 
 function formatUtcYyyyMmDd(date: Date): string {
   const year = date.getUTCFullYear();
@@ -230,6 +292,14 @@ export function buildEspnFightcenterUrl(eventId: string): string {
   }
 
   return `${ESPN_FIGHTCENTER_BASE_URL}/${encodeURIComponent(eventId)}`;
+}
+
+export function buildEspnAthleteUrl(athleteId: string): string {
+  if (athleteId.trim().length === 0) {
+    throw new TypeError("ESPN athlete URL requires a non-empty athlete id");
+  }
+
+  return `${ESPN_ATHLETE_BIO_BASE_URL}/${encodeURIComponent(athleteId)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +369,43 @@ function cornerForRawCompetitor(
   return competitor.order === 2 ? "blue" : "red";
 }
 
+const DISPLAY_HEIGHT_PATTERN = /^(\d+)'\s*(\d+)"?$/;
+
+/**
+ * Fightcenter gives height as `6' 1"` (feet/inches), not the raw-inches
+ * number espn.ts's parseFighter gets from the athlete-profile endpoint —
+ * this is the only form available here, so it's parsed from the string
+ * directly. Mirrors espn.ts's `Math.round(profile.height * 2.54)` rounding
+ * style. Never throws on malformed/missing input — omits the field instead.
+ */
+function parseDisplayHeightCm(displayHeight: string | undefined): number | undefined {
+  if (typeof displayHeight !== "string") return undefined;
+
+  const match = displayHeight.trim().match(DISPLAY_HEIGHT_PATTERN);
+  const feet = Number(match?.[1]);
+  const inches = Number(match?.[2]);
+  if (!match || !Number.isFinite(feet) || !Number.isFinite(inches)) return undefined;
+
+  return Math.round(feet * 30.48 + inches * 2.54);
+}
+
+const DISPLAY_REACH_PATTERN = /^([\d.]+)"?$/;
+
+/**
+ * Fightcenter gives reach as `74"` (inches, occasionally fractional like
+ * `74.5"`). Never throws on malformed/missing input — omits the field
+ * instead.
+ */
+function parseDisplayReachCm(displayReach: string | undefined): number | undefined {
+  if (typeof displayReach !== "string") return undefined;
+
+  const match = displayReach.trim().match(DISPLAY_REACH_PATTERN);
+  const inches = Number(match?.[1]);
+  if (!match || !Number.isFinite(inches)) return undefined;
+
+  return Math.round(inches * 2.54);
+}
+
 function buildFighter(
   competitor: RawEspnFightcenterCompetitor | undefined,
 ): EspnScheduledFighter | null {
@@ -307,6 +414,22 @@ function buildFighter(
   const athlete = competitor.athlete;
   const name = athlete?.displayName ?? athlete?.fullName;
   if (typeof name !== "string" || name.length === 0) return null;
+
+  const heightCm = parseDisplayHeightCm(athlete?.displayHeight);
+  const reachCm = parseDisplayReachCm(athlete?.displayReach);
+
+  const stats = (competitor.stats ?? [])
+    .filter(
+      (stat): stat is Required<Pick<RawEspnFightcenterCompetitorStat, "name" | "shortDisplayName" | "displayValue">> =>
+        typeof stat.name === "string" &&
+        typeof stat.shortDisplayName === "string" &&
+        typeof stat.displayValue === "string",
+    )
+    .map((stat) => ({
+      name: stat.name,
+      label: stat.shortDisplayName,
+      displayValue: stat.displayValue,
+    }));
 
   return {
     ...(athlete?.id === undefined ? {} : { athleteId: athlete.id }),
@@ -318,6 +441,13 @@ function buildFighter(
     ...(athlete?.headshot?.href === undefined
       ? {}
       : { headshotUrl: athlete.headshot.href }),
+    ...(stats.length === 0 ? {} : { stats }),
+    ...(athlete?.age === undefined ? {} : { age: athlete.age }),
+    ...(heightCm === undefined ? {} : { heightCm }),
+    ...(reachCm === undefined ? {} : { reachCm }),
+    ...(athlete?.stance?.text === undefined
+      ? {}
+      : { stance: athlete.stance.text }),
   };
 }
 
@@ -473,6 +603,115 @@ export function parseEspnFightcenterCard(
   };
 }
 
+/**
+ * Maps ESPN's "W"/"L"/"D"/"NC" game-result letter codes to this project's
+ * PastBout result vocabulary. Mirrors espn.ts's private parsePastBoutResult
+ * (not exported there, duplicated here per this file's own "Fetch plumbing
+ * (copied from espn.ts...)" convention). Unrecognized/missing -> null so
+ * the caller drops the entry instead of fabricating a result.
+ */
+function parseAthleteBioResult(gameResult: string | undefined): PastBout["result"] | null {
+  switch (gameResult?.toLowerCase()) {
+    case "w":
+      return "win";
+    case "l":
+      return "loss";
+    case "d":
+      return "draw";
+    case "nc":
+      return "nc";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Normalizes ESPN's finish-method strings (e.g. "decision---unanimous",
+ * "kotko", "submission") into this project's FinishMethod union. Mirrors
+ * espn.ts's private parseMethod — same lowercase + substring checks,
+ * duplicated locally rather than imported.
+ */
+function parseAthleteBioMethod(method: string | undefined): FinishMethod {
+  const normalized = method?.toLowerCase() ?? "";
+
+  if (normalized.includes("unanimous")) return "decision-unanimous";
+  if (normalized.includes("split")) return "decision-split";
+  if (normalized.includes("majority")) return "decision-majority";
+  if (normalized.includes("submission")) return "submission";
+  if (normalized.includes("tko") || normalized === "ko") return "ko-tko";
+  if (normalized.includes("disqualification") || normalized === "dq") {
+    return "dq";
+  }
+  if (normalized.includes("no contest") || normalized === "nc") return "nc";
+  return "other";
+}
+
+const ATHLETE_BIO_MAX_RECENT_BOUTS = 5;
+
+/**
+ * Parses one athlete's ESPN bio payload into a nickname plus up to the 5
+ * most recent bouts. `athleteId` guards against normalizing a payload for
+ * the wrong athlete when the response happens to carry its own id,
+ * mirroring parseEspnFightcenterCard's eventId guard — but tolerates a
+ * response with no id field at all (this endpoint's sample payload didn't
+ * show one). `eventsMap`'s entries are already newest-first per the live
+ * sample captured 2026-07-28, so insertion order is preserved verbatim
+ * rather than re-sorted. Never throws on malformed input — returns
+ * `{ recentBouts: [] }` instead.
+ */
+export function parseEspnAthleteBio(
+  payload: unknown,
+  athleteId: string,
+): { nickname?: string; recentBouts: PastBout[] } {
+  if (typeof payload !== "object" || payload === null) {
+    return { recentBouts: [] };
+  }
+
+  const raw = payload as RawEspnAthleteBioResponse;
+  const bioAthlete = raw.athlete;
+  if (bioAthlete?.id !== undefined && bioAthlete.id !== athleteId) {
+    return { recentBouts: [] };
+  }
+
+  const eventsMapValue = raw.eventsMap;
+  const entries =
+    typeof eventsMapValue === "object" && eventsMapValue !== null
+      ? Object.values(eventsMapValue)
+      : [];
+
+  const recentBouts: PastBout[] = [];
+  for (const entry of entries) {
+    if (recentBouts.length >= ATHLETE_BIO_MAX_RECENT_BOUTS) break;
+    if (typeof entry !== "object" || entry === null) continue;
+
+    const opponentName = entry.opponent?.displayName;
+    if (typeof opponentName !== "string" || opponentName.length === 0) {
+      continue;
+    }
+
+    const result = parseAthleteBioResult(entry.gameResult);
+    if (result === null) continue;
+
+    recentBouts.push({
+      opponentName,
+      result,
+      method: parseAthleteBioMethod(
+        entry.status?.result?.displayName ?? entry.status?.result?.name,
+      ),
+      ...(entry.status?.period === undefined
+        ? {}
+        : { round: entry.status.period }),
+      ...(entry.gameDate === undefined ? {} : { date: entry.gameDate }),
+      ...(entry.name === undefined ? {} : { eventName: entry.name }),
+    });
+  }
+
+  return {
+    ...(bioAthlete?.nickname === undefined ? {} : { nickname: bioAthlete.nickname }),
+    recentBouts,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Fetch plumbing (copied from espn.ts — not exported there, kept local here)
 // ---------------------------------------------------------------------------
@@ -560,6 +799,10 @@ const SCHEDULE_REQUEST_TIMEOUT_MS = 8_000;
 const SCHEDULE_MAX_RESPONSE_BYTES = 4_000_000;
 const FIGHTCENTER_REQUEST_TIMEOUT_MS = 8_000;
 const FIGHTCENTER_MAX_RESPONSE_BYTES = 4_000_000;
+const ATHLETE_BIO_REQUEST_TIMEOUT_MS = 8_000;
+const ATHLETE_BIO_MAX_RESPONSE_BYTES = 4_000_000;
+
+type AthleteBio = ReturnType<typeof parseEspnAthleteBio>;
 
 interface CacheEntry<T> {
   expiresAt: number;
@@ -598,6 +841,15 @@ export function createEspnScheduleSource(options?: {
   const cardCache = new Map<string, CacheEntry<EspnScheduledCard | null>>();
   const cardInFlight = new Map<string, Promise<EspnScheduledCard | null>>();
 
+  // Per-athlete bio cache (nickname + recent-fight history), independent of
+  // the card cache above: a card's shape rarely changes, but an athlete's
+  // bio is shared across every card that athlete appears on and is worth
+  // caching on its own key. Same TTL-plus-inflight-dedup shape as the card
+  // cache; a failed bio fetch is never cached, matching that cache's
+  // "failure is never cached — the next call retries" convention.
+  const athleteBioCache = new Map<string, CacheEntry<AthleteBio>>();
+  const athleteBioInFlight = new Map<string, Promise<AthleteBio>>();
+
   async function fetchEventList(): Promise<EspnScheduledEventSummary[]> {
     const start = now();
     const end = new Date(start.getTime() + SCHEDULE_WINDOW_DAYS * DAY_MS);
@@ -620,6 +872,90 @@ export function createEspnScheduleSource(options?: {
     }
   }
 
+  async function fetchAthleteBio(athleteId: string): Promise<AthleteBio> {
+    const payload = await fetchJsonWithLimits(buildEspnAthleteUrl(athleteId), {
+      timeoutMs: ATHLETE_BIO_REQUEST_TIMEOUT_MS,
+      maxBytes: ATHLETE_BIO_MAX_RESPONSE_BYTES,
+      fetchImpl,
+    });
+    return parseEspnAthleteBio(payload, athleteId);
+  }
+
+  function getAthleteBio(athleteId: string): Promise<AthleteBio> {
+    const nowMs = now().getTime();
+    const cached = athleteBioCache.get(athleteId);
+    if (cached !== undefined && cached.expiresAt > nowMs) {
+      return Promise.resolve(cached.value);
+    }
+    const inFlight = athleteBioInFlight.get(athleteId);
+    if (inFlight !== undefined) {
+      return inFlight;
+    }
+
+    const promise = fetchAthleteBio(athleteId)
+      .then((value) => {
+        athleteBioCache.set(athleteId, { expiresAt: now().getTime() + ttlMs, value });
+        return value;
+      })
+      .finally(() => {
+        athleteBioInFlight.delete(athleteId);
+      });
+    athleteBioInFlight.set(athleteId, promise);
+    return promise;
+  }
+
+  /**
+   * Merges each fighter's nickname/recent-fight-history bio onto an
+   * already-built card. Every athlete's bio is fetched independently
+   * (`Promise.allSettled`) so one athlete's slow or failing bio request
+   * never fails or stalls the whole card — a fighter simply keeps
+   * whichever fightcenter-only fields it already had (age/height/reach/
+   * stance/stats, parsed for free out of the payload `fetchCard` already
+   * has) when its bio can't be fetched.
+   */
+  async function enrichCardWithAthleteBios(
+    card: EspnScheduledCard,
+  ): Promise<EspnScheduledCard> {
+    const athleteIds = new Set<string>();
+    for (const section of card.sections) {
+      for (const fight of section.fights) {
+        if (fight.red.athleteId !== undefined) athleteIds.add(fight.red.athleteId);
+        if (fight.blue.athleteId !== undefined) athleteIds.add(fight.blue.athleteId);
+      }
+    }
+    if (athleteIds.size === 0) return card;
+
+    const bios = new Map<string, AthleteBio>();
+    await Promise.allSettled(
+      Array.from(athleteIds, async (athleteId) => {
+        bios.set(athleteId, await getAthleteBio(athleteId));
+      }),
+    );
+    if (bios.size === 0) return card;
+
+    const enrichFighter = (fighter: EspnScheduledFighter): EspnScheduledFighter => {
+      const bio = fighter.athleteId !== undefined ? bios.get(fighter.athleteId) : undefined;
+      if (bio === undefined) return fighter;
+      return {
+        ...fighter,
+        ...(bio.nickname === undefined ? {} : { nickname: bio.nickname }),
+        ...(bio.recentBouts.length === 0 ? {} : { recentBouts: bio.recentBouts }),
+      };
+    };
+
+    return {
+      ...card,
+      sections: card.sections.map((section) => ({
+        ...section,
+        fights: section.fights.map((fight) => ({
+          ...fight,
+          red: enrichFighter(fight.red),
+          blue: enrichFighter(fight.blue),
+        })),
+      })),
+    };
+  }
+
   async function fetchCard(eventId: string): Promise<EspnScheduledCard | null> {
     try {
       const payload = await fetchJsonWithLimits(
@@ -630,7 +966,8 @@ export function createEspnScheduleSource(options?: {
           fetchImpl,
         },
       );
-      return parseEspnFightcenterCard(payload, eventId);
+      const card = parseEspnFightcenterCard(payload, eventId);
+      return card === null ? null : await enrichCardWithAthleteBios(card);
     } catch (error) {
       throw new Error(
         `Failed to load the ESPN fight card for event ${eventId}: ${messageOf(error)}`,

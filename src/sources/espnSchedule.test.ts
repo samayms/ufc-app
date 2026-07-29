@@ -6,9 +6,11 @@ import fightcenterFixture from "../fixtures/espnFightcenter.json" with {
   type: "json",
 };
 import {
+  buildEspnAthleteUrl,
   buildEspnFightcenterUrl,
   buildEspnScheduleUrl,
   createEspnScheduleSource,
+  parseEspnAthleteBio,
   parseEspnFightcenterCard,
   parseEspnScheduleEvents,
 } from "./espnSchedule.ts";
@@ -78,6 +80,21 @@ describe("buildEspnFightcenterUrl", () => {
   it("rejects an empty event id", () => {
     expect(() => buildEspnFightcenterUrl("  ")).toThrow(TypeError);
     expect(() => buildEspnFightcenterUrl("")).toThrow(/non-empty event id/);
+  });
+});
+
+describe("buildEspnAthleteUrl", () => {
+  it("builds an athlete bio URL scoped to the athlete id", () => {
+    const url = buildEspnAthleteUrl("4738092");
+
+    expect(url).toBe(
+      "https://site.web.api.espn.com/apis/common/v3/sports/mma/ufc/athletes/4738092",
+    );
+  });
+
+  it("rejects an empty athlete id", () => {
+    expect(() => buildEspnAthleteUrl("  ")).toThrow(TypeError);
+    expect(() => buildEspnAthleteUrl("")).toThrow(/non-empty athlete id/);
   });
 });
 
@@ -225,6 +242,173 @@ describe("parseEspnFightcenterCard", () => {
     expect(parseEspnFightcenterCard({}, "600059185")).toBeNull();
     expect(parseEspnFightcenterCard({ cards: null }, "600059185")).toBeNull();
   });
+
+  // Regression guard for the shape captured live on 2026-07-28: fightcenter
+  // competitors already carry age/displayHeight/displayReach/stance in the
+  // same payload the card fetch already reads — no extra request needed for
+  // these four fields. Ian Machado Garry's reach ("74.5\"") is deliberately
+  // fractional, covering the non-integer-inches case.
+  it("parses age/height/reach/stance directly off the fightcenter payload", () => {
+    const card = parseEspnFightcenterCard(ufc330Fixture, "600059185");
+    const mainEventFight = card?.sections[0]?.fights[0];
+
+    expect(mainEventFight?.red.name).toBe("Islam Makhachev");
+    expect(mainEventFight?.red.age).toBe(34);
+    expect(mainEventFight?.red.stance).toBe("Southpaw");
+    expect(mainEventFight?.red.heightCm).toBe(178); // 5'10"
+    expect(mainEventFight?.red.reachCm).toBe(179); // 70.5"
+
+    expect(mainEventFight?.blue.name).toBe("Ian Machado Garry");
+    expect(mainEventFight?.blue.age).toBe(28);
+    expect(mainEventFight?.blue.stance).toBe("Orthodox");
+    expect(mainEventFight?.blue.heightCm).toBe(191); // 6'3"
+    expect(mainEventFight?.blue.reachCm).toBe(189); // 74.5"
+  });
+
+  it("omits height/reach rather than throwing on an unparseable display string", () => {
+    const malformed = {
+      event: { id: "1", name: "Test Event" },
+      cards: {
+        main: {
+          competitions: [
+            {
+              id: "c1",
+              matchNumber: 1,
+              competitors: [
+                {
+                  order: 1,
+                  athlete: {
+                    id: "a1",
+                    displayName: "Fighter One",
+                    displayHeight: "not a height",
+                    displayReach: "not a reach",
+                  },
+                },
+                { order: 2, athlete: { id: "a2", displayName: "Fighter Two" } },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    const card = parseEspnFightcenterCard(malformed, "1");
+    const fight = card?.sections[0]?.fights[0];
+
+    expect(fight?.red.heightCm).toBeUndefined();
+    expect(fight?.red.reachCm).toBeUndefined();
+  });
+});
+
+// Regression guard for the shape captured live on 2026-07-28 from
+// site.web.api.espn.com/.../ufc/athletes/{id}: `eventsMap` entries are
+// keyed by event uid and already newest-first by insertion order.
+describe("parseEspnAthleteBio", () => {
+  const realisticPayload = {
+    athlete: { id: "4426312", nickname: "D-Rod" },
+    eventsMap: {
+      "s:3301~l:3321~e:600053891~c:401799529": {
+        name: "UFC 318: Holloway vs. Poirier 3",
+        gameDate: "2025-07-19T22:00:00.000+00:00",
+        gameResult: "W",
+        status: {
+          period: 3,
+          result: { name: "decision---unanimous", displayName: "Decision - Unanimous" },
+        },
+        opponent: { displayName: "Kevin Holland" },
+      },
+      "s:3301~l:3321~e:600053455~c:401763453": {
+        name: "UFC on ESPN: Some Event",
+        gameDate: "2025-01-01T22:00:00.000+00:00",
+        gameResult: "L",
+        status: {
+          period: 1,
+          result: { name: "kotko", displayName: "KO/TKO" },
+        },
+        opponent: { displayName: "Some Opponent" },
+      },
+    },
+  };
+
+  it("extracts nickname and recent bouts, newest-first, from a realistic payload", () => {
+    const bio = parseEspnAthleteBio(realisticPayload, "4426312");
+
+    expect(bio.nickname).toBe("D-Rod");
+    expect(bio.recentBouts).toEqual([
+      {
+        opponentName: "Kevin Holland",
+        result: "win",
+        method: "decision-unanimous",
+        round: 3,
+        date: "2025-07-19T22:00:00.000+00:00",
+        eventName: "UFC 318: Holloway vs. Poirier 3",
+      },
+      {
+        opponentName: "Some Opponent",
+        result: "loss",
+        method: "ko-tko",
+        round: 1,
+        date: "2025-01-01T22:00:00.000+00:00",
+        eventName: "UFC on ESPN: Some Event",
+      },
+    ]);
+  });
+
+  it("caps recent bouts at 5", () => {
+    const eventsMap: Record<string, unknown> = {};
+    for (let i = 0; i < 8; i++) {
+      eventsMap[`event-${i}`] = {
+        name: `Event ${i}`,
+        gameResult: "W",
+        opponent: { displayName: `Opponent ${i}` },
+      };
+    }
+
+    const bio = parseEspnAthleteBio({ eventsMap }, "any-id");
+
+    expect(bio.recentBouts).toHaveLength(5);
+  });
+
+  it("drops entries with no opponent name or unrecognized game result, without throwing", () => {
+    const bio = parseEspnAthleteBio(
+      {
+        eventsMap: {
+          noOpponent: { gameResult: "W" },
+          badResult: { gameResult: "X", opponent: { displayName: "Someone" } },
+          valid: { gameResult: "D", opponent: { displayName: "Someone Else" } },
+        },
+      },
+      "any-id",
+    );
+
+    expect(bio.recentBouts).toEqual([
+      {
+        opponentName: "Someone Else",
+        result: "draw",
+        method: "other",
+      },
+    ]);
+  });
+
+  it("returns no bio when the payload's own athlete id disagrees with the requested id", () => {
+    const bio = parseEspnAthleteBio(
+      { athlete: { id: "wrong-id", nickname: "Nope" }, eventsMap: {} },
+      "requested-id",
+    );
+
+    expect(bio).toEqual({ recentBouts: [] });
+  });
+
+  it("returns an empty result rather than throwing on malformed input", () => {
+    expect(parseEspnAthleteBio(null, "any-id")).toEqual({ recentBouts: [] });
+    expect(parseEspnAthleteBio({}, "any-id")).toEqual({ recentBouts: [] });
+    expect(parseEspnAthleteBio({ eventsMap: null }, "any-id")).toEqual({
+      recentBouts: [],
+    });
+    expect(parseEspnAthleteBio({ eventsMap: "not an object" }, "any-id")).toEqual({
+      recentBouts: [],
+    });
+  });
 });
 
 describe("createEspnScheduleSource", () => {
@@ -292,9 +476,25 @@ describe("createEspnScheduleSource", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it("caches getCard per event id and shares in-flight requests", async () => {
+  // ufc330Fixture and sparseFixture carry 18 and 2 unique athlete ids
+  // respectively (disjoint sets), each triggering its own athlete-bio fetch
+  // once getCard enriches the card — counted separately from the single
+  // fightcenter fetch below so this test doesn't hardcode an opaque total.
+  function cardFetchCount(fetchImpl: ReturnType<typeof vi.fn>): number {
+    return fetchImpl.mock.calls.filter(([url]) =>
+      String(url).includes("/fightcenter/"),
+    ).length;
+  }
+  function bioFetchCount(fetchImpl: ReturnType<typeof vi.fn>): number {
+    return fetchImpl.mock.calls.filter(([url]) =>
+      String(url).includes("/athletes/"),
+    ).length;
+  }
+
+  it("caches getCard per event id and shares in-flight requests, deduping per-athlete bio fetches", async () => {
     let currentTime = new Date("2026-07-28T00:00:00Z");
     const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/athletes/")) return jsonResponse({});
       const eventId = url.split("/").pop();
       return jsonResponse(
         eventId === "600059185" ? ufc330Fixture : sparseFixture,
@@ -310,20 +510,24 @@ describe("createEspnScheduleSource", () => {
       source.getCard("600059185"),
       source.getCard("600059185"),
     ]);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(cardFetchCount(fetchImpl)).toBe(1);
+    expect(bioFetchCount(fetchImpl)).toBe(18);
     expect(first).toEqual(second);
 
     await source.getCard("600060773");
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(cardFetchCount(fetchImpl)).toBe(2);
+    expect(bioFetchCount(fetchImpl)).toBe(20); // +2 unique athletes from the sparse fixture
 
     currentTime = new Date(currentTime.getTime() + 61_000);
     await source.getCard("600059185");
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(cardFetchCount(fetchImpl)).toBe(3);
+    expect(bioFetchCount(fetchImpl)).toBe(38); // both caches expire after the TTL — all 18 re-fetched
   });
 
   it("never caches a failed card fetch", async () => {
     let shouldFail = true;
-    const fetchImpl = vi.fn(async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/athletes/")) return jsonResponse({});
       if (shouldFail) {
         shouldFail = false;
         return errorResponse(404);
@@ -340,7 +544,68 @@ describe("createEspnScheduleSource", () => {
     );
     const retried = await source.getCard("600059185");
     expect(retried?.eventId).toBe("600059185");
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    // The failed first attempt never reaches enrichment, so only the
+    // successful retry's card fetch + its 18 athlete-bio fetches count.
+    expect(cardFetchCount(fetchImpl)).toBe(2);
+    expect(bioFetchCount(fetchImpl)).toBe(18);
+  });
+
+  it("merges nickname and recent-bout history from the athlete-bio endpoint onto getCard's fighters", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/athletes/4738092")) {
+        return jsonResponse({
+          athlete: { id: "4738092", nickname: "The Future" },
+          eventsMap: {
+            e1: {
+              name: "UFC Fight Night",
+              gameResult: "W",
+              opponent: { displayName: "Some Opponent" },
+              status: { period: 2, result: { name: "submission" } },
+            },
+          },
+        });
+      }
+      if (url.includes("/athletes/")) return jsonResponse({});
+      return jsonResponse(ufc330Fixture);
+    });
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => new Date("2026-07-28T00:00:00Z"),
+    });
+
+    const card = await source.getCard("600059185");
+    const garry = card?.sections[0]?.fights[0]?.blue;
+
+    expect(garry?.name).toBe("Ian Machado Garry");
+    expect(garry?.nickname).toBe("The Future");
+    expect(garry?.recentBouts).toEqual([
+      {
+        opponentName: "Some Opponent",
+        result: "win",
+        method: "submission",
+        round: 2,
+        eventName: "UFC Fight Night",
+      },
+    ]);
+  });
+
+  it("keeps the rest of a fighter's data when their bio fetch fails, without failing the whole card", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/athletes/")) return errorResponse(500);
+      return jsonResponse(ufc330Fixture);
+    });
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => new Date("2026-07-28T00:00:00Z"),
+    });
+
+    const card = await source.getCard("600059185");
+    const garry = card?.sections[0]?.fights[0]?.blue;
+
+    expect(garry?.name).toBe("Ian Machado Garry");
+    expect(garry?.age).toBe(28); // still parsed straight off the fightcenter payload
+    expect(garry?.nickname).toBeUndefined();
+    expect(garry?.recentBouts).toBeUndefined();
   });
 
   // Regression guard: the default fetch implementation must keep its
