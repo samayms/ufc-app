@@ -14,7 +14,7 @@ describe("loadConfig", () => {
       xMode: "embed",
       port: 8600,
       persistencePath: "./data",
-      oddsApiIoBookmakers: ["bet365", "draftkings"],
+      oddsApiIoBookmakers: ["Bet365", "DraftKings"],
       xSpendCapUsd: 0,
       sherdog: {
         permissionScope: "none",
@@ -50,8 +50,10 @@ describe("loadConfig", () => {
 
     expect(config.port).toBe(0);
     expect(config.persistencePath).toBe("/tmp/ufc-data");
+    // Case is preserved for the outbound request (Odds-API.io rejects
+    // lowercased names), while duplicates still collapse case-insensitively.
     expect(config.oddsApiIoBookmakers).toEqual([
-      "fanduel",
+      "FanDuel",
       "betmgm",
     ]);
     expect(config.xMode).toBe("manual");

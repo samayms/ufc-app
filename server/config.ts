@@ -147,15 +147,23 @@ function parseBookmakers(env: CollectorEnvironment): readonly string[] {
   // would have failed every live call. Still overridable per the architecture
   // note that book selection must not be permanently hard-coded; the plan
   // selection is changed via Odds-API.io's own bookmaker-selection endpoint.
-  const raw = env.ODDS_API_IO_BOOKMAKERS ?? "bet365,draftkings";
-  const bookmakers = [
-    ...new Set(
-      raw
-        .split(",")
-        .map((bookmaker) => bookmaker.trim().toLowerCase())
-        .filter(Boolean),
-    ),
-  ];
+  //
+  // Case is preserved deliberately. Re-probed live 2026-07-29: these are
+  // case-sensitive *display* names, and sending "bet365" fails the whole
+  // request with `"bet365 is not a valid bookmaker"` rather than degrading.
+  // Consumers compare them case-insensitively; only the outbound request
+  // needs the exact casing. Duplicates are still collapsed case-insensitively.
+  const raw = env.ODDS_API_IO_BOOKMAKERS ?? "Bet365,DraftKings";
+  const seen = new Set<string>();
+  const bookmakers: string[] = [];
+  for (const entry of raw.split(",")) {
+    const bookmaker = entry.trim();
+    if (bookmaker.length === 0) continue;
+    const key = bookmaker.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    bookmakers.push(bookmaker);
+  }
 
   if (bookmakers.length === 0) {
     throw new TypeError(

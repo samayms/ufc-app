@@ -168,8 +168,16 @@ export function parsePolymarketUpcomingMarkets(
 
       const weightClass =
         title === undefined ? undefined : polymarketTitleWeightClass(title);
+      // Gamma's `startDate` is when the *market* was listed, not when the
+      // fight happens — observed live at 13 days before the bout, which is far
+      // outside the matcher's event-date window and rejected every Polymarket
+      // market outright. `endDate` is the resolution deadline, which sits a
+      // few hours after the fight and is the only date in the payload that
+      // tracks it.
       const startsAt =
-        readString(market.startDate) ?? readString(event.startDate);
+        readString(market.endDateIso) ??
+        readString(market.endDate) ??
+        readString(event.endDate);
 
       return [
         {
