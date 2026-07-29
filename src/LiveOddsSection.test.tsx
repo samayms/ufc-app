@@ -65,7 +65,7 @@ describe("LiveOddsSection", () => {
     expect(html).not.toContain(">Markets<");
   });
 
-  it("keeps live OddsPanel precedence when the bout has live odds", async () => {
+  it("uses the upcoming odds layout when the bout has live odds", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];
     expect(view).toBeDefined();
@@ -78,10 +78,13 @@ describe("LiveOddsSection", () => {
       />,
     );
 
-    expect(html).toContain(">Markets<");
+    expect(html).toContain("Kalshi");
+    expect(html).toContain("Polymarket");
+    expect(html).toContain("Sportsbooks");
+    expect(html).not.toContain(">Markets<");
   });
 
-  it("falls back to OddsPanel when the bout is missing from upcoming odds", async () => {
+  it("keeps the upcoming odds layout when no odds are available", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-3"];
     expect(view).toBeDefined();
@@ -95,6 +98,8 @@ describe("LiveOddsSection", () => {
       />,
     );
 
-    expect(html).toContain(">Markets<");
+    expect(html).toContain('aria-label="Odds comparison"');
+    expect(html).toContain("Kalshi");
+    expect(html).not.toContain(">Markets<");
   });
 });

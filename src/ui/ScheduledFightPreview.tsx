@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { EspnScheduledFight, EspnScheduledFighter } from "../sources/espnSchedule.ts";
 import type {
   Bout,
+  BoutView,
   Corner,
   Fighter,
   FightRecord,
@@ -12,6 +13,8 @@ import type {
 import {
   findUpcomingBout,
   type UpcomingBoutOdds,
+  type UpcomingProviderEntry,
+  type UpcomingProviderId,
 } from "../lib/upcomingOdds.ts";
 import type { UpcomingOddsState } from "../store/useUpcomingOdds.ts";
 import { BoutHeader } from "./BoutHeader.tsx";
@@ -39,6 +42,53 @@ function boutFighterToScheduledFighter(fighter: Fighter): EspnScheduledFighter {
     ...(fighter.stance === undefined ? {} : { stance: fighter.stance }),
     ...(fighter.recentBouts === undefined ? {} : { recentBouts: fighter.recentBouts }),
     ...(fighter.ranking === undefined ? {} : { ranking: fighter.ranking }),
+  };
+}
+
+function liveSnapshotEntry(
+  provider: UpcomingProviderId,
+  snapshot: OddsSnapshot,
+): UpcomingProviderEntry {
+  const fetchedAt = snapshot.provenance.fetchedAt;
+  return {
+    status: "loaded",
+    fetchedAt,
+    updatedAt: snapshot.marketUpdatedAt ?? fetchedAt,
+    externalId: `${provider}:${snapshot.boutId}`,
+    confidence: 1,
+    cornersReversed: false,
+    snapshot,
+  };
+}
+
+/** Converts live snapshots into the same provider shape used by upcoming odds. */
+export function liveBoutToUpcomingOdds(view: BoutView): UpcomingBoutOdds {
+  const providers: UpcomingBoutOdds["providers"] = {};
+  for (const snapshot of Object.values(view.latestOdds)) {
+    const provider: UpcomingProviderId =
+      snapshot.market === "kalshi"
+        ? "kalshi"
+        : snapshot.market === "polymarket"
+          ? "polymarket"
+          : snapshot.provenance.source === "odds-api"
+            ? "odds-api"
+            : "odds-api-io";
+    providers[provider] = liveSnapshotEntry(provider, snapshot);
+  }
+  const synthetic = Object.values(view.latestOdds).some(
+    (snapshot) => snapshot.provenance.synthetic,
+  );
+  return {
+    boutId: view.bout.id,
+    espnEventId: view.bout.eventId,
+    redFighter: view.bout.fighters.red.name,
+    blueFighter: view.bout.fighters.blue.name,
+    providers,
+    decision: {
+      state: "not_listed",
+      fetchedAt: new Date().toISOString(),
+      synthetic,
+    },
   };
 }
 
@@ -116,16 +166,22 @@ function toFighter(fighter: EspnScheduledFighter): Fighter {
  * same answer. Nothing here falls back to fixture prices: every number on
  * this screen was published by a real provider for this exact bout.
  */
-function OddsSection({
+export function UpcomingOddsSection({
   fight,
   upcoming,
+  liveView,
 }: {
   fight: EspnScheduledFight;
   upcoming: UpcomingOddsState;
+  liveView?: BoutView;
 }) {
   const redName = fight.red.name.split(" ").at(-1) ?? fight.red.name;
   const blueName = fight.blue.name.split(" ").at(-1) ?? fight.blue.name;
-  const bout = findUpcomingBout(upcoming.document, fight.competitionId);
+  const upcomingBout = findUpcomingBout(upcoming.document, fight.competitionId);
+  const liveBout = liveView ? liveBoutToUpcomingOdds(liveView) : undefined;
+  const bout = liveBout && Object.keys(liveBout.providers).length > 0
+    ? liveBout
+    : upcomingBout;
 
   const notice =
     upcoming.status === "loading"
@@ -148,15 +204,18 @@ function OddsSection({
         ? {}
         : { syncedAt: upcoming.document.generatedAt })}
       {...(notice === undefined ? {} : { notice })}
+      {...(liveView === undefined ? {} : { allowSynthetic: true })}
     />
   );
 }
 
-function TaleSection({ fight }: { fight: EspnScheduledFight }) {
-  const fighters: Record<Corner, Fighter> = {
-    red: toFighter(fight.red),
-    blue: toFighter(fight.blue),
-  };
+export function UpcomingTaleSection({
+  fighters,
+  statValues,
+}: {
+  fighters: Record<Corner, Fighter>;
+  statValues?: Partial<Record<Corner, Record<string, string>>>;
+}) {
   return (
     <>
       <FighterProfile fighters={fighters} />
@@ -169,14 +228,34 @@ function TaleSection({ fight }: { fight: EspnScheduledFight }) {
         <div className="profile-rows">
           {STAT_ROWS.map(({ key, label }) => (
             <div className="profile-row" key={key}>
-              <span className="num">{statValue(fight.red, key)}</span>
+              <span className="num">{statValues?.red?.[key] ?? "—"}</span>
               <span>{label}</span>
-              <span className="num">{statValue(fight.blue, key)}</span>
+              <span className="num">{statValues?.blue?.[key] ?? "—"}</span>
             </div>
           ))}
         </div>
       </section>
     </>
+  );
+}
+
+function TaleSection({ fight }: { fight: EspnScheduledFight }) {
+  const fighters: Record<Corner, Fighter> = {
+    red: toFighter(fight.red),
+    blue: toFighter(fight.blue),
+  };
+  return (
+    <UpcomingTaleSection
+      fighters={fighters}
+      statValues={{
+        red: Object.fromEntries(
+          STAT_ROWS.map(({ key }) => [key, statValue(fight.red, key)]),
+        ),
+        blue: Object.fromEntries(
+          STAT_ROWS.map(({ key }) => [key, statValue(fight.blue, key)]),
+        ),
+      }}
+    />
   );
 }
 
@@ -274,7 +353,7 @@ export function ScheduledFightPreview({
 
       <SectionTabs active={active} onChange={setActive} sections={PREVIEW_SECTIONS} />
 
-      {active === "odds" && <OddsSection fight={fight} upcoming={upcoming} />}
+      {active === "odds" && <UpcomingOddsSection fight={fight} upcoming={upcoming} />}
       {active === "tale" && <TaleSection fight={fight} />}
     </div>
   );

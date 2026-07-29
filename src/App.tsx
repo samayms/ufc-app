@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDashboard } from "./store/useDashboard.ts";
 import {
-  getCollectorMarketDelivery,
   getCollectorRoundDelivery,
   type CollectorValueDelivery,
 } from "./store/collectorClient.ts";
@@ -12,10 +11,7 @@ import { CardRail } from "./ui/CardRail.tsx";
 import { DeliveryFreshness } from "./ui/DeliveryFreshness.tsx";
 import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
-import { FighterProfile } from "./ui/FighterProfile.tsx";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
-import { OddsPanel } from "./ui/OddsPanel.tsx";
-import { RecentForm } from "./ui/RecentForm.tsx";
 import { RoundGrid } from "./ui/RoundGrid.tsx";
 import {
   defaultRoundSelection,
@@ -26,6 +22,8 @@ import { RoundStatsPanel } from "./ui/RoundStatsPanel.tsx";
 import { ScheduledCardRail } from "./ui/ScheduledCardRail.tsx";
 import {
   boutToScheduledFight,
+  UpcomingOddsSection,
+  UpcomingTaleSection,
   ScheduledFightPreview,
 } from "./ui/ScheduledFightPreview.tsx";
 import { ScorecardFeed } from "./ui/ScorecardFeed.tsx";
@@ -38,24 +36,14 @@ import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
 import { WEIGHT_LABEL } from "./ui/format.ts";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
 import { useUpcomingOdds } from "./store/useUpcomingOdds.ts";
-import { findUpcomingBout } from "./lib/upcomingOdds.ts";
 import {
   fighterEspnAthleteId,
   useCurrentEventAthletePhotos,
   useUpcomingEventPhotos,
 } from "./store/useEventPhotos.ts";
 import type { BoutView, OddsSnapshot } from "./schema.ts";
-import { UpcomingOddsPanel } from "./ui/UpcomingOddsPanel.tsx";
 import type { EspnScheduledFight } from "./sources/espnSchedule.ts";
 import "./ui/dashboard.css";
-
-const NON_UPCOMING_BOUT_STATUSES = new Set([
-  "in-round",
-  "between-rounds",
-  "final",
-  "canceled",
-  "postponed",
-]);
 
 export function LiveOddsSection({
   view,
@@ -66,39 +54,12 @@ export function LiveOddsSection({
   upcomingOdds: ReturnType<typeof useUpcomingOdds>;
   deliveries?: Partial<Record<OddsSnapshot["market"], CollectorValueDelivery>>;
 }) {
-  const redName = view.bout.fighters.red.name.split(" ").at(-1) ?? view.bout.fighters.red.name;
-  const blueName = view.bout.fighters.blue.name.split(" ").at(-1) ?? view.bout.fighters.blue.name;
-  const upcomingBout = findUpcomingBout(upcomingOdds.document, view.bout.id);
-  const hasLiveMarketData = Object.keys(view.latestOdds).length > 0;
-  const shouldUseUpcomingOdds =
-    !NON_UPCOMING_BOUT_STATUSES.has(view.bout.status) &&
-    !hasLiveMarketData &&
-    upcomingBout !== undefined;
-
-  if (shouldUseUpcomingOdds) {
-    return (
-      <UpcomingOddsPanel
-        bout={upcomingBout}
-        redName={redName}
-        blueName={blueName}
-      />
-    );
-  }
-
+  void deliveries;
   return (
-    <OddsPanel
-      redName={redName}
-      blueName={blueName}
-      latestOdds={view.latestOdds}
-      preFightOdds={view.preFightOdds}
-      emptyText={
-        view.bout.status === "final"
-          ? "Bout is final."
-          : view.bout.status === "canceled" || view.bout.status === "postponed"
-            ? `Bout ${view.bout.status}.`
-            : undefined
-      }
-      deliveries={deliveries}
+    <UpcomingOddsSection
+      fight={boutToScheduledFight(view.bout)}
+      upcoming={upcomingOdds}
+      liveView={view}
     />
   );
 }
@@ -219,26 +180,6 @@ export default function App() {
           stale: dashboard.collector?.connection !== "connected",
           provisional: lifecycle.provisional,
         };
-  const marketDeliveries = view
-    ? {
-        kalshi: getCollectorMarketDelivery(
-          dashboard.collector,
-          view.bout.id,
-          "kalshi",
-        ),
-        polymarket: getCollectorMarketDelivery(
-          dashboard.collector,
-          view.bout.id,
-          "polymarket",
-        ),
-        sportsbook: getCollectorMarketDelivery(
-          dashboard.collector,
-          view.bout.id,
-          "sportsbook",
-        ),
-      }
-    : undefined;
-
   const selectBout = (id: string) => {
     setSelected(id);
     setTab("fight");
@@ -454,17 +395,14 @@ export default function App() {
                   </>
                 )}
                 {section === "odds" && (
-                  <LiveOddsSection
-                    view={view}
-                    upcomingOdds={upcomingOdds}
-                    deliveries={marketDeliveries}
+                  <UpcomingOddsSection
+                    fight={boutToScheduledFight(view.bout)}
+                    upcoming={upcomingOdds}
+                    liveView={view}
                   />
                 )}
                 {section === "tale" && (
-                  <>
-                    <FighterProfile fighters={view.bout.fighters} />
-                    <RecentForm fighters={view.bout.fighters} />
-                  </>
+                  <UpcomingTaleSection fighters={view.bout.fighters} />
                 )}
                 </div>
               )

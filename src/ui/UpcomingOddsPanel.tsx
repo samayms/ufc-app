@@ -125,10 +125,12 @@ function MetadataFooter({
 function bestSportsbookQuote(
   entries: readonly (UpcomingProviderEntry | undefined)[],
   corner: "red" | "blue",
+  allowSynthetic = false,
 ) {
   return entries
     .flatMap((source) =>
-      source?.snapshot?.provenance.synthetic === false
+      source?.snapshot !== undefined &&
+      (source.snapshot.provenance.synthetic === false || allowSynthetic)
         ? source.snapshot.quotes
         : [],
     )
@@ -324,6 +326,7 @@ export function UpcomingMarketBlock({
   redName,
   blueName,
   nowMs,
+  allowSynthetic = false,
 }: {
   provider: DisplayProvider;
   entry: UpcomingProviderEntry | undefined;
@@ -331,6 +334,7 @@ export function UpcomingMarketBlock({
   redName: string;
   blueName: string;
   nowMs: number;
+  allowSynthetic?: boolean;
 }) {
   const providers = provider === "sportsbooks" ? SPORTSBOOK_PROVIDERS : [provider];
   const statuses = providers.map((source) =>
@@ -346,15 +350,17 @@ export function UpcomingMarketBlock({
     : [];
   const sportsbookQuotes = provider === "sportsbooks"
     ? {
-        red: bestSportsbookQuote(sportsbookEntries, "red"),
-        blue: bestSportsbookQuote(sportsbookEntries, "blue"),
+        red: bestSportsbookQuote(sportsbookEntries, "red", allowSynthetic),
+        blue: bestSportsbookQuote(sportsbookEntries, "blue", allowSynthetic),
       }
     : undefined;
+  const entrySnapshot = entry?.snapshot;
   const snapshot = provider === "sportsbooks"
     ? null
     : status === "loaded" || status === "stale"
-      ? (entry?.snapshot?.provenance.synthetic === false
-        ? entry.snapshot
+      ? (entrySnapshot !== undefined &&
+        (entrySnapshot.provenance.synthetic === false || allowSynthetic)
+        ? entrySnapshot
         : null)
       : null;
   const label = provider === "sportsbooks" ? "Sportsbooks" : UPCOMING_PROVIDER_LABEL[provider];
@@ -396,6 +402,7 @@ export function UpcomingOddsPanel({
   redName,
   blueName,
   nowMs = Date.now(),
+  allowSynthetic = false,
 }: {
   bout: UpcomingBoutOdds | undefined;
   redName: string;
@@ -403,6 +410,7 @@ export function UpcomingOddsPanel({
   syncedAt?: string;
   notice?: string;
   nowMs?: number;
+  allowSynthetic?: boolean;
 }) {
   return (
     <section className="panel upcoming-odds-panel" aria-label="Odds comparison">
@@ -417,6 +425,7 @@ export function UpcomingOddsPanel({
           redName={redName}
           blueName={blueName}
           nowMs={nowMs}
+          allowSynthetic={allowSynthetic}
         />
       ))}
       <DecisionBlock
