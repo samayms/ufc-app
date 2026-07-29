@@ -428,7 +428,7 @@ export default function App() {
                 <div className="page-heading">
                   <div>
                     <span className="page-kicker">Bout order</span>
-                    <h2 id="card-title">
+                    <h2 id="card-title" className="event-title">
                       {scheduleSelection === event.id
                         ? event.name
                         : (espnCard.card?.name ?? "Event card")}

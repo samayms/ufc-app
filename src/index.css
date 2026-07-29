@@ -52,6 +52,7 @@
   --font-display: "Asap Condensed", "Arial Narrow", sans-serif;
   --font-data: "Schibsted Grotesk", system-ui, sans-serif;
   --font-stat-label: "Barlow Semi Condensed", system-ui, sans-serif;
+  --font-event-title: "Bebas Neue", "Arial Narrow", sans-serif;
 
   --fs-xs: 0.6875rem; /* 11px labels */
   --fs-sm: 0.8125rem; /* 13px dense body */

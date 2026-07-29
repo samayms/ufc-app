@@ -155,9 +155,9 @@
 .event-card-name {
   overflow: hidden;
   color: var(--text);
-  font-family: var(--font-display);
+  font-family: var(--font-event-title);
   font-size: 0.92rem;
-  font-weight: 700;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
