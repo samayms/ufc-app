@@ -31,13 +31,24 @@ Every item below should end with an observation written into this file
 - [ ] **ESPN poll interval in practice.** 5–10s is specified; confirm ESPN
       neither rate-limits it nor serves a cached scoreboard that lags the
       broadcast enough to make the boundary snapshots meaningless.
-- [ ] **ESPN live endpoint shapes.** `src/sources/espn.ts`'s live fetchers are
-      marked unverified placeholders. Confirm the real URLs and payload shapes.
+- [ ] **ESPN event/fighter discovery.** The scoreboard path and its lifecycle
+      parser were verified live on 2026-07-28, and live cards are built through
+      `src/sources/espnSchedule.ts`. What stays unimplemented is
+      `createEspnSource`'s own event/fighter discovery — confirm nothing in a
+      live run depends on it.
 - [ ] **Cito lifecycle fallback.** Only reachable when ESPN fails repeatedly.
       Force it (block ESPN at the network level mid-card) and confirm the
       handover produces no duplicate or missed round events.
 
 ## Round statistics
+
+- [ ] **Cito exact-round response shape.** The exact-round response has never
+      been captured and remains unverified. The current parser accepts a
+      single round object, one `data` wrapper, arrays of explicitly
+      round-matched rows, and the six defined stat fields in either camelCase
+      or snake_case. A shape mismatch degrades to an absent or incomplete
+      round; it does not announce itself. Confirm the actual fighter
+      identifiers/corner fields and revise the parser from a real response.
 
 - [ ] **Cito publication latency.** The T+5–8s initial job and single T+20–30s
       retry are guesses at when exact round data appears. Measure the real
@@ -54,6 +65,13 @@ Every item below should end with an observation written into this file
       depended on. Confirm before any future work relies on it.
 - [ ] **Cito serialization below 10/min.** Verified in tests against the quota
       guard; confirm the real endpoint agrees about what counts as a request.
+- [ ] **Which of Cito's two exact-round endpoints is actually needed.** Each
+      round boundary currently spends **two** requests — `stats?round=N` and
+      `rounds?round=N` — and merges them, because without a captured response we
+      cannot tell which one carries the per-fighter figures. Once a real card
+      shows that one endpoint is sufficient, drop the other and halve the
+      per-round Cito quota cost. `cito-live-round-stats-weekend-test.md` is the
+      procedure for establishing this.
 
 ## Markets
 

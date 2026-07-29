@@ -76,6 +76,7 @@ describe("collector market transport wiring", () => {
         DATA_MODE: "live",
         COLLECTOR_PORT: "0",
         CITO_API_KEY: "cito-key",
+        CITO_API_BASE_URL: "https://cito.example.invalid/api/v1",
         ODDS_API_IO_KEY: "odds-io-key",
         THE_ODDS_API_KEY: "odds-api-key",
         KALSHI_API_KEY_ID: "kalshi-id",

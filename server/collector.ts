@@ -750,7 +750,10 @@ export async function createCollector(
       roundStatsOptions?.fetcher ??
       (config.dataMode === "fixture"
         ? createFixtureCitoRoundStatsFetcher()
-        : createLiveCitoRoundStatsFetcher()),
+        : createLiveCitoRoundStatsFetcher({
+            baseUrl: config.citoApiBaseUrl ?? "",
+            apiKey: config.credentials.CITO_API_KEY ?? "",
+          })),
     publish: async (record) => {
       await push.publish("update", {
         kind: "round",

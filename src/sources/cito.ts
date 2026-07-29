@@ -106,7 +106,7 @@ export interface CitoFighterRoundStats {
 }
 
 export interface CitoRoundStatsPayload {
-  boutId: string;
+  boutId?: string;
   round: number;
   fighterA?: CitoFighterRoundStats;
   fighterB?: CitoFighterRoundStats;
@@ -119,6 +119,30 @@ export interface CitoRoundStatsFetcher {
     round: number,
   ): Promise<CitoRoundStatsPayload | null>;
   fetchAllRounds(boutId: string): Promise<CitoRoundStatsPayload[]>;
+}
+
+export type CitoRoundStatsErrorKind =
+  | "auth"
+  | "quota"
+  | "transient"
+  | "unavailable";
+
+export class CitoRoundStatsRequestError extends Error {
+  override readonly name = "CitoRoundStatsRequestError";
+
+  readonly kind: CitoRoundStatsErrorKind;
+
+  readonly status?: number;
+
+  constructor(
+    kind: CitoRoundStatsErrorKind,
+    message: string,
+    options?: { status?: number; cause?: unknown },
+  ) {
+    super(message, options?.cause === undefined ? undefined : { cause: options.cause });
+    this.kind = kind;
+    if (options?.status !== undefined) this.status = options.status;
+  }
 }
 
 interface CitoRoundResult {
@@ -406,13 +430,314 @@ export function createFixtureCitoRoundStatsFetcher(): CitoRoundStatsFetcher {
   };
 }
 
-export function createLiveCitoRoundStatsFetcher(): CitoRoundStatsFetcher {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function roundNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value >= 1 ? value : undefined;
+  }
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : undefined;
+}
+
+function property(
+  record: Record<string, unknown>,
+  names: readonly string[],
+): unknown {
+  for (const name of names) {
+    if (record[name] !== undefined) return record[name];
+  }
+  return undefined;
+}
+
+const STAT_FIELDS = [
+  ["significantStrikes", ["significantStrikes", "significant_strikes"]],
+  ["totalStrikes", ["totalStrikes", "total_strikes"]],
+  ["takedowns", ["takedowns"]],
+  ["takedownsAttempted", ["takedownsAttempted", "takedowns_attempted"]],
+  ["controlTimeSeconds", ["controlTimeSeconds", "control_time_seconds"]],
+  ["knockdowns", ["knockdowns"]],
+] as const;
+
+type FighterPosition = "A" | "B";
+
+function cumulativeMarker(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  for (const [key, raw] of Object.entries(value)) {
+    const normalized = key.replace(/[-_]/g, "").toLowerCase();
+    if (
+      (normalized === "iscumulative" && raw === true) ||
+      normalized.includes("cumulative") ||
+      normalized.includes("overallstats") ||
+      normalized.includes("fighttotals") ||
+      normalized.includes("throughround") ||
+      (normalized === "scope" &&
+        typeof raw === "string" &&
+        /^(?:fight|cumulative|overall|total)$/iu.test(raw))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function fighterStats(value: unknown): CitoFighterRoundStats | undefined {
+  if (!isRecord(value) || cumulativeMarker(value)) return undefined;
+
+  const nested = property(value, [
+    "stats",
+    "statistics",
+    "roundStats",
+    "round_stats",
+  ]);
+  const source = isRecord(nested) ? nested : value;
+  if (cumulativeMarker(source)) return undefined;
+
+  const stats: CitoFighterRoundStats = {};
+  for (const [normalizedName, names] of STAT_FIELDS) {
+    const parsed = finiteNumber(property(source, names));
+    if (parsed !== undefined && parsed >= 0) {
+      stats[normalizedName] = parsed;
+    }
+  }
+  return Object.keys(stats).length === 0 ? undefined : stats;
+}
+
+const POSITION_NAMES: Record<FighterPosition, readonly string[]> = {
+  A: ["fighterA", "fighter_a", "red", "redFighter", "red_fighter"],
+  B: ["fighterB", "fighter_b", "blue", "blueFighter", "blue_fighter"],
+};
+
+function positionFor(value: unknown): FighterPosition | undefined {
+  if (!isRecord(value)) return undefined;
+  const raw = property(value, [
+    "corner",
+    "fighterCorner",
+    "fighter_corner",
+    "side",
+    "color",
+  ]);
+  if (typeof raw !== "string") {
+    const fighter = value.fighter;
+    return positionFor(fighter);
+  }
+  const normalized = raw.toLowerCase();
+  if (normalized === "red" || normalized === "r") return "A";
+  if (normalized === "blue" || normalized === "b") return "B";
+  return undefined;
+}
+
+function addStats(
+  target: CitoFighterRoundStats | undefined,
+  next: CitoFighterRoundStats | undefined,
+): CitoFighterRoundStats | undefined {
+  if (target === undefined) return next;
+  if (next === undefined) return target;
+  return { ...target, ...next };
+}
+
+function boutIdFrom(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  return nonEmptyString(property(value, ["boutId", "bout_id"]));
+}
+
+function sourceUpdatedAtFrom(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  return nonEmptyString(
+    property(value, ["sourceUpdatedAt", "source_updated_at", "updatedAt", "updated_at"]),
+  );
+}
+
+function roundFrom(value: unknown): number | undefined {
+  if (!isRecord(value)) return undefined;
+  return roundNumber(property(value, ["round", "roundNumber", "round_number"]));
+}
+
+function dataWrapper(value: unknown): unknown {
+  if (!isRecord(value) || value.data === undefined) return value;
+  return value.data;
+}
+
+function findRoundRows(payload: unknown, round: number): Record<string, unknown>[] {
+  const wrapped = dataWrapper(payload);
+  if (Array.isArray(wrapped)) {
+    return wrapped.filter(
+      (item): item is Record<string, unknown> =>
+        isRecord(item) && roundFrom(item) === round,
+    );
+  }
+  if (!isRecord(wrapped)) return [];
+
+  const nestedRows = property(wrapped, ["rounds", "rows"]);
+  if (Array.isArray(nestedRows)) {
+    return nestedRows.filter(
+      (item): item is Record<string, unknown> =>
+        isRecord(item) && roundFrom(item) === round,
+    );
+  }
+  return roundFrom(wrapped) === round ? [wrapped] : [];
+}
+
+function parseRoundRows(
+  rows: readonly Record<string, unknown>[],
+): {
+  fighterA?: CitoFighterRoundStats;
+  fighterB?: CitoFighterRoundStats;
+} {
+  let fighterA: CitoFighterRoundStats | undefined;
+  let fighterB: CitoFighterRoundStats | undefined;
+
+  for (const row of rows) {
+    const container = property(row, ["stats", "statistics"]);
+    const source = isRecord(container) ? container : row;
+    const direct = fighterStats(row) ?? fighterStats(row.fighter);
+    for (const position of ["A", "B"] as const) {
+      const candidate = property(source, POSITION_NAMES[position]);
+      const parsed = fighterStats(candidate);
+      if (parsed === undefined) continue;
+      if (position === "A") fighterA = addStats(fighterA, parsed);
+      else fighterB = addStats(fighterB, parsed);
+    }
+
+    const position = positionFor(row) ?? positionFor(source);
+    if (position === "A") fighterA = addStats(fighterA, direct);
+    if (position === "B") fighterB = addStats(fighterB, direct);
+  }
+
   return {
-    async fetchRound() {
-      throw new Error("Cito live round-stats transport is not installed");
+    ...(fighterA === undefined ? {} : { fighterA }),
+    ...(fighterB === undefined ? {} : { fighterB }),
+  };
+}
+
+/**
+ * Parses only explicitly per-round-looking data. The exact Cito round-stats
+ * response has not been captured, so this accepts documented-ish wrappers and
+ * corner-labeled rows while leaving unrecognized fighters absent.
+ */
+export function parseCitoRoundStatsResponse(
+  payload: unknown,
+  round: number,
+): CitoRoundStatsPayload | null {
+  const rows = findRoundRows(payload, round);
+  if (rows.length === 0) return null;
+
+  if (cumulativeMarker(payload) || rows.some(cumulativeMarker)) {
+    return { round };
+  }
+
+  const parsed = parseRoundRows(rows);
+  const first = rows[0];
+  return {
+    ...(boutIdFrom(first) === undefined ? {} : { boutId: boutIdFrom(first) }),
+    round,
+    ...(parsed.fighterA === undefined ? {} : { fighterA: parsed.fighterA }),
+    ...(parsed.fighterB === undefined ? {} : { fighterB: parsed.fighterB }),
+    ...(sourceUpdatedAtFrom(first) === undefined
+      ? {}
+      : { sourceUpdatedAt: sourceUpdatedAtFrom(first) }),
+  };
+}
+
+function mergeRoundPayloads(
+  boutId: string,
+  round: number,
+  left: CitoRoundStatsPayload | null,
+  right: CitoRoundStatsPayload | null,
+): CitoRoundStatsPayload | null {
+  if (left === null && right === null) return null;
+  return {
+    boutId,
+    round,
+    ...(left?.fighterA === undefined && right?.fighterA === undefined
+      ? {}
+      : { fighterA: { ...left?.fighterA, ...right?.fighterA } }),
+    ...(left?.fighterB === undefined && right?.fighterB === undefined
+      ? {}
+      : { fighterB: { ...left?.fighterB, ...right?.fighterB } }),
+    ...(right?.sourceUpdatedAt ?? left?.sourceUpdatedAt) === undefined
+      ? {}
+      : {
+          sourceUpdatedAt:
+            right?.sourceUpdatedAt ?? left?.sourceUpdatedAt,
+        },
+  };
+}
+
+export interface LiveCitoRoundStatsFetcherOptions {
+  baseUrl: string;
+  apiKey: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  maxBytes?: number;
+}
+
+export function createLiveCitoRoundStatsFetcher(
+  options: LiveCitoRoundStatsFetcherOptions,
+): CitoRoundStatsFetcher {
+  if (options.baseUrl.trim().length === 0) {
+    throw new Error(
+      "Cito live round-stats fetcher requires a configured base URL",
+    );
+  }
+  const apiKey = options.apiKey.trim();
+  if (apiKey.length === 0) {
+    throw new Error("Cito live round-stats fetcher requires CITO_API_KEY");
+  }
+  const timeoutMs = options.timeoutMs ?? CITO_ROUND_STATS_REQUEST_TIMEOUT_MS;
+  const maxBytes = options.maxBytes ?? CITO_ROUND_STATS_MAX_RESPONSE_BYTES;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError("Cito round-stats timeout must be positive");
+  }
+  if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+    throw new TypeError("Cito round-stats maximum response size must be positive");
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const request = (url: string): Promise<unknown> =>
+    fetchJsonWithLimits(url, {
+      timeoutMs,
+      maxBytes,
+      fetchImpl,
+      headers: { "x-api-key": apiKey },
+    });
+
+  return {
+    async fetchRound(boutId, round) {
+      const statsPayload = await request(
+        buildCitoRoundStatsUrl(options.baseUrl, boutId, round),
+      );
+      const rowsPayload = await request(
+        buildCitoRoundRowsUrl(options.baseUrl, boutId, round),
+      );
+      return mergeRoundPayloads(
+        boutId,
+        round,
+        parseCitoRoundStatsResponse(statsPayload, round),
+        parseCitoRoundStatsResponse(rowsPayload, round),
+      );
     },
-    async fetchAllRounds() {
-      throw new Error("Cito live round-stats transport is not installed");
+    async fetchAllRounds(boutId) {
+      const payloads: CitoRoundStatsPayload[] = [];
+      for (let round = 1; round <= 5; round += 1) {
+        const payload = parseCitoRoundStatsResponse(
+          await request(buildCitoRoundStatsUrl(options.baseUrl, boutId, round)),
+          round,
+        );
+        if (payload !== null) payloads.push({ ...payload, boutId });
+      }
+      return payloads;
     },
   };
 }
@@ -476,6 +801,8 @@ interface CitoLiveStateEnvelope {
 
 const CITO_LIVE_STATE_REQUEST_TIMEOUT_MS = 8_000;
 const CITO_LIVE_STATE_MAX_RESPONSE_BYTES = 500_000;
+const CITO_ROUND_STATS_REQUEST_TIMEOUT_MS = 8_000;
+const CITO_ROUND_STATS_MAX_RESPONSE_BYTES = 500_000;
 
 /**
  * Builds the URL for Cito's verified `GET /ufc/live` card-overview
@@ -499,6 +826,43 @@ export function buildCitoLiveStateUrl(baseUrl: string): string {
 
   const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
   return new URL("ufc/live", base).toString();
+}
+
+function buildCitoBoutRoundUrl(
+  baseUrl: string,
+  boutId: string,
+  endpoint: "stats" | "rounds",
+  round: number,
+): string {
+  if (baseUrl.trim().length === 0) {
+    throw new TypeError("Cito round-stats URL requires a non-empty base URL");
+  }
+  if (boutId.trim().length === 0) {
+    throw new TypeError("Cito round-stats URL requires a non-empty bout id");
+  }
+  if (!Number.isSafeInteger(round) || round < 1) {
+    throw new TypeError("Cito round-stats URL requires a positive round");
+  }
+
+  const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  const path = `ufc/bouts/${encodeURIComponent(boutId)}/${endpoint}`;
+  return `${new URL(path, base).toString()}?round=${round}`;
+}
+
+export function buildCitoRoundStatsUrl(
+  baseUrl: string,
+  boutId: string,
+  round: number,
+): string {
+  return buildCitoBoutRoundUrl(baseUrl, boutId, "stats", round);
+}
+
+export function buildCitoRoundRowsUrl(
+  baseUrl: string,
+  boutId: string,
+  round: number,
+): string {
+  return buildCitoBoutRoundUrl(baseUrl, boutId, "rounds", round);
 }
 
 function citoLifecycleState(status: string | undefined): "pre" | "in" | "post" {
@@ -590,7 +954,10 @@ async function readWithByteLimit(
   if (reader === undefined) {
     const text = await response.text();
     if (new TextEncoder().encode(text).byteLength > maxBytes) {
-      throw new Error("response exceeded the maximum allowed size");
+      throw new CitoRoundStatsRequestError(
+        "unavailable",
+        "Cito response exceeded the maximum allowed size",
+      );
     }
     return text;
   }
@@ -605,7 +972,10 @@ async function readWithByteLimit(
     size += value.byteLength;
     if (size > maxBytes) {
       await reader.cancel().catch(() => undefined);
-      throw new Error("response exceeded the maximum allowed size");
+      throw new CitoRoundStatsRequestError(
+        "unavailable",
+        "Cito response exceeded the maximum allowed size",
+      );
     }
     chunks.push(value);
   }
@@ -635,19 +1005,50 @@ async function fetchJsonWithLimits(
   );
 
   try {
-    const response = await options.fetchImpl(url, {
-      signal: controller.signal,
-      ...(options.headers === undefined ? {} : { headers: options.headers }),
-    });
-    if (!response.ok) {
-      throw new Error(`request failed with HTTP ${response.status}`);
-    }
-
-    const text = await readWithByteLimit(response, options.maxBytes);
     try {
-      return JSON.parse(text) as unknown;
-    } catch {
-      throw new Error("response was not valid JSON");
+      const response = await options.fetchImpl(url, {
+        signal: controller.signal,
+        ...(options.headers === undefined ? {} : { headers: options.headers }),
+      });
+      if (!response.ok) {
+        const kind: CitoRoundStatsErrorKind =
+          response.status === 401 || response.status === 403
+            ? "auth"
+            : response.status === 429
+              ? "quota"
+              : response.status >= 500
+                ? "transient"
+                : "unavailable";
+        throw new CitoRoundStatsRequestError(
+          kind,
+          `Cito request failed with HTTP ${response.status}`,
+          { status: response.status },
+        );
+      }
+
+      const text = await readWithByteLimit(response, options.maxBytes);
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        throw new CitoRoundStatsRequestError(
+          "unavailable",
+          "Cito response was not valid JSON",
+        );
+      }
+    } catch (error) {
+      if (error instanceof CitoRoundStatsRequestError) throw error;
+      if (controller.signal.aborted) {
+        throw new CitoRoundStatsRequestError(
+          "transient",
+          "Cito request timed out",
+          { cause: error },
+        );
+      }
+      throw new CitoRoundStatsRequestError(
+        "transient",
+        "Cito request failed",
+        { cause: error },
+      );
     }
   } finally {
     globalThis.clearTimeout(timeout);

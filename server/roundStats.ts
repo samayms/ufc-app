@@ -4,6 +4,7 @@ import type {
   CitoRoundStatsFetcher,
   CitoRoundStatsPayload,
 } from "../src/sources/cito.ts";
+import { CitoRoundStatsRequestError } from "../src/sources/cito.ts";
 import type {
   MarketBoundaryType,
   MarketSnapshot,
@@ -445,6 +446,18 @@ function endingSignal(event: RoundBoundaryEvent): RoundEndingSignal {
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function terminalCitoError(error: unknown): TerminalRoundJobError | undefined {
+  if (
+    !(error instanceof CitoRoundStatsRequestError) ||
+    (error.kind !== "auth" &&
+      error.kind !== "quota" &&
+      error.kind !== "unavailable")
+  ) {
+    return undefined;
+  }
+  return new TerminalRoundJobError(`Cito round request failed: ${error.message}`);
 }
 
 export class RoundStatsPipeline {
@@ -896,6 +909,9 @@ export class RoundStatsPipeline {
       );
     } catch (error) {
       if (error instanceof TerminalRoundJobError) throw error;
+      const terminal = terminalCitoError(error);
+      if (terminal !== undefined) throw terminal;
+      if (error instanceof CitoRoundStatsRequestError) throw error;
       throw new TerminalRoundJobError(
         `Cito round request failed: ${errorText(error)}`,
       );
@@ -927,6 +943,9 @@ export class RoundStatsPipeline {
       );
     } catch (error) {
       if (error instanceof TerminalRoundJobError) throw error;
+      const terminal = terminalCitoError(error);
+      if (terminal !== undefined) throw terminal;
+      if (error instanceof CitoRoundStatsRequestError) throw error;
       throw new TerminalRoundJobError(
         `Cito reconciliation failed: ${errorText(error)}`,
       );
@@ -968,16 +987,17 @@ export class RoundStatsPipeline {
     payload: CitoRoundStatsPayload,
   ): Promise<void> {
     const complete = completePayload(payload);
-    if (complete === undefined) return;
+    if (complete === undefined || payload.boutId === undefined) return;
+    const boutId = payload.boutId;
 
     await this.enqueueState(async () => {
-      const key = roundKey(payload.boutId, payload.round);
+      const key = roundKey(boutId, payload.round);
       const previous = this.stats.get(key);
       const observedAt = new Date(this.clock.now()).toISOString();
       const hash = payloadHash(complete);
       const provisional = !this.confirmedRounds.has(key);
       const next: RoundStatsRecord = {
-        boutId: payload.boutId,
+        boutId,
         round: payload.round,
         fighterA: complete.fighterA,
         fighterB: complete.fighterB,
