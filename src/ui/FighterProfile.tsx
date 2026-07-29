@@ -1,5 +1,5 @@
 import type { Corner, Fighter } from "../schema.ts";
-import { fmtRecord, fmtTime } from "./format.ts";
+import { fmtRecord } from "./format.ts";
 
 function value(value: string | number | undefined, suffix = "") {
   return value == null ? "—" : `${value}${suffix}`;
@@ -16,8 +16,10 @@ function Profile({
   return (
     <div className={`profile profile-${corner}`}>
       <h3 className={`corner-${corner}`}>{last}</h3>
+      <span className="profile-fullname">{fighter.name}</span>
       <span className="profile-record num">{fmtRecord(fighter.record)}</span>
-      {fighter.nickname && <span className="profile-nick">“{fighter.nickname}”</span>}
+      {fighter.nickname && <span className="profile-nick">"{fighter.nickname}"</span>}
+      {fighter.ranking && <span className="profile-ranking">{fighter.ranking}</span>}
     </div>
   );
 }
@@ -47,10 +49,6 @@ export function FighterProfile({ fighters }: { fighters: Record<Corner, Fighter>
           </div>
         ))}
       </div>
-      <p className="data-footnote">
-        Cached fighter records · as of{" "}
-        <span className="num">{fmtTime(red.provenance.fetchedAt)}</span>
-      </p>
     </section>
   );
 }

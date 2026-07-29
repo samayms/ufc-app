@@ -12,6 +12,7 @@ import {
   createEspnScheduleSource,
   parseEspnAthleteBio,
   parseEspnFightcenterCard,
+  parseEspnRankings,
   parseEspnScheduleEvents,
 } from "./espnSchedule.ts";
 
@@ -523,6 +524,104 @@ describe("parseEspnAthleteBio", () => {
   });
 });
 
+describe("parseEspnRankings", () => {
+  // Trimmed but field-shaped like the live payload captured 2026-07-28:
+  // pound-for-pound groups carry no weightClass (skipped), a division's
+  // champion group (type ending "-champions") is listed ahead of its
+  // numbered-contenders group (bare type), each with a weightClass.text.
+  const realisticPayload = {
+    rankings: [
+      {
+        id: "1",
+        name: "Men's Pound for Pound Rankings",
+        type: "pound-for-pound",
+        ranks: [{ current: 1, athlete: { id: "3088812" }, recordSummary: "21-5-0" }],
+      },
+      {
+        id: "6",
+        name: "Welterweight Division Champions (Up to 170 pounds)",
+        type: "welterweight-champions",
+        weightClass: { id: "969", text: "Welterweight", shortName: "Welterweight", slug: "welterweight" },
+        ranks: [{ current: 1, athlete: { id: "4083730" }, recordSummary: "17-3-0" }],
+      },
+      {
+        id: "16",
+        name: "Welterweight Division Rankings (Up to 170 pounds)",
+        type: "welterweight",
+        weightClass: { id: "969", text: "Welterweight", shortName: "Welterweight", slug: "welterweight" },
+        ranks: [
+          { current: 1, athlete: { id: "4361398" }, recordSummary: "20-4-0" },
+          { current: 2, athlete: { id: "3948124" }, recordSummary: "18-6-0" },
+        ],
+      },
+    ],
+  };
+
+  it("prefers a divisional champion/rank over pound-for-pound, formatted short", () => {
+    const rankings = parseEspnRankings(realisticPayload);
+
+    expect(rankings.get("4083730")).toBe("Welterweight Champion");
+    expect(rankings.get("4361398")).toBe("#1 Welterweight");
+    expect(rankings.get("3948124")).toBe("#2 Welterweight");
+    // Pound-for-pound-only athlete never gets an entry: no weightClass group
+    // ever mentions them in this payload.
+    expect(rankings.get("3088812")).toBeUndefined();
+    expect(rankings.size).toBe(3);
+  });
+
+  it("prefers the first group an athlete appears in (champion group listed before the numbered group)", () => {
+    const rankings = parseEspnRankings({
+      rankings: [
+        {
+          type: "welterweight-champions",
+          weightClass: { text: "Welterweight" },
+          ranks: [{ current: 1, athlete: { id: "same-id" } }],
+        },
+        {
+          type: "welterweight",
+          weightClass: { text: "Welterweight" },
+          ranks: [{ current: 1, athlete: { id: "same-id" } }],
+        },
+      ],
+    });
+
+    expect(rankings.get("same-id")).toBe("Welterweight Champion");
+  });
+
+  it("skips groups with no weightClass, entries with no athlete id, and numbered entries with no current rank", () => {
+    const rankings = parseEspnRankings({
+      rankings: [
+        { type: "pound-for-pound", ranks: [{ current: 1, athlete: { id: "no-weightclass" } }] },
+        {
+          type: "flyweight",
+          weightClass: { text: "Flyweight" },
+          ranks: [
+            { current: 1 },
+            { athlete: { id: "no-current" } },
+            { current: 3, athlete: {} },
+          ],
+        },
+      ],
+    });
+
+    expect(rankings.size).toBe(0);
+  });
+
+  it("returns an empty map rather than throwing on malformed input", () => {
+    expect(parseEspnRankings(null).size).toBe(0);
+    expect(parseEspnRankings(undefined).size).toBe(0);
+    expect(parseEspnRankings("not an object").size).toBe(0);
+    expect(parseEspnRankings({}).size).toBe(0);
+    expect(parseEspnRankings({ rankings: "not an array" }).size).toBe(0);
+    expect(parseEspnRankings({ rankings: [null, "bad", 42] }).size).toBe(0);
+    expect(
+      parseEspnRankings({
+        rankings: [{ type: "flyweight", weightClass: { text: "Flyweight" }, ranks: "not an array" }],
+      }).size,
+    ).toBe(0);
+  });
+});
+
 describe("createEspnScheduleSource", () => {
   it("caches listUpcomingEvents within the TTL and shares in-flight requests", async () => {
     let currentTime = new Date("2026-07-28T00:00:00Z");
@@ -699,6 +798,98 @@ describe("createEspnScheduleSource", () => {
         eventName: "UFC Fight Night",
       },
     ]);
+  });
+
+  it("merges divisional ranking from the rankings endpoint onto getCard's fighters", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/rankings")) {
+        return jsonResponse({
+          rankings: [
+            {
+              type: "lightweight-champions",
+              weightClass: { text: "Lightweight" },
+              ranks: [{ current: 1, athlete: { id: "3332412" } }],
+            },
+          ],
+        });
+      }
+      if (url.includes("/athletes/")) return jsonResponse({});
+      return jsonResponse(ufc330Fixture);
+    });
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => new Date("2026-07-28T00:00:00Z"),
+    });
+
+    const card = await source.getCard("600059185");
+    const makhachev = card?.sections[0]?.fights[0]?.red;
+    const garry = card?.sections[0]?.fights[0]?.blue;
+
+    expect(makhachev?.name).toBe("Islam Makhachev");
+    expect(makhachev?.ranking).toBe("Lightweight Champion");
+    // Unranked fighter: no ranking entry, not a fabricated placeholder.
+    expect(garry?.ranking).toBeUndefined();
+  });
+
+  it("keeps the card intact when the rankings fetch fails, without failing or blocking card loading", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/rankings")) return errorResponse(500);
+      if (url.includes("/athletes/")) return jsonResponse({});
+      return jsonResponse(ufc330Fixture);
+    });
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => new Date("2026-07-28T00:00:00Z"),
+    });
+
+    const card = await source.getCard("600059185");
+    const garry = card?.sections[0]?.fights[0]?.blue;
+
+    expect(garry?.name).toBe("Ian Machado Garry");
+    expect(garry?.ranking).toBeUndefined();
+  });
+
+  it("caches the rankings lookup across multiple getCard calls (single-entry, independent of the per-event card cache)", async () => {
+    let currentTime = new Date("2026-07-28T00:00:00Z");
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/rankings")) {
+        return jsonResponse({
+          rankings: [
+            {
+              type: "lightweight-champions",
+              weightClass: { text: "Lightweight" },
+              ranks: [{ current: 1, athlete: { id: "3332412" } }],
+            },
+          ],
+        });
+      }
+      if (url.includes("/athletes/")) return jsonResponse({});
+      const eventId = url.split("/").pop();
+      return jsonResponse(eventId === "600059185" ? ufc330Fixture : sparseFixture);
+    });
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => currentTime,
+      ttlMs: 60_000,
+    });
+
+    function rankingsFetchCount(): number {
+      return fetchImpl.mock.calls.filter(([url]) => String(url).includes("/rankings")).length;
+    }
+
+    await source.getCard("600059185");
+    expect(rankingsFetchCount()).toBe(1);
+
+    // A second event's card, well within the short card ttlMs, still reuses
+    // the single cached rankings lookup rather than re-fetching it.
+    await source.getCard("600060773");
+    expect(rankingsFetchCount()).toBe(1);
+
+    // Even once the (short) card cache has expired, the (much longer)
+    // rankings cache is still live.
+    currentTime = new Date(currentTime.getTime() + 61_000);
+    await source.getCard("600059185");
+    expect(rankingsFetchCount()).toBe(1);
   });
 
   it("keeps the rest of a fighter's data when their bio fetch fails, without failing the whole card", async () => {

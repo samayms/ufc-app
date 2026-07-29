@@ -95,6 +95,13 @@ export interface Fighter {
   country?: string;
   /** Most recent bouts, newest first. */
   recentBouts?: PastBout[];
+  /**
+   * Divisional UFC ranking at the time of fetch, e.g. "#3 Welterweight" or
+   * "Welterweight Champion" — short, display-ready, source-formatted.
+   * Currently only ever populated via the ESPN schedule source; absent
+   * means unranked or unavailable, never a fabricated "unranked" label.
+   */
+  ranking?: string;
   provenance: Provenance;
 }
 

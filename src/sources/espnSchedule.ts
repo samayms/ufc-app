@@ -40,6 +40,12 @@ export interface EspnScheduledFighter {
   stance?: string;
   /** From the per-athlete bio endpoint, newest first, capped at 5. */
   recentBouts?: PastBout[];
+  /**
+   * Divisional UFC ranking from the rankings endpoint, e.g. "#3
+   * Welterweight" or "Welterweight Champion" — absent when the fighter
+   * isn't ranked or the rankings fetch failed.
+   */
+  ranking?: string;
 }
 
 export interface EspnScheduledFight {
@@ -283,6 +289,36 @@ interface RawEspnAthleteBioResponse {
   eventsMap?: Record<string, RawEspnAthleteBioEvent>;
 }
 
+interface RawEspnRankingsAthlete {
+  id?: string;
+}
+
+interface RawEspnRankingsEntry {
+  current?: number;
+  athlete?: RawEspnRankingsAthlete;
+}
+
+interface RawEspnRankingsWeightClass {
+  text?: string;
+}
+
+interface RawEspnRankingsGroup {
+  /**
+   * e.g. "welterweight-champions" / "welterweight" / "pound-for-pound" —
+   * champion groups (single-entry) always end in "-champions"; numbered
+   * divisional groups share the same weightClass but no suffix. Verified
+   * live 2026-07-28.
+   */
+  type?: string;
+  /** Absent on the two pound-for-pound groups — that's how they're skipped. */
+  weightClass?: RawEspnRankingsWeightClass;
+  ranks?: RawEspnRankingsEntry[];
+}
+
+interface RawEspnRankingsResponse {
+  rankings?: RawEspnRankingsGroup[];
+}
+
 // ---------------------------------------------------------------------------
 // URL builders
 // ---------------------------------------------------------------------------
@@ -293,6 +329,13 @@ const ESPN_FIGHTCENTER_BASE_URL =
   "https://site.web.api.espn.com/apis/common/v3/sports/mma/ufc/fightcenter";
 const ESPN_ATHLETE_BIO_BASE_URL =
   "https://site.web.api.espn.com/apis/common/v3/sports/mma/ufc/athletes";
+/**
+ * Returns every division's rankings (plus both pound-for-pound lists) in a
+ * single response — no query params needed or honored (verified live
+ * 2026-07-28: `?rankingId=6` made no difference). CORS-open, unauthenticated
+ * "site API" surface, same class of endpoint as the rest of this file.
+ */
+const ESPN_RANKINGS_URL = "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/rankings";
 
 function formatUtcYyyyMmDd(date: Date): string {
   const year = date.getUTCFullYear();
@@ -801,6 +844,57 @@ export function parseEspnAthleteBio(
   };
 }
 
+const CHAMPION_TYPE_SUFFIX = "-champions";
+
+/**
+ * Parses ESPN's rankings payload into a lookup from athlete id to a short,
+ * display-ready divisional ranking string ("#3 Welterweight" / "Welterweight
+ * Champion"). Pound-for-pound groups are skipped entirely (they carry no
+ * `weightClass`) — divisional rank is what's meaningful for "ranking at the
+ * time of this fight". When an athlete id somehow appears in more than one
+ * group, the first one wins; ESPN's own payload always lists a division's
+ * champion group ahead of its numbered-contenders group, so this naturally
+ * prefers "Champion" over a numbered rank. Never throws on malformed input —
+ * an unrecognized shape just yields an empty map, matching this file's other
+ * parsers' "no data" convention.
+ */
+export function parseEspnRankings(payload: unknown): Map<string, string> {
+  const result = new Map<string, string>();
+  if (typeof payload !== "object" || payload === null) return result;
+
+  const raw = payload as RawEspnRankingsResponse;
+  if (!Array.isArray(raw.rankings)) return result;
+
+  for (const group of raw.rankings) {
+    if (typeof group !== "object" || group === null) continue;
+
+    const division = group.weightClass?.text;
+    if (typeof division !== "string" || division.length === 0) continue;
+
+    const isChampion = typeof group.type === "string" && group.type.endsWith(CHAMPION_TYPE_SUFFIX);
+    const ranks = Array.isArray(group.ranks) ? group.ranks : [];
+
+    for (const entry of ranks) {
+      if (typeof entry !== "object" || entry === null) continue;
+
+      const athleteId = entry.athlete?.id;
+      if (typeof athleteId !== "string" || athleteId.length === 0) continue;
+      if (result.has(athleteId)) continue;
+
+      if (isChampion) {
+        result.set(athleteId, `${division} Champion`);
+        continue;
+      }
+
+      const current = entry.current;
+      if (typeof current !== "number" || !Number.isFinite(current)) continue;
+      result.set(athleteId, `#${current} ${division}`);
+    }
+  }
+
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Fetch plumbing (copied from espn.ts — not exported there, kept local here)
 // ---------------------------------------------------------------------------
@@ -890,6 +984,14 @@ const FIGHTCENTER_REQUEST_TIMEOUT_MS = 8_000;
 const FIGHTCENTER_MAX_RESPONSE_BYTES = 4_000_000;
 const ATHLETE_BIO_REQUEST_TIMEOUT_MS = 8_000;
 const ATHLETE_BIO_MAX_RESPONSE_BYTES = 4_000_000;
+const RANKINGS_REQUEST_TIMEOUT_MS = 8_000;
+const RANKINGS_MAX_RESPONSE_BYTES = 4_000_000;
+/**
+ * Rankings move at most weekly, nothing like the minute-to-minute data the
+ * rest of this file caches — a noticeably longer TTL than `DEFAULT_TTL_MS`
+ * keeps this from being re-fetched on every card load.
+ */
+const RANKINGS_TTL_MS = 45 * 60_000;
 
 type AthleteBio = ReturnType<typeof parseEspnAthleteBio>;
 
@@ -938,6 +1040,14 @@ export function createEspnScheduleSource(options?: {
   // "failure is never cached — the next call retries" convention.
   const athleteBioCache = new Map<string, CacheEntry<AthleteBio>>();
   const athleteBioInFlight = new Map<string, Promise<AthleteBio>>();
+
+  // Single-entry cache for the rankings lookup (one GET returns every
+  // division), independent of the caches above and on its own longer TTL.
+  // A failed fetch is never cached, same "next call retries" convention as
+  // the rest of this file — enrichCardWithRankings is the one that swallows
+  // the failure so it never blocks or fails card loading.
+  let rankingsEntry: CacheEntry<Map<string, string>> | undefined;
+  let rankingsInFlight: Promise<Map<string, string>> | undefined;
 
   async function fetchEventList(): Promise<EspnScheduledEventSummary[]> {
     const start = now();
@@ -993,6 +1103,43 @@ export function createEspnScheduleSource(options?: {
     return promise;
   }
 
+  async function fetchRankings(): Promise<Map<string, string>> {
+    try {
+      const payload = await fetchJsonWithLimits(ESPN_RANKINGS_URL, {
+        timeoutMs: RANKINGS_REQUEST_TIMEOUT_MS,
+        maxBytes: RANKINGS_MAX_RESPONSE_BYTES,
+        fetchImpl,
+      });
+      return parseEspnRankings(payload);
+    } catch (error) {
+      throw new Error(
+        `Failed to load ESPN UFC rankings: ${messageOf(error)}`,
+        { cause: error },
+      );
+    }
+  }
+
+  function getRankingsMap(): Promise<Map<string, string>> {
+    const nowMs = now().getTime();
+    if (rankingsEntry !== undefined && rankingsEntry.expiresAt > nowMs) {
+      return Promise.resolve(rankingsEntry.value);
+    }
+    if (rankingsInFlight !== undefined) {
+      return rankingsInFlight;
+    }
+
+    const promise = fetchRankings()
+      .then((value) => {
+        rankingsEntry = { expiresAt: now().getTime() + RANKINGS_TTL_MS, value };
+        return value;
+      })
+      .finally(() => {
+        rankingsInFlight = undefined;
+      });
+    rankingsInFlight = promise;
+    return promise;
+  }
+
   /**
    * Merges each fighter's nickname/recent-fight-history bio onto an
    * already-built card. Every athlete's bio is fetched independently
@@ -1045,6 +1192,43 @@ export function createEspnScheduleSource(options?: {
     };
   }
 
+  /**
+   * Merges each fighter's divisional ranking onto an already-built card.
+   * The rankings fetch is a single shared lookup (not per-athlete), so a
+   * failure here means no ranking data for the whole card rather than a
+   * per-fighter gap — but exactly like the bio enrichment above, that
+   * failure is swallowed rather than propagated: a rankings outage must
+   * never fail or block card loading.
+   */
+  async function enrichCardWithRankings(
+    card: EspnScheduledCard,
+  ): Promise<EspnScheduledCard> {
+    let rankings: Map<string, string>;
+    try {
+      rankings = await getRankingsMap();
+    } catch {
+      return card;
+    }
+    if (rankings.size === 0) return card;
+
+    const enrichFighter = (fighter: EspnScheduledFighter): EspnScheduledFighter => {
+      const ranking = fighter.athleteId !== undefined ? rankings.get(fighter.athleteId) : undefined;
+      return ranking === undefined ? fighter : { ...fighter, ranking };
+    };
+
+    return {
+      ...card,
+      sections: card.sections.map((section) => ({
+        ...section,
+        fights: section.fights.map((fight) => ({
+          ...fight,
+          red: enrichFighter(fight.red),
+          blue: enrichFighter(fight.blue),
+        })),
+      })),
+    };
+  }
+
   async function fetchCard(eventId: string): Promise<EspnScheduledCard | null> {
     try {
       const payload = await fetchJsonWithLimits(
@@ -1056,7 +1240,9 @@ export function createEspnScheduleSource(options?: {
         },
       );
       const card = parseEspnFightcenterCard(payload, eventId);
-      return card === null ? null : await enrichCardWithAthleteBios(card);
+      if (card === null) return null;
+      const withBios = await enrichCardWithAthleteBios(card);
+      return await enrichCardWithRankings(withBios);
     } catch (error) {
       throw new Error(
         `Failed to load the ESPN fight card for event ${eventId}: ${messageOf(error)}`,
