@@ -1273,14 +1273,15 @@
 }
 
 /*
- * Bet365 ships as a 3840x2160 canvas with generous internal padding, so a
- * shared 16px box renders its glyph far smaller than the Kalshi and
- * Polymarket wordmarks beside it. Sizing it by the box would keep it
- * looking undersized; it gets its own height so the visible mark reads at
- * the same weight as its neighbours.
+ * Bet365 ships as a 3840x2160 canvas with generous internal padding. Crop
+ * that canvas into a compact box so the visible wordmark is larger without
+ * introducing transparent space above and below it.
  */
 .upcoming-odds-panel .market[data-market-accent="sportsbook"] .market-head h3 img {
-  height: 34px;
+  width: 76px;
+  height: 22px;
+  object-fit: cover;
+  object-position: center;
 }
 
 .upcoming-odds-panel .market[data-market-accent="kalshi"] .market-head h3 img {
@@ -1288,7 +1289,7 @@
 }
 
 .upcoming-odds-panel .market[data-market-accent="sportsbook"] .market-head {
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .upcoming-odds-panel > .market .market-bar {
