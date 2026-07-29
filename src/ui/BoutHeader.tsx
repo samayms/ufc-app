@@ -1,7 +1,18 @@
-import type { Bout, Corner, Fighter } from "../schema.ts";
-import { fmtMethod, fmtRecord, WEIGHT_LABEL } from "./format.ts";
+import { useState } from "react";
+import type { BoutResult, BoutStatus, Corner, Fighter } from "../schema.ts";
+import { fmtMethod, fmtRecord } from "./format.ts";
 
-function FighterBlock({ fighter, corner }: { fighter: Fighter; corner: Corner }) {
+function FighterBlock({
+  fighter,
+  corner,
+  photoUrl,
+}: {
+  fighter: Fighter;
+  corner: Corner;
+  photoUrl?: string;
+}) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const showImg = photoUrl !== undefined && !imgFailed;
   const initials = fighter.name
     .split(/\s+/)
     .map((part) => part[0])
@@ -11,8 +22,20 @@ function FighterBlock({ fighter, corner }: { fighter: Fighter; corner: Corner })
 
   return (
     <div className={`tot-fighter tot-${corner}`}>
-      <span className={`fighter-photo fighter-photo-${corner}`} aria-hidden="true">
-        {initials}
+      <span
+        className={`fighter-photo fighter-photo-${corner}`}
+        aria-hidden={showImg ? undefined : "true"}
+      >
+        {showImg ? (
+          <img
+            className="fighter-photo-img"
+            src={photoUrl}
+            alt={fighter.name}
+            onError={() => setImgFailed(true)}
+          />
+        ) : (
+          initials
+        )}
       </span>
       <span className={`tot-name corner-${corner}`} title={fighter.name}>
         {lastName}
@@ -22,22 +45,34 @@ function FighterBlock({ fighter, corner }: { fighter: Fighter; corner: Corner })
   );
 }
 
-function CenterStatus({ bout }: { bout: Bout }) {
-  if (bout.status === "canceled" || bout.status === "postponed") {
+function CenterStatus({
+  status,
+  currentRound,
+  scheduledRounds,
+  result,
+  fighters,
+}: {
+  status: BoutStatus;
+  currentRound?: number;
+  scheduledRounds: number;
+  result?: BoutResult;
+  fighters: Record<Corner, Fighter>;
+}) {
+  if (status === "canceled" || status === "postponed") {
     return (
       <>
-        <span className="tot-live-label tot-canceled">{bout.status}</span>
+        <span className="tot-live-label tot-canceled">{status}</span>
         <span className="tot-round-label">—</span>
         <span className="tot-substate">bout unavailable</span>
       </>
     );
   }
-  if (bout.status === "final" && bout.result) {
-    const { winner, method, round, time } = bout.result;
+  if (status === "final" && result) {
+    const { winner, method, round, time } = result;
     const name =
       winner === "draw" || winner === "nc"
         ? null
-        : bout.fighters[winner as Corner].name.split(" ").at(-1);
+        : fighters[winner as Corner].name.split(" ").at(-1);
     return (
       <>
         <span className="tot-live-label">Final</span>
@@ -52,44 +87,86 @@ function CenterStatus({ bout }: { bout: Bout }) {
       </>
     );
   }
-  if (bout.status === "between-rounds" || bout.status === "in-round") {
+  if (status === "between-rounds" || status === "in-round") {
     return (
       <>
         <span
-          className={`tot-live-label${bout.status === "between-rounds" ? " tot-between" : ""}`}
+          className={`tot-live-label${status === "between-rounds" ? " tot-between" : ""}`}
         >
           <span className="live-dot" aria-hidden="true" />
-          {bout.status === "in-round" ? "Live" : "Between rds"}
+          {status === "in-round" ? "Live" : "Between rds"}
         </span>
         <span className="tot-round-label num">
-          {bout.status === "in-round" ? `R${bout.currentRound}` : `End R${bout.currentRound}`}
+          {status === "in-round" ? `R${currentRound}` : `End R${currentRound}`}
         </span>
-        <span className="tot-substate">of {bout.scheduledRounds}</span>
+        <span className="tot-substate">of {scheduledRounds}</span>
       </>
     );
   }
   return (
     <>
       <span className="tot-live-label tot-upcoming">Upcoming</span>
-      <span className="tot-round-label num">{bout.scheduledRounds}×5</span>
+      <span className="tot-round-label num">{scheduledRounds}×5</span>
       <span className="tot-substate">rounds · not started</span>
     </>
   );
 }
 
-export function BoutHeader({ bout }: { bout: Bout }) {
+/**
+ * Tale-of-the-tape header: weight class, both corners, and a center status
+ * that reads the bout's live state. Deliberately takes plain fields rather
+ * than a full live `Bout` — a not-yet-started ESPN fight has no canonical
+ * `Bout` (no id, no event, no provenance), just the same handful of facts
+ * this header actually renders, so this is the one shared element for both
+ * the live Fight tab and the future-fight preview instead of two
+ * hand-maintained copies of the same markup.
+ */
+export function BoutHeader({
+  weightClassLabel,
+  titleFight,
+  scheduledRounds,
+  fighters,
+  status,
+  currentRound,
+  result,
+  photosByCorner,
+}: {
+  weightClassLabel: string;
+  titleFight: boolean;
+  scheduledRounds: number;
+  fighters: Record<Corner, Fighter>;
+  status: BoutStatus;
+  currentRound?: number;
+  result?: BoutResult;
+  /** Optional real photo per corner — falls back to initials when absent, same as CardRail's RailPhoto. */
+  photosByCorner?: Partial<Record<Corner, string>>;
+}) {
   return (
     <section className="tot" aria-label="Tale of the tape">
       <div className="tot-class">
-        {WEIGHT_LABEL[bout.weightClass]}
-        {bout.titleFight ? " · Title fight" : ""}
+        {weightClassLabel}
+        {titleFight ? " · Title fight" : ""}
       </div>
       <div className="tot-grid">
-        <FighterBlock fighter={bout.fighters.red} corner="red" />
+        <FighterBlock
+          fighter={fighters.red}
+          corner="red"
+          photoUrl={photosByCorner?.red}
+        />
         <div className="tot-center">
-          <CenterStatus bout={bout} />
+          <CenterStatus
+            status={status}
+            currentRound={currentRound}
+            scheduledRounds={scheduledRounds}
+            result={result}
+            fighters={fighters}
+          />
         </div>
-        <FighterBlock fighter={bout.fighters.blue} corner="blue" />
+        <FighterBlock
+          fighter={fighters.blue}
+          corner="blue"
+          photoUrl={photosByCorner?.blue}
+        />
       </div>
     </section>
   );

@@ -3,20 +3,13 @@ import { useState } from "react";
 import type { EspnScheduledFight, EspnScheduledFighter } from "../sources/espnSchedule.ts";
 import type { Corner, Fighter, FightRecord } from "../schema.ts";
 
+import { BoutHeader } from "./BoutHeader.tsx";
 import { FighterProfile } from "./FighterProfile.tsx";
 import { RecentForm } from "./RecentForm.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
 import "./newComponents.css";
 
 const PREVIEW_SECTIONS: FightSection[] = ["odds", "tale", "stats"];
-
-function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2);
-}
 
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -63,41 +56,6 @@ function toFighter(fighter: EspnScheduledFighter): Fighter {
     recentBouts: fighter.recentBouts,
     provenance: { source: "espn", fetchedAt: new Date().toISOString(), synthetic: false },
   };
-}
-
-function PreviewFighter({
-  fighter,
-  corner,
-}: {
-  fighter: EspnScheduledFighter;
-  corner: "red" | "blue";
-}) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const showImg = fighter.headshotUrl && !imgFailed;
-  const lastName = fighter.name.split(" ").at(-1) ?? fighter.name;
-  return (
-    <div className={`tot-fighter tot-${corner}`}>
-      <span
-        className={`fighter-photo fighter-photo-${corner}`}
-        aria-hidden={showImg ? undefined : "true"}
-      >
-        {showImg ? (
-          <img
-            className="fighter-photo-img"
-            src={fighter.headshotUrl}
-            alt={fighter.name}
-            onError={() => setImgFailed(true)}
-          />
-        ) : (
-          initialsOf(fighter.name)
-        )}
-      </span>
-      <span className={`tot-name corner-${corner}`} title={fighter.name}>
-        {lastName}
-      </span>
-      {fighter.record && <span className="tot-record num">{fighter.record}</span>}
-    </div>
-  );
 }
 
 function OddsSection() {
@@ -168,9 +126,11 @@ function StatsSection({ fight }: { fight: EspnScheduledFight }) {
 }
 
 /**
- * Fight-detail view for a future (not-yet-started) ESPN fight — a lighter
- * stand-in for the full live BoutHeader + SectionTabs experience, which
- * needs live round data that doesn't exist pre-fight.
+ * Fight-detail view for a future (not-yet-started) ESPN fight. Shares the
+ * live Fight tab's BoutHeader/FighterProfile/RecentForm elements outright
+ * (a fight's tale-of-the-tape identity doesn't change between "scheduled"
+ * and "in progress") and only swaps in a lighter tab set (no round data,
+ * no live odds) for what genuinely doesn't exist before the fight starts.
  */
 export function ScheduledFightPreview({
   fight,
@@ -187,21 +147,17 @@ export function ScheduledFightPreview({
 
   return (
     <div className="scheduled-preview">
-      <section className="tot" aria-label="Tale of the tape">
-        <div className="tot-class">
-          {fight.weightClassLabel ?? ""}
-          {fight.titleFight ? " · Title fight" : ""}
-        </div>
-        <div className="tot-grid">
-          <PreviewFighter fighter={fight.red} corner="red" />
-          <div className="tot-center">
-            <span className="tot-live-label tot-upcoming">Upcoming</span>
-            <span className="tot-round-label num">{scheduledRounds}×5</span>
-            <span className="tot-substate">rounds · not started</span>
-          </div>
-          <PreviewFighter fighter={fight.blue} corner="blue" />
-        </div>
-      </section>
+      <BoutHeader
+        weightClassLabel={fight.weightClassLabel ?? ""}
+        titleFight={fight.titleFight}
+        scheduledRounds={scheduledRounds}
+        fighters={{ red: toFighter(fight.red), blue: toFighter(fight.blue) }}
+        status="upcoming"
+        photosByCorner={{
+          red: fight.red.headshotUrl,
+          blue: fight.blue.headshotUrl,
+        }}
+      />
 
       <SectionTabs active={active} onChange={setActive} sections={PREVIEW_SECTIONS} />
 

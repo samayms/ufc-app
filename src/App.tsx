@@ -32,6 +32,7 @@ import {
 } from "./ui/SectionTabs.tsx";
 import { SourceStatus } from "./ui/SourceStatus.tsx";
 import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
+import { WEIGHT_LABEL } from "./ui/format.ts";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
 import {
   fighterEspnAthleteId,
@@ -315,7 +316,15 @@ export default function App() {
               <ScheduledFightPreview fight={selectedFutureFight} />
             ) : view ? (
               <div className="fight-screen">
-                <BoutHeader bout={view.bout} />
+                <BoutHeader
+                  weightClassLabel={WEIGHT_LABEL[view.bout.weightClass] ?? ""}
+                  titleFight={view.bout.titleFight}
+                  scheduledRounds={view.bout.scheduledRounds}
+                  fighters={view.bout.fighters}
+                  status={view.bout.status}
+                  currentRound={view.bout.currentRound}
+                  result={view.bout.result}
+                />
                 {lifecycleDelivery && (
                   <div className="delivery-notice" role="status">
                     <DeliveryFreshness delivery={lifecycleDelivery} />
