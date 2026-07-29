@@ -447,7 +447,17 @@ export function createEspnSource(
   config: SourceConfig,
 ): FightDataSource & FighterRecordSource {
   if (config.mode === "live") {
-    throw new Error("espn live mode not available yet");
+    return {
+      async getEvent() {
+        return null;
+      },
+      async getRoundUpdates() {
+        return [];
+      },
+      async getFighter() {
+        return null;
+      },
+    };
   }
 
   return {

@@ -109,10 +109,16 @@ describe("createCitoSource", () => {
     ).toEqual([]);
   });
 
-  it("rejects live mode at the factory boundary", () => {
-    expect(() => createCitoSource({ mode: "live" })).toThrow(
-      "cito live mode not available yet",
-    );
+  it("constructs fail-closed in live mode", async () => {
+    const live = createCitoSource({ mode: "live" });
+
+    await expect(
+      live.getEvent({ source: "cito", id: "event" }),
+    ).resolves.toBeNull();
+    await expect(live.getRoundUpdates({} as never)).resolves.toEqual([]);
+    await expect(
+      live.getFighter({ source: "cito", id: "fighter" }),
+    ).resolves.toBeNull();
   });
 
   it("provides exact fixture-backed round fetches for the collector pipeline", async () => {

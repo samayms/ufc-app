@@ -261,7 +261,11 @@ export function createSherdogSource(
   config: SourceConfig,
 ): RoundCommentarySource {
   if (config.mode === "live") {
-    throw new Error("sherdog live mode not available yet");
+    return {
+      async getRoundUpdates() {
+        return [];
+      },
+    };
   }
 
   return {

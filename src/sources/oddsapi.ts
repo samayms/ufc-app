@@ -158,7 +158,20 @@ function parseSnapshot(bout: Bout): OddsSnapshot | null {
 
 export function createOddsApiSource(config: SourceConfig): TheOddsApiSource {
   if (config.mode === "live") {
-    throw new Error("odds-api live mode not available yet");
+    const failClosed = (): never => {
+      throw new Error("The Odds API live source is not installed");
+    };
+    return {
+      async getH2hSnapshot() {
+        return failClosed();
+      },
+      async getOddsSnapshot() {
+        return failClosed();
+      },
+      async getTickHistory() {
+        return failClosed();
+      },
+    };
   }
 
   const getH2hSnapshot = async (

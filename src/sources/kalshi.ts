@@ -128,7 +128,14 @@ const ticks = ticksFixture.ticks as MarketTick[];
 
 export function createKalshiSource(config: SourceConfig): OddsSourceWithHistory {
   if (config.mode === "live") {
-    throw new Error("kalshi live mode not available yet");
+    return {
+      async getOddsSnapshot() {
+        return null;
+      },
+      async getTickHistory() {
+        return [];
+      },
+    };
   }
 
   const markets = new Map<string, KalshiMarket>(

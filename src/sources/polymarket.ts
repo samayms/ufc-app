@@ -112,7 +112,14 @@ export function createPolymarketSource(
   config: SourceConfig,
 ): OddsSourceWithHistory {
   if (config.mode === "live") {
-    throw new Error("polymarket live mode not available yet");
+    return {
+      async getOddsSnapshot() {
+        return null;
+      },
+      async getTickHistory() {
+        return [];
+      },
+    };
   }
 
   return {
