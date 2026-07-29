@@ -1,5 +1,5 @@
 import type { Corner, Fighter, PastBout } from "../schema.ts";
-import { fmtMethod, fmtTime } from "./format.ts";
+import { fmtMethod } from "./format.ts";
 
 const RESULT_LETTER: Record<PastBout["result"], string> = {
   win: "W",
@@ -14,7 +14,7 @@ function FormColumn({ fighter, corner }: { fighter: Fighter; corner: Corner }) {
     <div className={`form-col form-${corner}`}>
       <h3 className={`corner-${corner}`}>{fighter.name.split(" ").at(-1)}</h3>
       {bouts.length === 0 ? (
-        <p className="empty">No cached history for this fighter.</p>
+        <p className="empty">No fight history for this fighter.</p>
       ) : (
         <ul className="form-list">
           {bouts.map((pb, i) => (
@@ -35,7 +35,7 @@ function FormColumn({ fighter, corner }: { fighter: Fighter; corner: Corner }) {
   );
 }
 
-/** Cached recent history for both corners — fetch-once data, no polling. */
+/** Recent fight history for both corners. */
 export function RecentForm({ fighters }: { fighters: Record<Corner, Fighter> }) {
   const hasAny =
     (fighters.red.recentBouts?.length ?? 0) > 0 ||
@@ -43,13 +43,6 @@ export function RecentForm({ fighters }: { fighters: Record<Corner, Fighter> }) 
   if (!hasAny) return null;
   return (
     <section className="panel" aria-label="Recent form">
-      <div className="panel-head">
-        <h2>Recent form</h2>
-        <span className="freshness">
-          cached fighter history · fetched{" "}
-          <span className="num">{fmtTime(fighters.red.provenance.fetchedAt)}</span>
-        </span>
-      </div>
       <div className="form-grid">
         <FormColumn fighter={fighters.red} corner="red" />
         <FormColumn fighter={fighters.blue} corner="blue" />
