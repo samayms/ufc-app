@@ -35,13 +35,70 @@ import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
 import { WEIGHT_LABEL } from "./ui/format.ts";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
 import { useUpcomingOdds } from "./store/useUpcomingOdds.ts";
+import { findUpcomingBout } from "./lib/upcomingOdds.ts";
 import {
   fighterEspnAthleteId,
   useCurrentEventAthletePhotos,
   useUpcomingEventPhotos,
 } from "./store/useEventPhotos.ts";
+import type { BoutView, OddsSnapshot } from "./schema.ts";
+import { UpcomingOddsPanel } from "./ui/UpcomingOddsPanel.tsx";
 import type { EspnScheduledFight } from "./sources/espnSchedule.ts";
 import "./ui/dashboard.css";
+
+const NON_UPCOMING_BOUT_STATUSES = new Set([
+  "in-round",
+  "between-rounds",
+  "final",
+  "canceled",
+  "postponed",
+]);
+
+export function LiveOddsSection({
+  view,
+  upcomingOdds,
+  deliveries,
+}: {
+  view: BoutView;
+  upcomingOdds: ReturnType<typeof useUpcomingOdds>;
+  deliveries?: Partial<Record<OddsSnapshot["market"], CollectorValueDelivery>>;
+}) {
+  const redName = view.bout.fighters.red.name.split(" ").at(-1) ?? view.bout.fighters.red.name;
+  const blueName = view.bout.fighters.blue.name.split(" ").at(-1) ?? view.bout.fighters.blue.name;
+  const upcomingBout = findUpcomingBout(upcomingOdds.document, view.bout.id);
+  const hasLiveMarketData = Object.keys(view.latestOdds).length > 0;
+  const shouldUseUpcomingOdds =
+    !NON_UPCOMING_BOUT_STATUSES.has(view.bout.status) &&
+    !hasLiveMarketData &&
+    upcomingBout !== undefined;
+
+  if (shouldUseUpcomingOdds) {
+    return (
+      <UpcomingOddsPanel
+        bout={upcomingBout}
+        redName={redName}
+        blueName={blueName}
+      />
+    );
+  }
+
+  return (
+    <OddsPanel
+      redName={redName}
+      blueName={blueName}
+      latestOdds={view.latestOdds}
+      preFightOdds={view.preFightOdds}
+      emptyText={
+        view.bout.status === "final"
+          ? "Bout is final."
+          : view.bout.status === "canceled" || view.bout.status === "postponed"
+            ? `Bout ${view.bout.status}.`
+            : undefined
+      }
+      deliveries={deliveries}
+    />
+  );
+}
 
 export default function App() {
   const dashboard = useDashboard();
@@ -387,18 +444,9 @@ export default function App() {
                   </>
                 )}
                 {section === "odds" && (
-                  <OddsPanel
-                    redName={view.bout.fighters.red.name.split(" ").at(-1) ?? view.bout.fighters.red.name}
-                    blueName={view.bout.fighters.blue.name.split(" ").at(-1) ?? view.bout.fighters.blue.name}
-                    latestOdds={view.latestOdds}
-                    preFightOdds={view.preFightOdds}
-                    emptyText={
-                      view.bout.status === "final"
-                        ? "Bout is final."
-                        : view.bout.status === "canceled" || view.bout.status === "postponed"
-                          ? `Bout ${view.bout.status}.`
-                          : undefined
-                    }
+                  <LiveOddsSection
+                    view={view}
+                    upcomingOdds={upcomingOdds}
                     deliveries={marketDeliveries}
                   />
                 )}
