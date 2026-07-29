@@ -63,7 +63,8 @@ function oddsApiIoProvider(): UpcomingOddsProvider {
       return events.flatMap((event): UpcomingProviderMarket[] => {
         const raw = oddsById[event.eventId];
         if (raw === undefined) return [];
-        const { quotes, marketUpdatedAt } = parseOddsApiIoUpcomingOdds(raw);
+        const { quotes, marketUpdatedAt, metadata, decision } =
+          parseOddsApiIoUpcomingOdds(raw);
         return [
           {
             externalId: event.eventId,
@@ -79,6 +80,8 @@ function oddsApiIoProvider(): UpcomingOddsProvider {
               ? {}
               : { eventName: event.leagueName }),
             ...(marketUpdatedAt === undefined ? {} : { marketUpdatedAt }),
+            ...(metadata === undefined ? {} : { metadata }),
+            ...(decision === undefined ? {} : { decision }),
             quotes,
           },
         ];

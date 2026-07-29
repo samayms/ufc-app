@@ -4,10 +4,12 @@ import fixture from "../../fixtures/upcomingProvidersLive.json" with {
   type: "json",
 };
 import {
+  parseKalshiDistanceMarkets,
   kalshiMarketTickers,
   parseKalshiUpcomingMarkets,
 } from "./kalshiUpcoming.ts";
 import {
+  parsePolymarketDistanceMarket,
   parsePolymarketUpcomingMarkets,
   polymarketOutcomeTokens,
   polymarketTitleWeightClass,
@@ -69,6 +71,71 @@ describe("kalshi upcoming discovery", () => {
 
   it("returns no markets rather than throwing on an empty envelope", () => {
     expect(parseKalshiUpcomingMarkets({})).toEqual([]);
+  });
+
+  it("treats an absent distance series as a normal empty result", () => {
+    expect(parseKalshiDistanceMarkets({ markets: [] })).toEqual(new Map());
+  });
+
+  it("joins a listed distance market by the verified fight ticker key", () => {
+    const distance = parseKalshiDistanceMarkets({
+      markets: [
+        {
+          ticker: "KXUFCDISTANCE-26JUL25GIBHUS-DIST",
+          last_price_dollars: "0.62",
+        },
+      ],
+    });
+    const markets = parseKalshiUpcomingMarkets(
+      {
+        events: [
+          {
+            event_ticker: "KXUFCFIGHT-26JUL25GIBHUS",
+            markets: [
+              {
+                ticker: "KXUFCFIGHT-26JUL25GIBHUS-GIB",
+                yes_sub_title: "First Fighter",
+                yes_bid_dollars: "0.5",
+              },
+              {
+                ticker: "KXUFCFIGHT-26JUL25GIBHUS-HUS",
+                yes_sub_title: "Second Fighter",
+                yes_bid_dollars: "0.5",
+              },
+            ],
+          },
+        ],
+      },
+      distance,
+    );
+    expect(markets[0]?.decision?.decisionProbability).toBeCloseTo(0.62);
+  });
+
+  it("captures Kalshi win-market volume and open interest", () => {
+    const [market] = parseKalshiUpcomingMarkets({
+      events: [
+        {
+          event_ticker: "KXUFCFIGHT-META",
+          markets: [
+            {
+              ticker: "KXUFCFIGHT-META-A",
+              yes_sub_title: "A",
+              yes_bid_dollars: "0.5",
+              volume_fp: "12.5",
+              open_interest_fp: "4",
+            },
+            {
+              ticker: "KXUFCFIGHT-META-B",
+              yes_sub_title: "B",
+              yes_bid_dollars: "0.5",
+              volume_fp: "7.5",
+              open_interest_fp: "6",
+            },
+          ],
+        },
+      ],
+    });
+    expect(market?.metadata).toEqual({ volume: 20, openInterest: 10 });
   });
 });
 
@@ -138,6 +205,55 @@ describe("polymarket upcoming discovery", () => {
     expect(markets).toHaveLength(1);
     expect(markets[0]?.quotes).toEqual([]);
   });
+
+  it("accepts a liquid, tight distance market", () => {
+    const decision = parsePolymarketDistanceMarket({
+      conditionId: "0xdistance",
+      outcomes: '["Yes", "No"]',
+      outcomePrices: '["0.475", "0.525"]',
+      bestBid: 0.43,
+      bestAsk: 0.51,
+      liquidity: "1000",
+    });
+    expect(decision?.decisionProbability).toBeCloseTo(0.47);
+    expect(decision?.finishProbability).toBeCloseTo(0.53);
+  });
+
+  it("rejects an untraded distance market even when outcome prices exist", () => {
+    expect(
+      parsePolymarketDistanceMarket({
+        conditionId: "0xuntraded",
+        outcomes: '["Yes", "No"]',
+        outcomePrices: '["0.475", "0.525"]',
+        bestBid: 0.04,
+        bestAsk: 0.91,
+        liquidity: "116.3016",
+      }),
+    ).toBeUndefined();
+  });
+
+  it("captures Polymarket win-market volume, 24-hour volume, and liquidity", () => {
+    const [market] = parsePolymarketUpcomingMarkets([
+      {
+        title: "UFC: A vs. B",
+        markets: [
+          {
+            conditionId: "0xwinner",
+            outcomes: '["A", "B"]',
+            outcomePrices: '["0.4", "0.6"]',
+            volume: "1234.5",
+            volume24hr: "67.8",
+            liquidity: "910.11",
+          },
+        ],
+      },
+    ]);
+    expect(market?.metadata).toEqual({
+      volume: 1234.5,
+      volume24hr: 67.8,
+      liquidity: 910.11,
+    });
+  });
 });
 
 describe("odds-api.io upcoming discovery", () => {
@@ -166,6 +282,35 @@ describe("odds-api.io upcoming discovery", () => {
       expect(quote.impliedProbability).toBeGreaterThan(0);
       expect(quote.impliedProbability).toBeLessThan(1);
     }
+    expect(parseOddsApiIoUpcomingOdds(fixture.oddsApiIoEventOdds).metadata).toEqual({
+      bookmakerCount: 1,
+    });
+  });
+
+  it("parses distance prices by label and de-vigs complementary outcomes", () => {
+    const { decision } = parseOddsApiIoUpcomingOdds({
+      bookmakers: {
+        Bet365: [
+          {
+            name: "ML",
+            odds: [{ home: "3.3", away: "1.35" }],
+          },
+          {
+            name: "Fight to Go the Distance",
+            odds: [
+              { label: "No", under: "1.09" },
+              { label: "Yes", under: "7.25" },
+            ],
+          },
+        ],
+      },
+    });
+    expect(decision?.decisionProbability).toBeCloseTo(
+      (1 / 7.25) / (1 / 7.25 + 1 / 1.09),
+    );
+    expect(
+      (decision?.decisionProbability ?? 0) + (decision?.finishProbability ?? 0),
+    ).toBeCloseTo(1);
   });
 
   it("caps priced events and prefers the nearest card", () => {
@@ -212,6 +357,7 @@ describe("the odds api upcoming discovery", () => {
     expect(new Set(priced?.quotes.map((quote) => quote.side))).toEqual(
       new Set(["first", "second"]),
     );
+    expect(priced?.metadata).toEqual({ bookmakerCount: 1 });
   });
 
   it("drops an outcome that names neither fighter", () => {
@@ -255,6 +401,22 @@ describe("the odds api upcoming discovery", () => {
       expect(String(error)).not.toContain("super-secret-key");
     });
     expect(provider.lastQuota()).toEqual({ remaining: 0, used: 500 });
+  });
+
+  it("never requests a distance market from The Odds API", async () => {
+    const urls: string[] = [];
+    const provider = createTheOddsApiUpcomingProvider({
+      apiKey: "not-used",
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        urls.push(String(input));
+        return new Response("[]", { status: 200 });
+      }) as typeof fetch,
+    });
+
+    await provider.listMarkets();
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain("markets=h2h");
+    expect(urls[0]).not.toMatch(/distance|fight_result|method_of_victory/i);
   });
 });
 

@@ -20,6 +20,8 @@
 
 import {
   fetchProviderJson,
+  type UpcomingDecisionMarket,
+  type UpcomingMarketMetadata,
   type UpcomingFetchOptions,
   type UpcomingOddsProvider,
   type UpcomingProviderMarket,
@@ -28,6 +30,9 @@ import {
 
 const POLYMARKET_GAMMA_EVENTS_URL =
   "https://gamma-api.polymarket.com/events";
+
+export const POLYMARKET_DISTANCE_MIN_LIQUIDITY = 1_000;
+export const POLYMARKET_DISTANCE_MAX_SPREAD = 0.15;
 
 export function buildPolymarketUpcomingUrl(limit = 200): string {
   const url = new URL(POLYMARKET_GAMMA_EVENTS_URL);
@@ -125,6 +130,62 @@ function isFightWinnerMarket(outcomes: string[]): boolean {
   );
 }
 
+function isYesNoMarket(outcomes: string[]): boolean {
+  if (outcomes.length !== 2) return false;
+  const [first, second] = outcomes;
+  if (first === undefined || second === undefined) return false;
+  return (
+    first.toLocaleLowerCase("en-US") === "yes" &&
+    second.toLocaleLowerCase("en-US") === "no"
+  );
+}
+
+/**
+ * Applies the liquidity/spread gate before trusting a distance price. The
+ * listed outcome prices are not meaningful for the wide, nearly untraded
+ * books this gate is intended to reject.
+ */
+export function parsePolymarketDistanceMarket(
+  raw: unknown,
+): UpcomingDecisionMarket | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const market = raw as Record<string, unknown>;
+  const outcomes = readStringArray(market.outcomes);
+  if (!isYesNoMarket(outcomes)) return undefined;
+
+  const liquidity = readNumber(market.liquidity) ?? 0;
+  const bid = readNumber(market.bestBid);
+  const ask = readNumber(market.bestAsk);
+  if (
+    liquidity < POLYMARKET_DISTANCE_MIN_LIQUIDITY ||
+    bid === undefined ||
+    ask === undefined ||
+    ask < bid ||
+    ask - bid > POLYMARKET_DISTANCE_MAX_SPREAD
+  ) {
+    return undefined;
+  }
+
+  const externalId = readString(market.conditionId);
+  const decisionProbability = priceFor(
+    market,
+    0,
+    readStringArray(market.outcomePrices),
+  );
+  if (externalId === undefined || decisionProbability === undefined) {
+    return undefined;
+  }
+
+  return {
+    externalId,
+    decisionProbability,
+    finishProbability: 1 - decisionProbability,
+    ...(readString(market.updatedAt) === undefined
+      ? {}
+      : { marketUpdatedAt: readString(market.updatedAt) as string }),
+  };
+}
+
 /** Normalizes a Gamma `/events` array into one fight-winner market per fight. */
 export function parsePolymarketUpcomingMarkets(
   payload: unknown,
@@ -141,64 +202,86 @@ export function parsePolymarketUpcomingMarkets(
     const title = readString(event.title);
     const markets = Array.isArray(event.markets) ? event.markets : [];
 
+    let winnerMarket: Record<string, unknown> | undefined;
+    let distance: UpcomingDecisionMarket | undefined;
     for (const rawMarket of markets) {
       if (typeof rawMarket !== "object" || rawMarket === null) continue;
       const market = rawMarket as Record<string, unknown>;
       if (market.closed === true) continue;
 
       const outcomes = readStringArray(market.outcomes);
-      if (!isFightWinnerMarket(outcomes)) continue;
-
-      const conditionId = readString(market.conditionId);
-      if (conditionId === undefined) continue;
-
-      const [first, second] = outcomes as [string, string];
-      const outcomePrices = readStringArray(market.outcomePrices);
-      const quotes: UpcomingQuote[] = [];
-      for (const [side, index] of [
-        ["first", 0],
-        ["second", 1],
-      ] as const) {
-        const price = priceFor(market, index, outcomePrices);
-        if (price === undefined) continue;
-        quotes.push({
-          side,
-          native: { kind: "polymarket-price", price },
-          impliedProbability: price,
-        });
+      if (isYesNoMarket(outcomes)) {
+        const question = readString(market.question);
+        if (question?.toLocaleLowerCase("en-US").includes("fight to go the distance")) {
+          distance = parsePolymarketDistanceMarket(market);
+        }
+        continue;
       }
-
-      const weightClass =
-        title === undefined ? undefined : polymarketTitleWeightClass(title);
-      // Gamma's `startDate` is when the *market* was listed, not when the
-      // fight happens — observed live at 13 days before the bout, which is far
-      // outside the matcher's event-date window and rejected every Polymarket
-      // market outright. `endDate` is the resolution deadline, which sits a
-      // few hours after the fight and is the only date in the payload that
-      // tracks it.
-      const startsAt =
-        readString(market.endDateIso) ??
-        readString(market.endDate) ??
-        readString(event.endDate);
-
-      return [
-        {
-          externalId: conditionId,
-          firstFighter: first,
-          secondFighter: second,
-          ...(startsAt === undefined ? {} : { startsAt }),
-          ...(weightClass === undefined ? {} : { weightClass }),
-          promotion: "ufc",
-          ...(title === undefined ? {} : { eventName: title }),
-          ...(readString(market.updatedAt) === undefined
-            ? {}
-            : { marketUpdatedAt: readString(market.updatedAt) as string }),
-          quotes,
-        },
-      ];
+      if (!isFightWinnerMarket(outcomes) || winnerMarket !== undefined) continue;
+      winnerMarket = market;
     }
 
-    return [];
+    if (winnerMarket === undefined) return [];
+    const market = winnerMarket;
+
+    const conditionId = readString(market.conditionId);
+    if (conditionId === undefined) return [];
+
+    const outcomes = readStringArray(market.outcomes);
+    const [first, second] = outcomes as [string, string];
+    const outcomePrices = readStringArray(market.outcomePrices);
+    const quotes: UpcomingQuote[] = [];
+    for (const [side, index] of [
+      ["first", 0],
+      ["second", 1],
+    ] as const) {
+      const price = priceFor(market, index, outcomePrices);
+      if (price === undefined) continue;
+      quotes.push({
+        side,
+        native: { kind: "polymarket-price", price },
+        impliedProbability: price,
+      });
+    }
+
+    const weightClass =
+      title === undefined ? undefined : polymarketTitleWeightClass(title);
+    // Gamma's `startDate` is when the *market* was listed, not when the
+    // fight happens — observed live at 13 days before the bout, which is far
+    // outside the matcher's event-date window and rejected every Polymarket
+    // market outright. `endDate` is the resolution deadline, which sits a
+    // few hours after the fight and is the only date in the payload that
+    // tracks it.
+    const startsAt =
+      readString(market.endDateIso) ??
+      readString(market.endDate) ??
+      readString(event.endDate);
+
+    const metadata: UpcomingMarketMetadata = {};
+    const volume = readNumber(market.volume);
+    const volume24hr = readNumber(market.volume24hr);
+    const liquidity = readNumber(market.liquidity);
+    if (volume !== undefined) metadata.volume = volume;
+    if (volume24hr !== undefined) metadata.volume24hr = volume24hr;
+    if (liquidity !== undefined) metadata.liquidity = liquidity;
+
+    return [
+      {
+        externalId: conditionId,
+        firstFighter: first,
+        secondFighter: second,
+        ...(startsAt === undefined ? {} : { startsAt }),
+        ...(weightClass === undefined ? {} : { weightClass }),
+        promotion: "ufc",
+        ...(title === undefined ? {} : { eventName: title }),
+        ...(readString(market.updatedAt) === undefined
+          ? {}
+          : { marketUpdatedAt: readString(market.updatedAt) as string }),
+        ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
+        ...(distance === undefined ? {} : { decision: distance }),
+        quotes,
+      },
+    ];
   });
 }
 

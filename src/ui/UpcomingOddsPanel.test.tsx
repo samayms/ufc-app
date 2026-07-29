@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   UpcomingBoutOdds,
+  UpcomingDecisionOdds,
   UpcomingProviderEntry,
 } from "../lib/upcomingOdds.ts";
 import { UpcomingOddsPanel } from "./UpcomingOddsPanel.tsx";
@@ -91,6 +92,11 @@ function sportsbookEntry(
 
 function bout(
   providers: UpcomingBoutOdds["providers"],
+  decision: UpcomingDecisionOdds = {
+    state: "not_listed",
+    fetchedAt: "2026-08-14T11:00:00.000Z",
+    synthetic: false,
+  },
 ): UpcomingBoutOdds {
   return {
     boutId: "401869336",
@@ -98,6 +104,22 @@ function bout(
     redFighter: "Islam Makhachev",
     blueFighter: "Ian Machado Garry",
     providers,
+    decision,
+  };
+}
+
+function loadedDecision(
+  source: "kalshi" | "polymarket" | "odds-api-io",
+  decisionProbability: number,
+  synthetic = false,
+): UpcomingDecisionOdds {
+  return {
+    state: "loaded",
+    decisionProbability,
+    finishProbability: 1 - decisionProbability,
+    source,
+    fetchedAt: "2026-08-14T11:00:00.000Z",
+    synthetic,
   };
 }
 
@@ -216,7 +238,10 @@ describe("UpcomingOddsPanel", () => {
   it("uses Kalshi first for the Decision block", () => {
     const html = render(
       <UpcomingOddsPanel
-        bout={bout({ kalshi: loadedKalshi(), polymarket: loadedPolymarket() })}
+        bout={bout(
+          { kalshi: loadedKalshi(), polymarket: loadedPolymarket() },
+          loadedDecision("kalshi", 0.69),
+        )}
         redName="Makhachev"
         blueName="Garry"
         nowMs={NOW_MS}
@@ -224,14 +249,18 @@ describe("UpcomingOddsPanel", () => {
     );
     const decision = html.slice(html.lastIndexOf('<section class="market"'));
     expect(decision).toContain('data-market-accent="kalshi"');
+    expect(decision).toContain('class="decision-label">DECISION</span>');
+    expect(decision).toContain('class="decision-label">FINISH</span>');
     expect(decision).toContain('class="market-pct num">69%</span>');
     expect(decision).toContain('class="market-pct num">31%</span>');
+    expect(decision).toContain('class="split-decision"');
+    expect(decision).toContain('class="split-finish"');
   });
 
   it("falls through to Polymarket when Kalshi is absent", () => {
     const html = render(
       <UpcomingOddsPanel
-        bout={bout({ polymarket: loadedPolymarket() })}
+        bout={bout({}, loadedDecision("polymarket", 0.42))}
         redName="Makhachev"
         blueName="Garry"
         nowMs={NOW_MS}
@@ -246,17 +275,20 @@ describe("UpcomingOddsPanel", () => {
   it("falls through to de-vigged combined sportsbooks", () => {
     const html = render(
       <UpcomingOddsPanel
-        bout={bout({
-          "odds-api-io": sportsbookEntry(-110, 100 / 210, -110, 100 / 210),
-          "odds-api": sportsbookEntry(-110, 100 / 210, -110, 100 / 210),
-        })}
+        bout={bout(
+          {
+            "odds-api-io": sportsbookEntry(-110, 100 / 210, -110, 100 / 210),
+            "odds-api": sportsbookEntry(-110, 100 / 210, -110, 100 / 210),
+          },
+          loadedDecision("odds-api-io", 0.5),
+        )}
         redName="Makhachev"
         blueName="Garry"
         nowMs={NOW_MS}
       />,
     );
     const decision = html.slice(html.lastIndexOf('<section class="market"'));
-    expect(decision).toContain('data-market-accent="sportsbook"');
+    expect(decision).toContain('data-market-accent="odds-api-io"');
     expect(decision).toContain('class="market-pct num">50%</span>');
     expect(decision.match(/class="market-pct num">50%<\/span>/g)).toHaveLength(2);
   });
@@ -270,15 +302,18 @@ describe("UpcomingOddsPanel", () => {
     });
     const html = render(
       <UpcomingOddsPanel
-        bout={bout({ kalshi: synthetic, polymarket: loadedPolymarket() })}
+        bout={bout(
+          { kalshi: synthetic, polymarket: loadedPolymarket() },
+          loadedDecision("kalshi", 0.69, true),
+        )}
         redName="Makhachev"
         blueName="Garry"
         nowMs={NOW_MS}
       />,
     );
     const decision = html.slice(html.lastIndexOf('<section class="market"'));
-    expect(decision).toContain('data-market-accent="polymarket"');
+    expect(decision).toContain('data-market-accent="kalshi"');
     expect(decision).not.toContain('class="market-pct num">69%</span>');
-    expect(decision).toContain('class="market-pct num">42%</span>');
+    expect(decision).toContain('class="market-pct num">—</span>');
   });
 });

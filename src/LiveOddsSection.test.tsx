@@ -21,6 +21,11 @@ const document: UpcomingOddsDocument = {
           redFighter: "Red Fighter",
           blueFighter: "Blue Fighter",
           providers: {},
+          decision: {
+            state: "not_listed",
+            fetchedAt: "2026-08-14T12:00:00.000Z",
+            synthetic: false,
+          },
         },
       ],
     },

@@ -24,12 +24,15 @@
 
 import {
   fetchProviderJson,
+  type UpcomingDecisionMarket,
   type UpcomingFetchOptions,
+  type UpcomingMarketMetadata,
   type UpcomingOddsProvider,
   type UpcomingProviderMarket,
   type UpcomingQuote,
 } from "./types.ts";
 import { decimalToAmerican } from "../oddsApiIo.ts";
+import { devigPair } from "../../lib/oddsMath.ts";
 
 const ODDS_API_IO_BASE = "https://api.odds-api.io/v3";
 
@@ -142,6 +145,8 @@ export function parseOddsApiIoUpcomingEvents(
 export function parseOddsApiIoUpcomingOdds(payload: unknown): {
   quotes: UpcomingQuote[];
   marketUpdatedAt?: string;
+  metadata?: UpcomingMarketMetadata;
+  decision?: UpcomingDecisionMarket;
 } {
   if (typeof payload !== "object" || payload === null) {
     throw new TypeError("Odds-API.io /odds response was not a JSON object");
@@ -151,6 +156,10 @@ export function parseOddsApiIoUpcomingOdds(payload: unknown): {
 
   const quotes: UpcomingQuote[] = [];
   let marketUpdatedAt: string | undefined;
+  const distanceProbabilities: Array<{ yes: number; no: number }> = [];
+  let distanceExternalId: string | undefined;
+  let distanceUpdatedAt: string | undefined;
+  let bookmakerCount = 0;
 
   for (const [bookName, markets] of Object.entries(
     books as Record<string, unknown>,
@@ -164,42 +173,115 @@ export function parseOddsApiIoUpcomingOdds(payload: unknown): {
           (market as Record<string, unknown>).name,
         )?.toUpperCase() === "ML",
     ) as Record<string, unknown> | undefined;
-    if (moneyline === undefined) continue;
+    if (moneyline !== undefined) {
+      const entries = moneyline.odds;
+      if (Array.isArray(entries) && entries.length > 0) {
+        bookmakerCount += 1;
+        const entry = entries[0] as { home?: unknown; away?: unknown };
 
-    const entries = moneyline.odds;
-    if (!Array.isArray(entries) || entries.length === 0) continue;
-    const entry = entries[0] as { home?: unknown; away?: unknown };
+        const updatedAt = readString(moneyline.updatedAt);
+        if (
+          updatedAt !== undefined &&
+          (marketUpdatedAt === undefined || updatedAt > marketUpdatedAt)
+        ) {
+          marketUpdatedAt = updatedAt;
+        }
 
-    const updatedAt = readString(moneyline.updatedAt);
-    if (
-      updatedAt !== undefined &&
-      (marketUpdatedAt === undefined || updatedAt > marketUpdatedAt)
-    ) {
-      marketUpdatedAt = updatedAt;
+        for (const [side, key] of [
+          ["first", "home"],
+          ["second", "away"],
+        ] as const) {
+          const decimal = Number(entry[key]);
+          const american = decimalToAmerican(decimal);
+          if (american === null) continue;
+          quotes.push({
+            side,
+            native: {
+              kind: "american-moneyline",
+              moneyline: american,
+              book: bookName.toLocaleLowerCase("en-US"),
+            },
+            impliedProbability: 1 / decimal,
+          });
+        }
+      }
     }
 
-    for (const [side, key] of [
-      ["first", "home"],
-      ["second", "away"],
-    ] as const) {
-      const decimal = Number(entry[key]);
-      const american = decimalToAmerican(decimal);
-      if (american === null) continue;
-      quotes.push({
-        side,
-        native: {
-          kind: "american-moneyline",
-          moneyline: american,
-          book: bookName.toLocaleLowerCase("en-US"),
-        },
-        impliedProbability: 1 / decimal,
-      });
+    const distanceMarket = markets.find(
+      (market: unknown) =>
+        typeof market === "object" &&
+        market !== null &&
+        readString((market as Record<string, unknown>).name)?.toLocaleLowerCase(
+          "en-US",
+        ) === "fight to go the distance",
+    ) as Record<string, unknown> | undefined;
+    if (distanceMarket === undefined || !Array.isArray(distanceMarket.odds)) {
+      continue;
+    }
+    const yes = distanceMarket.odds.find(
+      (outcome: unknown) =>
+        typeof outcome === "object" &&
+        outcome !== null &&
+        readString((outcome as Record<string, unknown>).label)?.toLocaleLowerCase(
+          "en-US",
+        ) === "yes",
+    ) as Record<string, unknown> | undefined;
+    const no = distanceMarket.odds.find(
+      (outcome: unknown) =>
+        typeof outcome === "object" &&
+        outcome !== null &&
+        readString((outcome as Record<string, unknown>).label)?.toLocaleLowerCase(
+          "en-US",
+        ) === "no",
+    ) as Record<string, unknown> | undefined;
+    const yesDecimal = Number(yes?.under);
+    const noDecimal = Number(no?.under);
+    if (
+      !Number.isFinite(yesDecimal) ||
+      yesDecimal <= 1 ||
+      !Number.isFinite(noDecimal) ||
+      noDecimal <= 1
+    ) {
+      continue;
+    }
+    distanceProbabilities.push({ yes: 1 / yesDecimal, no: 1 / noDecimal });
+    distanceExternalId = `${bookName}:Fight to Go the Distance`;
+    const distanceMarketUpdatedAt = readString(distanceMarket.updatedAt);
+    if (
+      distanceMarketUpdatedAt !== undefined &&
+      (distanceUpdatedAt === undefined || distanceMarketUpdatedAt > distanceUpdatedAt)
+    ) {
+      distanceUpdatedAt = distanceMarketUpdatedAt;
     }
   }
+
+  const metadata: UpcomingMarketMetadata = {};
+  if (bookmakerCount > 0) metadata.bookmakerCount = bookmakerCount;
+  const average = (values: number[]) =>
+    values.reduce((sum, value) => sum + value, 0) / values.length;
+  const decision =
+    distanceExternalId === undefined || distanceProbabilities.length === 0
+      ? undefined
+      : (() => {
+          const noVig = devigPair(
+            average(distanceProbabilities.map((pair) => pair.yes)),
+            average(distanceProbabilities.map((pair) => pair.no)),
+          );
+          return {
+            externalId: distanceExternalId,
+            decisionProbability: noVig.red,
+            finishProbability: noVig.blue,
+            ...(distanceUpdatedAt === undefined
+              ? {}
+              : { marketUpdatedAt: distanceUpdatedAt }),
+          } satisfies UpcomingDecisionMarket;
+        })();
 
   return {
     quotes,
     ...(marketUpdatedAt === undefined ? {} : { marketUpdatedAt }),
+    ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
+    ...(decision === undefined ? {} : { decision }),
   };
 }
 
@@ -260,7 +342,8 @@ export function createOddsApiIoUpcomingProvider(
           ),
           options,
         );
-        const { quotes, marketUpdatedAt } = parseOddsApiIoUpcomingOdds(odds);
+        const { quotes, marketUpdatedAt, metadata, decision } =
+          parseOddsApiIoUpcomingOdds(odds);
         markets.push({
           externalId: event.eventId,
           firstFighter: event.firstFighter,
@@ -273,6 +356,8 @@ export function createOddsApiIoUpcomingProvider(
             ? {}
             : { eventName: event.leagueName }),
           ...(marketUpdatedAt === undefined ? {} : { marketUpdatedAt }),
+          ...(metadata === undefined ? {} : { metadata }),
+          ...(decision === undefined ? {} : { decision }),
           quotes,
         });
       }

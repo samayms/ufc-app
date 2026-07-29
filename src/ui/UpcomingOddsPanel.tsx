@@ -2,8 +2,9 @@ import type { OddsQuote, OddsSnapshot } from "../schema.ts";
 import betmgmLogo from "../assets/brand/betmgm-logo.webp";
 import kalshiLogo from "../assets/brand/kalshi-logo-primary-green-1-on-near-black.svg";
 import polymarketLogo from "../assets/brand/polymarket-logo-blue.svg";
-import { averageImpliedProbability, marketProbabilities } from "../lib/oddsMath.ts";
+import { averageImpliedProbability } from "../lib/oddsMath.ts";
 import {
+  upcomingDecisionDisplayStatus,
   upcomingProviderDisplayStatus,
   type UpcomingBoutOdds,
   type UpcomingProviderEntry,
@@ -100,6 +101,35 @@ function SplitBar({
   );
 }
 
+function DecisionBar({
+  decision,
+  finish,
+}: {
+  decision: number | null;
+  finish: number | null;
+}) {
+  const hasData = decision != null && finish != null;
+  const total = (decision ?? 0) + (finish ?? 0);
+  const decisionShare =
+    hasData && total > 0 ? ((decision as number) / total) * 100 : 50;
+  const label = hasData
+    ? `Decision ${fmtPct(decision as number)}, Finish ${fmtPct(finish as number)}`
+    : "Decision versus finish odds unavailable";
+
+  return (
+    <div className="split" role="img" aria-label={label}>
+      <span
+        className={hasData ? "split-decision" : "split-neutral"}
+        style={{ width: `calc(${decisionShare}% - 1px)` }}
+      />
+      <span
+        className={hasData ? "split-finish" : "split-neutral"}
+        style={{ width: `calc(${100 - decisionShare}% - 1px)` }}
+      />
+    </div>
+  );
+}
+
 function ProviderBar({
   snapshot,
   sportsbookQuotes,
@@ -160,75 +190,48 @@ function ProviderBar({
 
 function DecisionBlock({
   bout,
-  redName,
-  blueName,
   nowMs,
 }: {
   bout: UpcomingBoutOdds | undefined;
-  redName: string;
-  blueName: string;
   nowMs: number;
 }) {
-  const usableSnapshot = (provider: UpcomingProviderId) => {
-    const entry = bout?.providers[provider];
-    const status = upcomingProviderDisplayStatus(entry, nowMs);
-    return status === "loaded" || status === "stale"
-      ? entry?.snapshot?.provenance.synthetic === false
-        ? entry.snapshot
-        : null
-      : null;
-  };
-
-  const source = (["kalshi", "polymarket"] as const).find((provider) => {
-    const snapshot = usableSnapshot(provider);
-    return snapshot !== null && marketProbabilities(snapshot) !== null;
-  });
-  const sportsbookSnapshots = SPORTSBOOK_PROVIDERS
-    .map((provider) => usableSnapshot(provider))
-    .filter((snapshot): snapshot is OddsSnapshot => snapshot !== null);
-  const firstSportsbookSnapshot = sportsbookSnapshots[0];
-  const sportsbookSnapshot: OddsSnapshot | null = firstSportsbookSnapshot === undefined
-    ? null
-    : {
-        ...firstSportsbookSnapshot,
-        quotes: sportsbookSnapshots.flatMap((snapshot) =>
-          snapshot.quotes.filter(
-            (quote) => quote.native.kind === "american-moneyline",
-          ),
-        ),
-      };
-  const decisionSnapshot = source === undefined
-    ? sportsbookSnapshot
-    : usableSnapshot(source);
-  const probabilities = decisionSnapshot === null
-    ? null
-    : marketProbabilities(decisionSnapshot);
-  const accent = source ?? "sportsbook";
+  const decision = bout?.decision;
+  const status = upcomingDecisionDisplayStatus(decision, nowMs);
+  const available =
+    (status === "loaded" || status === "stale") &&
+    decision?.synthetic === false &&
+    decision.decisionProbability !== undefined &&
+    decision.finishProbability !== undefined;
+  const decisionProbability = available
+    ? decision?.decisionProbability ?? null
+    : null;
+  const finishProbability = available
+    ? decision?.finishProbability ?? null
+    : null;
+  const accent = decision?.source ?? "sportsbook";
 
   return (
     <section
       className="market"
       data-market-accent={accent}
-      aria-label={`Decision odds, ${probabilities === null ? "not available" : "available"}`}
+      data-upcoming-status={status}
+      aria-label={`Decision odds, ${available ? "available" : "not available"}`}
     >
       <div className="market-head">
         <h3 className="market-head-text">Decision</h3>
       </div>
       <div className="market-bar">
-        <span className="market-side">
+        <span className="market-side decision-side">
+          <span className="decision-label">DECISION</span>
           <span className="market-pct num">
-            {probabilities === null ? "—" : fmtPct(probabilities.red)}
+            {decisionProbability === null ? "—" : fmtPct(decisionProbability)}
           </span>
         </span>
-        <SplitBar
-          red={probabilities?.red ?? null}
-          blue={probabilities?.blue ?? null}
-          redName={redName}
-          blueName={blueName}
-        />
-        <span className="market-side market-side-blue">
+        <DecisionBar decision={decisionProbability} finish={finishProbability} />
+        <span className="market-side market-side-blue decision-side">
+          <span className="decision-label">FINISH</span>
           <span className="market-pct num">
-            {probabilities === null ? "—" : fmtPct(probabilities.blue)}
+            {finishProbability === null ? "—" : fmtPct(finishProbability)}
           </span>
         </span>
       </div>
@@ -339,8 +342,6 @@ export function UpcomingOddsPanel({
       ))}
       <DecisionBlock
         bout={bout}
-        redName={redName}
-        blueName={blueName}
         nowMs={nowMs}
       />
     </section>

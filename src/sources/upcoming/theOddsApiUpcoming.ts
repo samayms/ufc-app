@@ -80,6 +80,7 @@ export function parseTheOddsApiUpcomingMarkets(
 
     const quotes: UpcomingQuote[] = [];
     const updates: string[] = [];
+    let bookmakerCount = 0;
     const bookmakers = Array.isArray(event.bookmakers) ? event.bookmakers : [];
 
     for (const rawBook of bookmakers) {
@@ -88,15 +89,19 @@ export function parseTheOddsApiUpcomingMarkets(
       const bookKey = readString(book.key);
       if (bookKey === undefined) continue;
       const markets = Array.isArray(book.markets) ? book.markets : [];
+      let bookHasH2h = false;
 
       for (const rawMarket of markets) {
         if (typeof rawMarket !== "object" || rawMarket === null) continue;
         const market = rawMarket as Record<string, unknown>;
         if (readString(market.key) !== "h2h") continue;
+        const outcomes = Array.isArray(market.outcomes)
+          ? market.outcomes
+          : [];
+        bookHasH2h = bookHasH2h || outcomes.length > 0;
         const lastUpdate = readString(market.last_update);
         if (lastUpdate !== undefined) updates.push(lastUpdate);
 
-        const outcomes = Array.isArray(market.outcomes) ? market.outcomes : [];
         for (const rawOutcome of outcomes) {
           if (typeof rawOutcome !== "object" || rawOutcome === null) continue;
           const outcome = rawOutcome as Record<string, unknown>;
@@ -125,6 +130,7 @@ export function parseTheOddsApiUpcomingMarkets(
           });
         }
       }
+      if (bookHasH2h) bookmakerCount += 1;
     }
 
     const marketUpdatedAt = updates.sort().at(-1);
@@ -137,6 +143,9 @@ export function parseTheOddsApiUpcomingMarkets(
           ? {}
           : { startsAt: readString(event.commence_time) as string }),
         ...(marketUpdatedAt === undefined ? {} : { marketUpdatedAt }),
+        ...(bookmakerCount === 0
+          ? {}
+          : { metadata: { bookmakerCount } }),
         quotes,
       },
     ];

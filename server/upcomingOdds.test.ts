@@ -85,6 +85,34 @@ function kalshiMainEvent(): UpcomingProviderMarket {
 const NOW = () => new Date("2026-08-14T12:00:00.000Z");
 
 describe("syncUpcomingOdds", () => {
+  it("falls through from an absent Kalshi distance market", async () => {
+    const fallback = {
+      ...kalshiMainEvent(),
+      externalId: "odds-api-io-event",
+      decision: {
+        externalId: "odds-api-io-distance",
+        decisionProbability: 0.4,
+        finishProbability: 0.6,
+      },
+    };
+    const document = await syncUpcomingOdds({
+      cards: [CARD],
+      providers: [
+        stubProvider("kalshi", [kalshiMainEvent()]),
+        stubProvider("odds-api-io", [fallback]),
+      ],
+      now: NOW,
+    });
+
+    expect(document.events[0]?.bouts[0]?.decision).toMatchObject({
+      state: "loaded",
+      decisionProbability: 0.4,
+      finishProbability: 0.6,
+      source: "odds-api-io",
+      synthetic: false,
+    });
+  });
+
   it("attaches an aliased, reversed market to the right corners", async () => {
     const document = await syncUpcomingOdds({
       cards: [CARD],

@@ -45,6 +45,28 @@ export interface UpcomingQuote {
   impliedProbability: number;
 }
 
+/** Optional provider-native context captured alongside the win market. */
+export interface UpcomingMarketMetadata {
+  /** Kalshi volume, Polymarket volume, or another provider's total volume. */
+  volume?: number;
+  /** Polymarket's 24-hour volume. */
+  volume24hr?: number;
+  /** Polymarket liquidity. */
+  liquidity?: number;
+  /** Kalshi open interest. */
+  openInterest?: number;
+  /** Number of sportsbook books quoting the win market. */
+  bookmakerCount?: number;
+}
+
+/** A normalized binary fight-distance market: YES means decision. */
+export interface UpcomingDecisionMarket {
+  externalId: string;
+  decisionProbability: number;
+  finishProbability: number;
+  marketUpdatedAt?: string;
+}
+
 export interface UpcomingProviderMarket {
   /** Provider-native id: Kalshi event ticker, Polymarket condition id, … */
   externalId: string;
@@ -61,6 +83,10 @@ export interface UpcomingProviderMarket {
   /** When the provider says the price last moved. */
   marketUpdatedAt?: string;
   quotes: UpcomingQuote[];
+  /** Optional metadata for the provider's existing win market. */
+  metadata?: UpcomingMarketMetadata;
+  /** Optional fight-level decision market discovered with this win market. */
+  decision?: UpcomingDecisionMarket;
 }
 
 /**

@@ -24,7 +24,10 @@
  */
 
 import type { OddsSnapshot } from "../schema.ts";
-import type { UpcomingProviderId } from "../sources/upcoming/types.ts";
+import type {
+  UpcomingMarketMetadata,
+  UpcomingProviderId,
+} from "../sources/upcoming/types.ts";
 
 export type { UpcomingProviderId };
 
@@ -62,7 +65,28 @@ export interface UpcomingProviderEntry {
   preserved?: boolean;
   /** Operator-facing detail for `unmatched` and `provider_error`. */
   message?: string;
+  /** Optional metadata for the provider's existing win market. */
+  metadata?: UpcomingMarketMetadata;
   snapshot?: OddsSnapshot;
+}
+
+export type UpcomingDecisionSource = Exclude<
+  UpcomingProviderId,
+  "odds-api"
+>;
+
+/** The resolved fight-level decision-vs-finish market for one bout. */
+export interface UpcomingDecisionOdds {
+  state: UpcomingProviderStatus;
+  decisionProbability?: number;
+  finishProbability?: number;
+  source?: UpcomingDecisionSource;
+  fetchedAt: string;
+  synthetic: boolean;
+  updatedAt?: string;
+  externalId?: string;
+  preserved?: boolean;
+  message?: string;
 }
 
 export interface UpcomingBoutOdds {
@@ -75,6 +99,7 @@ export interface UpcomingBoutOdds {
   startsAt?: string;
   titleFight?: boolean;
   providers: Partial<Record<UpcomingProviderId, UpcomingProviderEntry>>;
+  decision: UpcomingDecisionOdds;
 }
 
 export interface UpcomingEventOdds {
@@ -146,6 +171,19 @@ export function upcomingProviderDisplayStatus(
   if (entry.status !== "loaded") return entry.status;
 
   const observed = Date.parse(entry.updatedAt ?? entry.fetchedAt);
+  if (!Number.isFinite(observed)) return "loaded";
+  return nowMs - observed > staleAfterMs ? "stale" : "loaded";
+}
+
+export function upcomingDecisionDisplayStatus(
+  decision: UpcomingDecisionOdds | undefined,
+  nowMs: number,
+  staleAfterMs: number = UPCOMING_STALE_AFTER_MS,
+): UpcomingProviderDisplayStatus {
+  if (decision === undefined) return "not_listed";
+  if (decision.state !== "loaded") return decision.state;
+
+  const observed = Date.parse(decision.updatedAt ?? decision.fetchedAt);
   if (!Number.isFinite(observed)) return "loaded";
   return nowMs - observed > staleAfterMs ? "stale" : "loaded";
 }

@@ -21,12 +21,15 @@
 import {
   fetchProviderJson,
   type UpcomingFetchOptions,
+  type UpcomingDecisionMarket,
+  type UpcomingMarketMetadata,
   type UpcomingOddsProvider,
   type UpcomingProviderMarket,
   type UpcomingQuote,
 } from "./types.ts";
 
 export const KALSHI_UFC_SERIES_TICKER = "KXUFCFIGHT";
+export const KALSHI_UFC_DISTANCE_SERIES_TICKER = "KXUFCDISTANCE";
 
 const KALSHI_EVENTS_URL =
   "https://api.elections.kalshi.com/trade-api/v2/events";
@@ -37,6 +40,13 @@ export function buildKalshiUpcomingUrl(limit = 200): string {
   url.searchParams.set("status", "open");
   url.searchParams.set("with_nested_markets", "true");
   url.searchParams.set("limit", String(limit));
+  return url.toString();
+}
+
+export function buildKalshiDistanceUpcomingUrl(): string {
+  const url = new URL("https://api.elections.kalshi.com/trade-api/v2/markets");
+  url.searchParams.set("series_ticker", KALSHI_UFC_DISTANCE_SERIES_TICKER);
+  url.searchParams.set("status", "open");
   return url.toString();
 }
 
@@ -58,12 +68,21 @@ function readString(value: unknown): string | undefined {
     : undefined;
 }
 
+function readNumber(value: unknown): number | undefined {
+  const parsed = typeof value === "string" ? Number(value) : value;
+  return typeof parsed === "number" && Number.isFinite(parsed)
+    ? parsed
+    : undefined;
+}
+
 interface KalshiMarketRow {
   ticker: string;
   fighter: string;
   yesCents: number | null;
   occurrenceDatetime?: string;
   status?: string;
+  volume?: number;
+  openInterest?: number;
 }
 
 function parseMarketRow(raw: unknown): KalshiMarketRow | null {
@@ -92,6 +111,73 @@ function parseMarketRow(raw: unknown): KalshiMarketRow | null {
     ...(readString(market.status) === undefined
       ? {}
       : { status: readString(market.status) as string }),
+    ...(readNumber(market.volume_fp) === undefined
+      ? {}
+      : { volume: readNumber(market.volume_fp) as number }),
+    ...(readNumber(market.open_interest_fp) === undefined
+      ? {}
+      : { openInterest: readNumber(market.open_interest_fp) as number }),
+  };
+}
+
+function kalshiFightKey(ticker: string): string | undefined {
+  return ticker.match(/^KXUFC(?:FIGHT|DISTANCE)-(.+?)(?:-DIST)?$/u)?.[1];
+}
+
+function binaryProbability(raw: Record<string, unknown>): number | null {
+  const bid = dollarsToCents(raw.yes_bid_dollars);
+  const ask = dollarsToCents(raw.yes_ask_dollars);
+  const cents =
+    bid !== null && ask !== null
+      ? Math.round(((bid + ask) / 2) * 1e6) / 1e6
+      : dollarsToCents(raw.last_price_dollars);
+  return cents === null ? null : cents / 100;
+}
+
+/** Parses the separate KXUFCDISTANCE listing into fight-keyed binary markets. */
+export function parseKalshiDistanceMarkets(
+  payload: unknown,
+): Map<string, UpcomingDecisionMarket> {
+  const result = new Map<string, UpcomingDecisionMarket>();
+  if (typeof payload !== "object" || payload === null) return result;
+  const markets = (payload as { markets?: unknown }).markets;
+  if (!Array.isArray(markets)) return result;
+
+  for (const raw of markets) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const market = raw as Record<string, unknown>;
+    const ticker = readString(market.ticker);
+    const key = ticker === undefined ? undefined : kalshiFightKey(ticker);
+    const probability = binaryProbability(market);
+    if (key === undefined || probability === null) continue;
+    result.set(key, {
+      externalId: ticker as string,
+      decisionProbability: probability,
+      finishProbability: 1 - probability,
+    });
+  }
+  return result;
+}
+
+function combinedMetadata(rows: readonly KalshiMarketRow[]):
+  | UpcomingMarketMetadata
+  | undefined {
+  const volumes = rows.flatMap((row) =>
+    row.volume === undefined ? [] : [row.volume],
+  );
+  const openInterests = rows.flatMap((row) =>
+    row.openInterest === undefined ? [] : [row.openInterest],
+  );
+  if (volumes.length === 0 && openInterests.length === 0) return undefined;
+  return {
+    ...(volumes.length === 0
+      ? {}
+      : { volume: volumes.reduce((sum, value) => sum + value, 0) }),
+    ...(openInterests.length === 0
+      ? {}
+      : {
+          openInterest: openInterests.reduce((sum, value) => sum + value, 0),
+        }),
   };
 }
 
@@ -105,6 +191,7 @@ function parseMarketRow(raw: unknown): KalshiMarketRow | null {
  */
 export function parseKalshiUpcomingMarkets(
   payload: unknown,
+  distanceMarkets: ReadonlyMap<string, UpcomingDecisionMarket> = new Map(),
 ): UpcomingProviderMarket[] {
   if (typeof payload !== "object" || payload === null) {
     throw new TypeError("Kalshi events response was not a JSON object");
@@ -145,6 +232,9 @@ export function parseKalshiUpcomingMarkets(
     }
 
     const startsAt = first.occurrenceDatetime ?? second.occurrenceDatetime;
+    const fightKey = kalshiFightKey(eventTicker);
+    const decision =
+      fightKey === undefined ? undefined : distanceMarkets.get(fightKey);
     return [
       {
         externalId: eventTicker,
@@ -155,6 +245,10 @@ export function parseKalshiUpcomingMarkets(
         ...(readString(event.title) === undefined
           ? {}
           : { eventName: readString(event.title) as string }),
+        ...(combinedMetadata(rows) === undefined
+          ? {}
+          : { metadata: combinedMetadata(rows) as UpcomingMarketMetadata }),
+        ...(decision === undefined ? {} : { decision }),
         quotes,
       },
     ];
@@ -196,13 +290,19 @@ export function createKalshiUpcomingProvider(
   return {
     id: "kalshi",
     async listMarkets() {
-      const payload = await fetchProviderJson(
-        "kalshi",
-        buildKalshiUpcomingUrl(),
-        options,
-      );
+      const [payload, distancePayload] = await Promise.all([
+        fetchProviderJson("kalshi", buildKalshiUpcomingUrl(), options),
+        fetchProviderJson(
+          "kalshi",
+          buildKalshiDistanceUpcomingUrl(),
+          options,
+        ).catch(() => ({ markets: [] })),
+      ]);
       tickers = kalshiMarketTickers(payload);
-      return parseKalshiUpcomingMarkets(payload);
+      return parseKalshiUpcomingMarkets(
+        payload,
+        parseKalshiDistanceMarkets(distancePayload),
+      );
     },
     lastMarketTickers: () => tickers,
   };
