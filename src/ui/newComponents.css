@@ -181,14 +181,17 @@
 }
 
 .event-card-center-weight {
-  max-width: 82px;
-  overflow: hidden;
+  /* A target width, not a hard clip — FitText shrinks the font to fit this
+     when it can without going unreadably small, but never truncates. On the
+     rare label too wide even at the smallest readable size, it just spills
+     past this width instead of getting cut off (overflow: visible below). */
+  width: 92px;
+  overflow: visible;
   color: var(--text-faint);
   font-family: var(--font-data);
   font-size: 0.5rem;
   letter-spacing: 0.03em;
   text-align: center;
-  text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
 }

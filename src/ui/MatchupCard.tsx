@@ -1,5 +1,117 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import "./newComponents.css";
+
+/** Never shrink text past this fraction of its natural size — a label that
+ * still doesn't fit at this size is left here and allowed to visually
+ * overflow its box rather than either going illegibly small or getting
+ * truncated. */
+const FIT_TEXT_MIN_SCALE = 0.78;
+
+/**
+ * Text that shrinks its own font-size just enough to avoid overflowing a
+ * target-width box — e.g. a weight class like "Women's Flyweight" in the
+ * bout row's status column. Only shrinks when the text would actually
+ * overflow at its normal size; short labels render unchanged. Never
+ * truncates — a label that can't fit even at the smallest readable size
+ * just spills past the box instead of being cut off.
+ */
+let measureCtx: CanvasRenderingContext2D | null = null;
+
+/**
+ * True (sub-pixel) rendered width of `text` at a given font size, via an
+ * offscreen canvas — independent of the target element's own box, which is
+ * the point: scrollWidth/clientWidth on a box can never report content
+ * narrower than the box itself (scrollWidth is clamped to clientWidth), so
+ * comparing them can never detect "this fits with room to spare," only
+ * "this overflows." Canvas measurement has no such floor.
+ */
+function measureTextWidth(text: string, fontSizePx: number, style: CSSStyleDeclaration): number {
+  if (!measureCtx) {
+    measureCtx = document.createElement("canvas").getContext("2d");
+  }
+  const ctx = measureCtx;
+  if (!ctx) return 0;
+  ctx.font = `${style.fontStyle} ${style.fontWeight} ${fontSizePx}px ${style.fontFamily}`;
+  if ("letterSpacing" in ctx) {
+    (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = style.letterSpacing;
+  }
+  const rendered = style.textTransform === "uppercase" ? text.toUpperCase() : text;
+  return ctx.measureText(rendered).width;
+}
+
+export function FitText({
+  text,
+  className,
+}: {
+  text: string;
+  className: string;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const FIT_SAFETY_PX = 1;
+
+    const fit = () => {
+      el.style.fontSize = "";
+      const style = window.getComputedStyle(el);
+      const naturalSize = parseFloat(style.fontSize);
+      const boxWidth = el.clientWidth;
+      if (boxWidth === 0) return; // Not laid out (e.g. hidden ancestor) — nothing to measure yet.
+
+      const fits = (fontSizePx: number) =>
+        measureTextWidth(text, fontSizePx, style) <= boxWidth - FIT_SAFETY_PX;
+
+      if (fits(naturalSize)) return;
+
+      const minSize = naturalSize * FIT_TEXT_MIN_SCALE;
+      if (!fits(minSize)) {
+        // Doesn't fit even at the smallest readable size — leave it there
+        // and let it spill past its box rather than going smaller still.
+        el.style.fontSize = `${minSize}px`;
+        return;
+      }
+
+      let lo = minSize;
+      let hi = naturalSize;
+      for (let i = 0; i < 10; i++) {
+        const mid = (lo + hi) / 2;
+        if (fits(mid)) {
+          lo = mid;
+        } else {
+          hi = mid;
+        }
+      }
+      el.style.fontSize = `${lo}px`;
+    };
+
+    fit();
+    window.addEventListener("resize", fit);
+
+    // The label is set in a custom webfont (--font-data). If that font is
+    // still swapping in when `fit` first runs, the measurement above used
+    // fallback-font metrics — re-measure once the real font is ready, or
+    // some labels end up mismeasured while others coincidentally aren't,
+    // depending on how each word's width differs between the two fonts.
+    let cancelled = false;
+    document.fonts?.ready.then(() => {
+      if (!cancelled) fit();
+    });
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("resize", fit);
+    };
+  }, [text]);
+
+  return (
+    <span ref={ref} className={className}>
+      {text}
+    </span>
+  );
+}
 
 /** Source-agnostic shape for one side of a matchup — callers adapt real data into this. */
 export interface MatchupFighterEntry {

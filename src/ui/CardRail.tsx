@@ -1,5 +1,5 @@
 import type { Bout } from "../schema.ts";
-import { MatchupCard } from "./MatchupCard.tsx";
+import { FitText, MatchupCard } from "./MatchupCard.tsx";
 import { fmtMethod, WEIGHT_LABEL } from "./format.ts";
 import "./newComponents.css";
 
@@ -79,9 +79,10 @@ export function CardRail({
                   center={
                     <span className="event-card-center">
                       <StatusChip bout={bout} />
-                      <span className="event-card-center-weight">
-                        {WEIGHT_LABEL[bout.weightClass]}
-                      </span>
+                      <FitText
+                        className="event-card-center-weight"
+                        text={WEIGHT_LABEL[bout.weightClass] ?? ""}
+                      />
                     </span>
                   }
                 />

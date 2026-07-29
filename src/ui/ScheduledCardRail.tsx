@@ -2,7 +2,7 @@ import type {
   EspnScheduledCard,
   EspnScheduledFight,
 } from "../sources/espnSchedule.ts";
-import { MatchupCard } from "./MatchupCard.tsx";
+import { FitText, MatchupCard } from "./MatchupCard.tsx";
 import { fmtMethod, fmtTime } from "./format.ts";
 import "./newComponents.css";
 
@@ -79,9 +79,10 @@ export function ScheduledCardRail({
                   <span className="event-card-center">
                     <FightStatusChip fight={fight} />
                     {fight.weightClassLabel && (
-                      <span className="event-card-center-weight">
-                        {fight.weightClassLabel}
-                      </span>
+                      <FitText
+                        className="event-card-center-weight"
+                        text={fight.weightClassLabel}
+                      />
                     )}
                   </span>
                 }
