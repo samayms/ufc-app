@@ -1,5 +1,5 @@
 import type { OddsQuote, OddsSnapshot } from "../schema.ts";
-import { averageImpliedProbability } from "../lib/oddsMath.ts";
+import { averageImpliedProbability, marketProbabilities } from "../lib/oddsMath.ts";
 import {
   upcomingProviderDisplayStatus,
   type UpcomingBoutOdds,
@@ -149,6 +149,84 @@ function ProviderBar({
   );
 }
 
+function DecisionBlock({
+  bout,
+  redName,
+  blueName,
+  nowMs,
+}: {
+  bout: UpcomingBoutOdds | undefined;
+  redName: string;
+  blueName: string;
+  nowMs: number;
+}) {
+  const usableSnapshot = (provider: UpcomingProviderId) => {
+    const entry = bout?.providers[provider];
+    const status = upcomingProviderDisplayStatus(entry, nowMs);
+    return status === "loaded" || status === "stale"
+      ? entry?.snapshot?.provenance.synthetic === false
+        ? entry.snapshot
+        : null
+      : null;
+  };
+
+  const source = (["kalshi", "polymarket"] as const).find((provider) => {
+    const snapshot = usableSnapshot(provider);
+    return snapshot !== null && marketProbabilities(snapshot) !== null;
+  });
+  const sportsbookSnapshots = SPORTSBOOK_PROVIDERS
+    .map((provider) => usableSnapshot(provider))
+    .filter((snapshot): snapshot is OddsSnapshot => snapshot !== null);
+  const firstSportsbookSnapshot = sportsbookSnapshots[0];
+  const sportsbookSnapshot: OddsSnapshot | null = firstSportsbookSnapshot === undefined
+    ? null
+    : {
+        ...firstSportsbookSnapshot,
+        quotes: sportsbookSnapshots.flatMap((snapshot) =>
+          snapshot.quotes.filter(
+            (quote) => quote.native.kind === "american-moneyline",
+          ),
+        ),
+      };
+  const decisionSnapshot = source === undefined
+    ? sportsbookSnapshot
+    : usableSnapshot(source);
+  const probabilities = decisionSnapshot === null
+    ? null
+    : marketProbabilities(decisionSnapshot);
+  const accent = source ?? "sportsbook";
+
+  return (
+    <section
+      className="market"
+      data-market-accent={accent}
+      aria-label={`Decision odds, ${probabilities === null ? "not available" : "available"}`}
+    >
+      <div className="market-head">
+        <h3>Decision</h3>
+      </div>
+      <div className="market-bar">
+        <span className="market-side">
+          <span className="market-pct num">
+            {probabilities === null ? "—" : fmtPct(probabilities.red)}
+          </span>
+        </span>
+        <SplitBar
+          red={probabilities?.red ?? null}
+          blue={probabilities?.blue ?? null}
+          redName={redName}
+          blueName={blueName}
+        />
+        <span className="market-side market-side-blue">
+          <span className="market-pct num">
+            {probabilities === null ? "—" : fmtPct(probabilities.blue)}
+          </span>
+        </span>
+      </div>
+    </section>
+  );
+}
+
 export function UpcomingMarketBlock({
   provider,
   entry,
@@ -245,6 +323,12 @@ export function UpcomingOddsPanel({
           nowMs={nowMs}
         />
       ))}
+      <DecisionBlock
+        bout={bout}
+        redName={redName}
+        blueName={blueName}
+        nowMs={nowMs}
+      />
     </section>
   );
 }

@@ -52,6 +52,23 @@ function loadedKalshi(
   ], overrides);
 }
 
+function loadedPolymarket(
+  overrides: Partial<UpcomingProviderEntry> = {},
+): UpcomingProviderEntry {
+  return entry("polymarket", [
+    {
+      corner: "red",
+      native: { kind: "polymarket-price", price: 0.42 },
+      impliedProbability: 0.42,
+    },
+    {
+      corner: "blue",
+      native: { kind: "polymarket-price", price: 0.58 },
+      impliedProbability: 0.58,
+    },
+  ], overrides);
+}
+
 function sportsbookEntry(
   redMoneyline: number,
   redProbability: number,
@@ -142,9 +159,9 @@ describe("UpcomingOddsPanel", () => {
       />,
     );
 
-    expect(html.match(/class="market"/g)).toHaveLength(3);
-    expect(html.match(/class="market-bar"/g)).toHaveLength(3);
-    expect(html.match(/class="market-pct num">—/g)).toHaveLength(4);
+    expect(html.match(/class="market"/g)).toHaveLength(4);
+    expect(html.match(/class="market-bar"/g)).toHaveLength(4);
+    expect(html.match(/class="market-pct num">—/g)).toHaveLength(6);
     expect(html.match(/class="market-moneyline num">—/g)).toHaveLength(2);
     expect(html.match(/class="market-moneyline-pct num">—/g)).toHaveLength(2);
     expect(html).not.toMatch(/market-pct num">\d/);
@@ -193,5 +210,74 @@ describe("UpcomingOddsPanel", () => {
 
     expect(html).not.toContain("69%");
     expect(html).toContain('class="market-pct num">—</span>');
+  });
+
+  it("uses Kalshi first for the Decision block", () => {
+    const html = render(
+      <UpcomingOddsPanel
+        bout={bout({ kalshi: loadedKalshi(), polymarket: loadedPolymarket() })}
+        redName="Makhachev"
+        blueName="Garry"
+        nowMs={NOW_MS}
+      />,
+    );
+    const decision = html.slice(html.lastIndexOf('<section class="market"'));
+    expect(decision).toContain('data-market-accent="kalshi"');
+    expect(decision).toContain('class="market-pct num">69%</span>');
+    expect(decision).toContain('class="market-pct num">31%</span>');
+  });
+
+  it("falls through to Polymarket when Kalshi is absent", () => {
+    const html = render(
+      <UpcomingOddsPanel
+        bout={bout({ polymarket: loadedPolymarket() })}
+        redName="Makhachev"
+        blueName="Garry"
+        nowMs={NOW_MS}
+      />,
+    );
+    const decision = html.slice(html.lastIndexOf('<section class="market"'));
+    expect(decision).toContain('data-market-accent="polymarket"');
+    expect(decision).toContain('class="market-pct num">42%</span>');
+    expect(decision).toContain('class="market-pct num">58%</span>');
+  });
+
+  it("falls through to de-vigged combined sportsbooks", () => {
+    const html = render(
+      <UpcomingOddsPanel
+        bout={bout({
+          "odds-api-io": sportsbookEntry(-110, 100 / 210, -110, 100 / 210),
+          "odds-api": sportsbookEntry(-110, 100 / 210, -110, 100 / 210),
+        })}
+        redName="Makhachev"
+        blueName="Garry"
+        nowMs={NOW_MS}
+      />,
+    );
+    const decision = html.slice(html.lastIndexOf('<section class="market"'));
+    expect(decision).toContain('data-market-accent="sportsbook"');
+    expect(decision).toContain('class="market-pct num">50%</span>');
+    expect(decision.match(/class="market-pct num">50%<\/span>/g)).toHaveLength(2);
+  });
+
+  it("does not use synthetic odds for the Decision source", () => {
+    const synthetic = loadedKalshi({
+      snapshot: {
+        ...loadedKalshi().snapshot!,
+        provenance: { ...loadedKalshi().snapshot!.provenance, synthetic: true },
+      },
+    });
+    const html = render(
+      <UpcomingOddsPanel
+        bout={bout({ kalshi: synthetic, polymarket: loadedPolymarket() })}
+        redName="Makhachev"
+        blueName="Garry"
+        nowMs={NOW_MS}
+      />,
+    );
+    const decision = html.slice(html.lastIndexOf('<section class="market"'));
+    expect(decision).toContain('data-market-accent="polymarket"');
+    expect(decision).not.toContain('class="market-pct num">69%</span>');
+    expect(decision).toContain('class="market-pct num">42%</span>');
   });
 });

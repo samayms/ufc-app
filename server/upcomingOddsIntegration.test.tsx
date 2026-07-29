@@ -152,8 +152,8 @@ describe("upcoming odds, ESPN fixture through to the frontend", () => {
         nowMs={NOW_MS}
       />,
     );
-    expect(html.match(/class="market"/g)).toHaveLength(3);
-    expect(html.match(/class="market-pct num">—/g)).toHaveLength(4);
+    expect(html.match(/class="market"/g)).toHaveLength(4);
+    expect(html.match(/class="market-pct num">—/g)).toHaveLength(6);
     expect(html.match(/class="market-moneyline num">—/g)).toHaveLength(2);
     expect(html).not.toMatch(/market-pct num">\d/);
   });
