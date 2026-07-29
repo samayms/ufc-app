@@ -36,3 +36,8 @@ __pycache__/
 /playwright-report/
 /test-results/
 /coverage/
+
+# Unpacked brand source files; product copies live under src/assets/brand/
+/kalshi-logos/
+/pm-logos-and-fonts/
+/betmgm-logo.webp

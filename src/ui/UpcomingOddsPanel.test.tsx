@@ -118,9 +118,10 @@ describe("UpcomingOddsPanel", () => {
       />,
     );
 
-    expect(html).toContain("Kalshi");
-    expect(html).toContain("Polymarket");
-    expect(html).toContain("Sportsbooks");
+    expect(html).toContain('alt="Kalshi"');
+    expect(html).toContain('alt="Polymarket"');
+    expect(html).toContain('alt="BetMGM"');
+    expect(html).toContain('class="market-head-text">Decision</h3>');
     expect(html).not.toContain("Odds-API.io");
     expect(html).not.toContain("The Odds API");
     expect(html).not.toContain("Markets");
@@ -182,7 +183,7 @@ describe("UpcomingOddsPanel", () => {
       />,
     );
 
-    const sportsbook = html.slice(html.indexOf("Sportsbooks"));
+    const sportsbook = html.slice(html.indexOf('alt="BetMGM"'));
     expect(sportsbook).toContain('class="market-moneyline num">-385</span>');
     expect(sportsbook).toContain('class="market-moneyline-pct num">21%</span>');
     expect(sportsbook).toContain('class="market-moneyline num">+300</span>');

@@ -1,4 +1,7 @@
 import type { OddsQuote, OddsSnapshot } from "../schema.ts";
+import betmgmLogo from "../assets/brand/betmgm-logo.webp";
+import kalshiLogo from "../assets/brand/kalshi-logo-primary-green-1-on-near-black.svg";
+import polymarketLogo from "../assets/brand/polymarket-logo-blue.svg";
 import { averageImpliedProbability, marketProbabilities } from "../lib/oddsMath.ts";
 import {
   upcomingProviderDisplayStatus,
@@ -35,6 +38,12 @@ const SPORTSBOOK_PROVIDERS: readonly UpcomingProviderId[] = [
   "odds-api-io",
   "odds-api",
 ];
+
+const PROVIDER_LOGO: Record<DisplayProvider, { alt: string; src: string }> = {
+  kalshi: { alt: "Kalshi", src: kalshiLogo },
+  polymarket: { alt: "Polymarket", src: polymarketLogo },
+  sportsbooks: { alt: "BetMGM", src: betmgmLogo },
+};
 
 function bestSportsbookQuote(
   entries: readonly (UpcomingProviderEntry | undefined)[],
@@ -203,7 +212,7 @@ function DecisionBlock({
       aria-label={`Decision odds, ${probabilities === null ? "not available" : "available"}`}
     >
       <div className="market-head">
-        <h3>Decision</h3>
+        <h3 className="market-head-text">Decision</h3>
       </div>
       <div className="market-bar">
         <span className="market-side">
@@ -277,7 +286,12 @@ export function UpcomingMarketBlock({
       aria-label={`${label} odds, ${status.replace("_", " ")}`}
     >
       <div className="market-head">
-        <h3>{label}</h3>
+        <h3>
+          <img
+            src={PROVIDER_LOGO[provider].src}
+            alt={PROVIDER_LOGO[provider].alt}
+          />
+        </h3>
       </div>
       <ProviderBar
         snapshot={snapshot}
@@ -309,7 +323,7 @@ export function UpcomingOddsPanel({
   nowMs?: number;
 }) {
   return (
-    <section className="panel" aria-label="Odds comparison">
+    <section className="panel upcoming-odds-panel" aria-label="Odds comparison">
       {PROVIDER_ORDER.map((provider) => (
         <UpcomingMarketBlock
           key={provider}
