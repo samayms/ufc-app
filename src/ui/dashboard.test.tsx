@@ -38,6 +38,7 @@ describe("dashboard state surfaces", () => {
   it("parses only supported visual demo states", () => {
     expect(dashboardDemoState("?demo=stale")).toBe("stale");
     expect(dashboardDemoState("?demo=error")).toBe("error");
+    expect(dashboardDemoState("?demo=live")).toBe("live");
     expect(dashboardDemoState("?demo=unknown")).toBe("default");
   });
 

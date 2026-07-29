@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { EspnScheduledFight, EspnScheduledFighter } from "../sources/espnSchedule.ts";
 import type {
+  Bout,
   Corner,
   Fighter,
   FightRecord,
@@ -19,9 +20,43 @@ import { MarketStrip } from "./MarketStrip.tsx";
 import { RecentForm } from "./RecentForm.tsx";
 import { UpcomingOddsPanel } from "./UpcomingOddsPanel.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
+import { WEIGHT_LABEL, fmtRecord } from "./format.ts";
 import "./newComponents.css";
 
 const PREVIEW_SECTIONS: FightSection[] = ["tale", "odds"];
+
+function boutFighterToScheduledFighter(fighter: Fighter): EspnScheduledFighter {
+  const athleteId = fighter.externalRefs.find((ref) => ref.source === "espn")?.id;
+  return {
+    ...(athleteId === undefined ? {} : { athleteId }),
+    name: fighter.name,
+    record: fmtRecord(fighter.record),
+    ...(fighter.nickname === undefined ? {} : { nickname: fighter.nickname }),
+    ...(fighter.country === undefined ? {} : { country: fighter.country }),
+    ...(fighter.age === undefined ? {} : { age: fighter.age }),
+    ...(fighter.heightCm === undefined ? {} : { heightCm: fighter.heightCm }),
+    ...(fighter.reachCm === undefined ? {} : { reachCm: fighter.reachCm }),
+    ...(fighter.stance === undefined ? {} : { stance: fighter.stance }),
+    ...(fighter.recentBouts === undefined ? {} : { recentBouts: fighter.recentBouts }),
+    ...(fighter.ranking === undefined ? {} : { ranking: fighter.ranking }),
+  };
+}
+
+/** Adapts a canonical bout into the same preview contract used by ESPN cards. */
+export function boutToScheduledFight(bout: Bout): EspnScheduledFight {
+  return {
+    competitionId: bout.id,
+    matchNumber: bout.cardPosition,
+    weightClassLabel: WEIGHT_LABEL[bout.weightClass] ?? bout.weightClass,
+    titleFight: bout.titleFight,
+    mainEvent: bout.cardPosition === 1,
+    red: boutFighterToScheduledFighter(bout.fighters.red),
+    blue: boutFighterToScheduledFighter(bout.fighters.blue),
+    status: bout.status,
+    ...(bout.currentRound === undefined ? {} : { currentRound: bout.currentRound }),
+    ...(bout.result === undefined ? {} : { result: bout.result }),
+  };
+}
 
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -199,9 +234,11 @@ function statValue(fighter: EspnScheduledFighter, key: string): string {
 export function ScheduledFightPreview({
   fight,
   upcoming,
+  photosByCorner,
 }: {
   fight: EspnScheduledFight;
   upcoming: UpcomingOddsState;
+  photosByCorner?: Partial<Record<Corner, string>>;
 }) {
   const [active, setActive] = useState<FightSection>("tale");
 
@@ -224,7 +261,7 @@ export function ScheduledFightPreview({
         scheduledRounds={scheduledRounds}
         fighters={{ red: toFighter(fight.red), blue: toFighter(fight.blue) }}
         status="upcoming"
-        photosByCorner={{
+        photosByCorner={photosByCorner ?? {
           red: fight.red.headshotUrl,
           blue: fight.blue.headshotUrl,
         }}

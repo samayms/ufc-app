@@ -48,6 +48,12 @@ Fixture mode reads only repository fixtures and makes no external network
 calls. Collector state and the SSE replay log are written under `./data`,
 which is intentionally ignored by Git.
 
+To work on the live-fight UI with deterministic fake data, open the app with
+`?demo=live` (for example `http://localhost:5173/?demo=live`). It promotes the
+fixture's main bout to an in-round state while leaving the rest of the card
+upcoming, so selecting another bout exercises the same Tale/Odds-only preview
+used before that bout starts.
+
 Configuration is supplied through server environment variables:
 
 | Setting | Default |

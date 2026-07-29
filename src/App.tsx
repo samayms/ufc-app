@@ -24,7 +24,10 @@ import {
 } from "./ui/RoundSelector.tsx";
 import { RoundStatsPanel } from "./ui/RoundStatsPanel.tsx";
 import { ScheduledCardRail } from "./ui/ScheduledCardRail.tsx";
-import { ScheduledFightPreview } from "./ui/ScheduledFightPreview.tsx";
+import {
+  boutToScheduledFight,
+  ScheduledFightPreview,
+} from "./ui/ScheduledFightPreview.tsx";
 import { ScorecardFeed } from "./ui/ScorecardFeed.tsx";
 import {
   SectionTabs,
@@ -379,7 +382,14 @@ export default function App() {
                 upcoming={upcomingOdds}
               />
             ) : view ? (
-              <div className="fight-screen">
+              view.bout.status === "upcoming" ? (
+                <ScheduledFightPreview
+                  fight={boutToScheduledFight(view.bout)}
+                  upcoming={upcomingOdds}
+                  photosByCorner={photosByBoutId[view.bout.id]}
+                />
+              ) : (
+                <div className="fight-screen">
                 <BoutHeader
                   weightClassLabel={WEIGHT_LABEL[view.bout.weightClass] ?? ""}
                   titleFight={view.bout.titleFight}
@@ -456,7 +466,8 @@ export default function App() {
                     <RecentForm fighters={view.bout.fighters} />
                   </>
                 )}
-              </div>
+                </div>
+              )
             ) : (
               <div className="empty-state">
                 <strong>No bouts on this card</strong>
