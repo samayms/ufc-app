@@ -481,11 +481,22 @@
   text-align: center;
 }
 
+/* Kalshi-sourced and no-data strips keep the mint this row has always
+   used. It is deliberately softer than --market-color-kalshi, which is
+   tuned for the small provider headings rather than a 1.55rem number. */
 .market-strip-side strong {
   color: #4de4b2;
   font-family: var(--font-display);
   font-size: 1.55rem;
   line-height: 1;
+}
+
+.market-strip-side strong[data-odds-source="polymarket"] {
+  color: var(--market-color-polymarket);
+}
+
+.market-strip-side strong[data-odds-source="sportsbook"] {
+  color: var(--market-color-sportsbook);
 }
 
 .market-strip-prefight {

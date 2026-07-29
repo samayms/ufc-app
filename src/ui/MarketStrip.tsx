@@ -51,14 +51,18 @@ export function MarketStrip({
       aria-label="Open odds comparison"
     >
       <span className="market-strip-side">
-        <strong className="num">{red == null ? "—" : fmtPct(red)}</strong>
+        <strong className="num" data-odds-source={snapshot?.market}>
+          {red == null ? "—" : fmtPct(red)}
+        </strong>
         <span className="market-strip-prefight">
           Prefight odds: <span className="num">{preFightRed == null ? "—" : fmtPct(preFightRed)}</span>
         </span>
       </span>
       <span className="market-strip-divider" aria-hidden="true" />
       <span className="market-strip-side">
-        <strong className="num">{blue == null ? "—" : fmtPct(blue)}</strong>
+        <strong className="num" data-odds-source={snapshot?.market}>
+          {blue == null ? "—" : fmtPct(blue)}
+        </strong>
         <span className="market-strip-prefight">
           Prefight odds: <span className="num">{preFightBlue == null ? "—" : fmtPct(preFightBlue)}</span>
         </span>
