@@ -325,18 +325,30 @@
   max-width: 100%;
 }
 
+/*
+ * Square by construction, not by hope. The previous rule combined a
+ * `min-width` with asymmetric padding, so a two-digit rank ("15") grew the
+ * box horizontally and the aspect-ratio could not hold it square. A fixed
+ * width and height with no padding is the only version that stays square for
+ * "C", "1" and "15" alike; box-sizing keeps a future border from re-breaking
+ * it, and `flex: none` stops the name row from squeezing it on a narrow card.
+ */
 .rank-badge {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  min-width: 1.1em;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
   aspect-ratio: 1 / 1;
-  padding: 2px 4px;
+  padding: 0;
+  align-self: center;
   background: #AAB0B6;
   color: var(--bg);
   font-family: var(--font-event-title);
   font-size: 0.62rem;
+  line-height: 1;
 }
 
 .rank-badge-champion {

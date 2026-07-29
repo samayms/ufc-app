@@ -829,7 +829,7 @@ describe("createEspnScheduleSource", () => {
     ]);
   });
 
-  it("merges divisional ranking from the rankings endpoint onto getCard's fighters", async () => {
+  it("prefers the official-UFC overlay over ESPN's stale rankings endpoint", async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.includes("/rankings")) {
         return jsonResponse({
@@ -855,9 +855,42 @@ describe("createEspnScheduleSource", () => {
     const garry = card?.sections[0]?.fights[0]?.blue;
 
     expect(makhachev?.name).toBe("Islam Makhachev");
-    expect(makhachev?.ranking).toBe("Lightweight Champion");
-    // Unranked fighter: no ranking entry, not a fabricated placeholder.
-    expect(garry?.ranking).toBeUndefined();
+    // ESPN's endpoint says lightweight champion here — and ESPN's real
+    // endpoint is years out of date in exactly this way. The checked-in
+    // official overlay wins.
+    expect(makhachev?.ranking).toBe("Welterweight Champion");
+    expect(garry?.ranking).toBe("#1 Welterweight");
+  });
+
+  it("falls back to ESPN for a fighter the official overlay does not name", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/rankings")) {
+        return jsonResponse({
+          rankings: [
+            {
+              type: "middleweight",
+              weightClass: { text: "Middleweight" },
+              // Dustin Stoltzfus is not on the official rankings page.
+              ranks: [{ current: 1, athlete: { id: "4685871" } }],
+            },
+          ],
+        });
+      }
+      if (url.includes("/athletes/")) return jsonResponse({});
+      return jsonResponse(ufc330Fixture);
+    });
+    const source = createEspnScheduleSource({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => new Date("2026-07-28T00:00:00Z"),
+    });
+
+    const card = await source.getCard("600059185");
+    const ranked = card?.sections
+      .flatMap((section) => section.fights)
+      .flatMap((fight) => [fight.red, fight.blue])
+      .find((fighter) => fighter.athleteId === "4685871");
+
+    expect(ranked?.ranking).toBe("#1 Middleweight");
   });
 
   it("keeps the card intact when the rankings fetch fails, without failing or blocking card loading", async () => {
@@ -875,7 +908,9 @@ describe("createEspnScheduleSource", () => {
     const garry = card?.sections[0]?.fights[0]?.blue;
 
     expect(garry?.name).toBe("Ian Machado Garry");
-    expect(garry?.ranking).toBeUndefined();
+    // The ESPN fallback is gone, but the checked-in overlay needs no network
+    // and still supplies the badge.
+    expect(garry?.ranking).toBe("#1 Welterweight");
   });
 
   it("caches the rankings lookup across multiple getCard calls (single-entry, independent of the per-event card cache)", async () => {
