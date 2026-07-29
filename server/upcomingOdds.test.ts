@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  POLYMARKET_MIN_VOLUME_USD,
+  POLYMARKET_MAX_IMPLIED_SUM,
   syncUpcomingOdds,
   type UpcomingCard,
 } from "./upcomingOdds.ts";
@@ -118,7 +118,18 @@ describe("syncUpcomingOdds", () => {
     const polymarket = {
       ...kalshiMainEvent(),
       externalId: "polymarket-thin",
-      metadata: { volume: POLYMARKET_MIN_VOLUME_USD - 1 },
+      quotes: [
+        {
+          side: "first" as const,
+          native: { kind: "polymarket-price" as const, price: 0.6 },
+          impliedProbability: 0.6,
+        },
+        {
+          side: "second" as const,
+          native: { kind: "polymarket-price" as const, price: 0.51 },
+          impliedProbability: 0.51,
+        },
+      ],
       decision: {
         externalId: "polymarket-thin-distance",
         decisionProbability: 0.7,
@@ -149,11 +160,25 @@ describe("syncUpcomingOdds", () => {
     });
   });
 
-  it("uses Polymarket when its distance market clears the volume floor", async () => {
+  it("uses Polymarket when its implied values stay below 110%", async () => {
     const polymarket = {
       ...kalshiMainEvent(),
       externalId: "polymarket-liquid",
-      metadata: { volume: POLYMARKET_MIN_VOLUME_USD },
+      quotes: [
+        {
+          side: "first" as const,
+          native: { kind: "polymarket-price" as const, price: 0.58 },
+          impliedProbability: 0.58,
+        },
+        {
+          side: "second" as const,
+          native: {
+            kind: "polymarket-price" as const,
+            price: POLYMARKET_MAX_IMPLIED_SUM - 0.58 - 0.01,
+          },
+          impliedProbability: POLYMARKET_MAX_IMPLIED_SUM - 0.58 - 0.01,
+        },
+      ],
       decision: {
         externalId: "polymarket-liquid-distance",
         decisionProbability: 0.7,
