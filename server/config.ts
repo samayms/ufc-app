@@ -36,6 +36,17 @@ export interface CollectorConfig {
     kalshi: number;
     polymarket: number;
   };
+  /**
+   * Target interval for each sportsbook API while a bout is actually live.
+   * These are targets, not guarantees: the quota guards slow or stop polling
+   * before a plan is exhausted, and quota protection always wins. The Odds
+   * API's plan is 500 requests a *month*, so its interval degrades to
+   * round-boundary-only long before the target is reached.
+   */
+  activePollMs: {
+    oddsApiIo: number;
+    theOddsApi: number;
+  };
   /** Whether the lifecycle driver polls providers and drives FightLifecycleMachine. */
   lifecycleDriverEnabled: boolean;
   /** Consecutive ESPN failures before falling back to the Cito provider. */
@@ -359,6 +370,18 @@ export function loadConfig(
         env,
         "POLL_POLYMARKET_MS",
         5_000,
+      ),
+    },
+    activePollMs: {
+      oddsApiIo: parsePositiveInteger(
+        env,
+        "ODDS_API_IO_ACTIVE_POLL_MS",
+        15_000,
+      ),
+      theOddsApi: parsePositiveInteger(
+        env,
+        "THE_ODDS_API_ACTIVE_POLL_MS",
+        45_000,
       ),
     },
     lifecycleDriverEnabled:

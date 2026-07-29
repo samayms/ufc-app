@@ -113,6 +113,7 @@ import {
   type Storage,
 } from "./storage.ts";
 import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
+import { TheOddsApiActivePoller } from "./theOddsApiActivePoller.ts";
 import {
   MarketTickStore,
   type LocalOrderBookState,
@@ -222,6 +223,7 @@ export interface Collector {
   readonly marketTransports: readonly MarketTransport[];
   readonly oddsApiIoPoller: OddsApiIoPoller;
   readonly theOddsApiJob: TheOddsApiRoundJob;
+  readonly theOddsApiActivePoller: TheOddsApiActivePoller;
   readonly sherdogJobs: SherdogRoundJobs;
   readonly xJobs: XRoundJobs;
   readonly lifecycle: FightLifecycleMachine;
@@ -979,6 +981,7 @@ export async function createCollector(
         : { bout, externalBoutId };
     },
     bookmakers: config.oddsApiIoBookmakers,
+    activePollMs: config.activePollMs.oddsApiIo,
     publishTick: async (tick) => {
       await push.publish("update", {
         kind: "market-tick",
@@ -994,12 +997,14 @@ export async function createCollector(
           quotaPolicy: options.sportsbook.oddsApiIoQuotaPolicy,
         }),
   });
+  // One client shared by the round job and the active poller, so both count
+  // against the same account and neither can double-instantiate it.
+  const theOddsApiSource =
+    options.sportsbook?.theOddsApiSource ?? createOddsApiSource(sourceConfig);
   const initializedTheOddsApiJob = new TheOddsApiRoundJob({
     eventBus,
     scheduler: initializedRoundStats.scheduler,
-    source:
-      options.sportsbook?.theOddsApiSource ??
-      createOddsApiSource(sourceConfig),
+    source: theOddsApiSource,
     tickStore: initializedTickStore,
     getBout: findBout,
     publishTick: async (tick) => {
@@ -1015,17 +1020,75 @@ export async function createCollector(
       : { random: options.sportsbook.random }),
   });
 
+  const initializedTheOddsApiActivePoller =
+    await TheOddsApiActivePoller.create({
+      eventBus,
+      storage,
+      source: theOddsApiSource,
+      tickStore: initializedTickStore,
+      getBout: findBout,
+      activePollMs: config.activePollMs.theOddsApi,
+      publishTick: async (tick) => {
+        await push.publish("update", { kind: "market-tick", tick });
+      },
+      metrics: healthRegistry,
+      ...(sportsbookClock === undefined ? {} : { clock: sportsbookClock }),
+      ...(sportsbookTimer === undefined ? {} : { timer: sportsbookTimer }),
+    });
+
   // Streams remain connected across round breaks. The simple card policy
   // closes them once every bout represented by a market subscription has
   // emitted FIGHT_ENDED.
+  const allMarketSubscriptions = new Map(
+    marketTransports.map((transport) => [
+      transport,
+      transport.subscriptions,
+    ]),
+  );
   const relevantMarketBouts = new Set(
     marketTransports.flatMap((transport) =>
       transport.subscriptions.map(({ boutId }) => boutId),
     ),
   );
   const endedMarketBouts = new Set<string>();
+
+  /**
+   * Narrows every stream to the bouts ESPN currently says are live.
+   *
+   * The transports are told what to subscribe to, not merely which ticks to
+   * keep: a card has a dozen mapped bouts and only one is ever in progress, so
+   * subscribing to all of them would carry eleven idle books and make the one
+   * that matters harder to keep fresh. Before any fight starts, and after the
+   * last one ends, the full mapped set is restored so the streams are already
+   * pointed at the right markets when the next fight opens.
+   *
+   * SupervisedMarketTransport treats a new subscription set as stale until a
+   * fresh snapshot arrives for it, so narrowing can never leave deltas being
+   * applied to a book that was never rebuilt.
+   */
+  const applyActiveSubscriptions = (): void => {
+    const activeBouts = new Set(
+      lifecycle
+        .getStates()
+        .filter((state) => state.state === "in" && !state.completed)
+        .map((state) => state.boutId),
+    );
+
+    for (const transport of marketTransports) {
+      const all = allMarketSubscriptions.get(transport) ?? [];
+      const active = all.filter((subscription) =>
+        activeBouts.has(subscription.boutId),
+      );
+      transport.setSubscriptions(active.length > 0 ? active : all);
+    }
+  };
+
   unsubscribers.push(
+    eventBus.subscribe("FIGHT_STARTED", () => {
+      applyActiveSubscriptions();
+    }),
     eventBus.subscribe("FIGHT_ENDED", (event) => {
+      applyActiveSubscriptions();
       if (!relevantMarketBouts.has(event.boutId)) return;
       endedMarketBouts.add(event.boutId);
       if (
@@ -1192,6 +1255,7 @@ export async function createCollector(
     marketTransports,
     oddsApiIoPoller: initializedOddsApiIoPoller,
     theOddsApiJob: initializedTheOddsApiJob,
+    theOddsApiActivePoller: initializedTheOddsApiActivePoller,
     sherdogJobs: initializedSherdogJobs,
     xJobs: initializedXJobs,
     lifecycle,
@@ -1219,9 +1283,14 @@ export async function createCollector(
             initializedOddsApiIoPoller.startActiveBout(
               lifecycleState.boutId,
             );
+            initializedTheOddsApiActivePoller.startActiveBout(
+              lifecycleState.boutId,
+            );
           }
         }
+        applyActiveSubscriptions();
         await initializedOddsApiIoPoller.idle();
+        await initializedTheOddsApiActivePoller.idle();
       }
       return port;
     },
@@ -1230,6 +1299,7 @@ export async function createCollector(
       await lifecycleDriver.close();
       await initializedOddsApiIoPoller.close();
       await initializedTheOddsApiJob.close();
+      await initializedTheOddsApiActivePoller.close();
       await initializedSherdogJobs.close();
       await initializedXJobs.close();
       await Promise.all(

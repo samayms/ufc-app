@@ -47,6 +47,8 @@ export interface OddsApiIoPollerOptions {
   tickStore: Pick<MarketTickStore, "ingest" | "snapshotSource">;
   resolveBout(boutId: string): ResolvedOddsApiIoBout | undefined;
   bookmakers: readonly string[];
+  /** Target poll interval while a bout is live; quota tiers override it. */
+  activePollMs?: number;
   clock?: QuotaClock;
   timer?: OddsApiIoPollTimer;
   quota?: RollingQuotaGuard;
@@ -60,25 +62,33 @@ type RequestResult =
   | { status: "accepted"; receivedAt?: string }
   | { status: "failed" | "terminal" };
 
+/**
+ * Picks the polling interval from what quota is left.
+ *
+ * `targetIntervalMs` is the configured `ODDS_API_IO_ACTIVE_POLL_MS` — what the
+ * owner *wants* while a fight is live. It only applies while quota is healthy;
+ * the degraded tiers are floors, so a target faster than a tier can never
+ * speed polling back up as quota runs down. Quota protection always wins over
+ * the target, and below a day's reserve polling stops entirely and only round
+ * boundaries are fetched.
+ */
 export function oddsApiIoPollingPolicy(
   remaining: Pick<QuotaRemaining, "hour" | "day">,
+  targetIntervalMs: number = ODDS_API_IO_DEFAULT_INTERVAL_MS,
 ): OddsApiIoPollingPolicy {
   if (remaining.day < 30) return { mode: "boundary-only" };
   if (remaining.hour > 30) {
-    return {
-      mode: "periodic",
-      intervalMs: ODDS_API_IO_DEFAULT_INTERVAL_MS,
-    };
+    return { mode: "periodic", intervalMs: targetIntervalMs };
   }
   if (remaining.hour >= 15) {
     return {
       mode: "periodic",
-      intervalMs: ODDS_API_IO_MID_INTERVAL_MS,
+      intervalMs: Math.max(targetIntervalMs, ODDS_API_IO_MID_INTERVAL_MS),
     };
   }
   return {
     mode: "periodic",
-    intervalMs: ODDS_API_IO_LOW_INTERVAL_MS,
+    intervalMs: Math.max(targetIntervalMs, ODDS_API_IO_LOW_INTERVAL_MS),
   };
 }
 
@@ -122,6 +132,8 @@ export class OddsApiIoPoller {
 
   private readonly bookmakers: readonly string[];
 
+  private readonly activePollMs: number;
+
   private readonly clock: QuotaClock;
 
   private readonly timer: OddsApiIoPollTimer;
@@ -155,6 +167,8 @@ export class OddsApiIoPoller {
     this.bookmakers = [...new Set(
       options.bookmakers.map((bookmaker) => bookmaker.toLowerCase()),
     )];
+    this.activePollMs =
+      options.activePollMs ?? ODDS_API_IO_DEFAULT_INTERVAL_MS;
     this.clock = options.clock ?? { now: () => Date.now() };
     this.timer = options.timer ?? defaultTimer();
     this.publishTick = options.publishTick;
@@ -276,7 +290,7 @@ export class OddsApiIoPoller {
     const remaining = await this.quota.remaining(
       ODDS_API_IO_QUOTA_SOURCE,
     );
-    const policy = oddsApiIoPollingPolicy(remaining);
+    const policy = oddsApiIoPollingPolicy(remaining, this.activePollMs);
     if (reason === "periodic" && policy.mode === "boundary-only") {
       return;
     }
@@ -369,6 +383,7 @@ export class OddsApiIoPoller {
     this.clearTimer(boutId);
     const policy = oddsApiIoPollingPolicy(
       await this.quota.remaining(ODDS_API_IO_QUOTA_SOURCE),
+      this.activePollMs,
     );
     if (
       policy.mode === "boundary-only" ||

@@ -173,6 +173,28 @@ export function resolveMarketSubscriptions(
   });
 }
 
+function subscriptionKey(subscription: MarketSubscription): string {
+  return [
+    subscription.source,
+    subscription.boutId,
+    subscription.externalId,
+    subscription.marketType,
+    subscription.outcome,
+  ].join("\u0000");
+}
+
+/** Order-insensitive set comparison, so a reordered list is not a change. */
+function subscriptionsEqual(
+  left: readonly MarketSubscription[],
+  right: readonly MarketSubscription[],
+): boolean {
+  if (left.length !== right.length) return false;
+  const leftKeys = new Set(left.map(subscriptionKey));
+  return right.every((subscription) =>
+    leftKeys.has(subscriptionKey(subscription)),
+  );
+}
+
 export function reconnectDelay(
   attempt: number,
   random: number,
@@ -306,15 +328,41 @@ export class SupervisedMarketTransport implements MarketTransport {
     }));
   }
 
+  /**
+   * Replaces what this transport is subscribed to — used to narrow the stream
+   * to the bout ESPN says is live, and to widen it again once that fight ends.
+   *
+   * When the set actually changes on a live socket, the socket is cycled
+   * rather than patched. The subscribe frame is only ever sent on open, so a
+   * changed set has to be re-sent; reconnecting re-runs the existing
+   * open-handshake path, which marks the source stale and buffers deltas until
+   * every subscription has produced a fresh snapshot. Patching the frame in
+   * place would leave a newly added market applying deltas to a book that was
+   * never rebuilt.
+   *
+   * An unchanged set is a no-op, so a lifecycle event that does not move the
+   * active bout never disturbs a healthy stream.
+   */
   setSubscriptions(
     subscriptions: readonly MarketSubscription[],
   ): void {
     subscriptions.forEach((subscription) =>
       validateSubscription(subscription, this.source),
     );
-    this.currentSubscriptions = subscriptions.map((subscription) => ({
-      ...subscription,
-    }));
+    const next = subscriptions.map((subscription) => ({ ...subscription }));
+    if (subscriptionsEqual(this.currentSubscriptions, next)) return;
+
+    this.currentSubscriptions = next;
+    if (this.socket === undefined || !this.desired) return;
+
+    const socket = this.socket;
+    this.clearSocketListeners();
+    this.socket = undefined;
+    socket.close(1000, "subscription change");
+    this.rebuilt.clear();
+    this.buffered.clear();
+    this.reconnectAttempt = 0;
+    void this.open().catch(() => undefined);
   }
 
   on(listener: MarketTransportListener): () => void {
