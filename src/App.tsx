@@ -12,13 +12,11 @@ import { DeliveryFreshness } from "./ui/DeliveryFreshness.tsx";
 import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
-import { RoundGrid } from "./ui/RoundGrid.tsx";
 import {
   defaultRoundSelection,
   RoundSelector,
   type RoundSelection,
 } from "./ui/RoundSelector.tsx";
-import { RoundStatsPanel } from "./ui/RoundStatsPanel.tsx";
 import { ScheduledCardRail } from "./ui/ScheduledCardRail.tsx";
 import {
   boutToScheduledFight,
@@ -34,6 +32,7 @@ import {
 import { SourceStatus } from "./ui/SourceStatus.tsx";
 import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
 import { WEIGHT_LABEL } from "./ui/format.ts";
+import { hasEventStarted, sameEvent } from "./lib/eventIdentity.ts";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
 import { useUpcomingOdds } from "./store/useUpcomingOdds.ts";
 import {
@@ -225,11 +224,19 @@ export default function App() {
     const athleteId = fighterEspnAthleteId(fighter.externalRefs);
     return athleteId ? currentEventAthletePhotos[athleteId] : undefined;
   };
+  const eventStarted = hasEventStarted(event.startsAt);
 
-  const currentEventEntry: EventListEntry = {
+  const dashboardEventEntry: EventListEntry = {
     id: event.id,
     name: event.name,
     startsAt: event.startsAt,
+    isLive: eventStarted &&
+      event.bouts.some(
+        (bout) =>
+          bout.status === "upcoming" ||
+          bout.status === "in-round" ||
+          bout.status === "between-rounds",
+      ),
     ...(mainBout
       ? {
           redFighter: {
@@ -243,23 +250,40 @@ export default function App() {
         }
       : {}),
   };
+  const currentEventEntry = eventStarted ? dashboardEventEntry : null;
 
   const upcomingEventEntries: EventListEntry[] = (
     upcomingEspn.status === "ready" ? upcomingEspn.events : []
-  ).map((upcomingEvent) => {
-    const corners = upcomingEventPhotos[upcomingEvent.eventId];
-    return {
-      id: upcomingEvent.eventId,
-      name: upcomingEvent.name,
-      startsAt: upcomingEvent.startsAt,
-      ...(corners?.red
-        ? { redFighter: { name: corners.red.name, photoUrl: corners.red.headshotUrl } }
-        : {}),
-      ...(corners?.blue
-        ? { blueFighter: { name: corners.blue.name, photoUrl: corners.blue.headshotUrl } }
-        : {}),
-    };
-  });
+  )
+    .filter(
+      (upcomingEvent) =>
+        !eventStarted ||
+        !sameEvent(
+          { id: event.id, name: event.name },
+          { id: upcomingEvent.eventId, name: upcomingEvent.name },
+        ),
+    )
+    .map((upcomingEvent) => {
+      const corners = upcomingEventPhotos[upcomingEvent.eventId];
+      return {
+        id: upcomingEvent.eventId,
+        name: upcomingEvent.name,
+        startsAt: upcomingEvent.startsAt,
+        isLive: hasEventStarted(upcomingEvent.startsAt),
+        ...(corners?.red
+          ? { redFighter: { name: corners.red.name, photoUrl: corners.red.headshotUrl } }
+          : {}),
+        ...(corners?.blue
+          ? { blueFighter: { name: corners.blue.name, photoUrl: corners.blue.headshotUrl } }
+          : {}),
+      };
+    });
+  if (
+    !eventStarted &&
+    !upcomingEventEntries.some((entry) => sameEvent(entry, dashboardEventEntry))
+  ) {
+    upcomingEventEntries.unshift(dashboardEventEntry);
+  }
 
   const photosByBoutId: Record<string, { red?: string; blue?: string }> = {};
   for (const bout of event.bouts) {
@@ -286,11 +310,29 @@ export default function App() {
             )
           : undefined;
 
+  const selectedScheduleEventName =
+    scheduleSelection === null
+      ? undefined
+      : scheduleSelection === event.id
+        ? event.name
+        : espnCard.card?.name ??
+          upcomingEventEntries.find((entry) => entry.id === scheduleSelection)
+            ?.name;
+
+  const subheaderEventName =
+    tab === "fight"
+      ? selectedFutureFight
+        ? (selectedScheduleEventName ?? event.name)
+        : event.name
+      : event.name;
+
   return (
     <div className="app">
       <TopBar />
       <EventSubheader
         event={event}
+        eventName={subheaderEventName}
+        hideTitle={tab !== "fight"}
         leading={
           tab === "event" && scheduleSelection !== null ? (
             <BackButton onClick={backToEventList} />
@@ -359,7 +401,7 @@ export default function App() {
                   onOpen={() => setSection("odds")}
                 />
                 <SectionTabs active={section} onChange={setSection} />
-                {(section === "summary" || section === "stats") && (
+                {section === "summary" && (
                   <RoundSelector
                     view={view}
                     value={round}
@@ -372,6 +414,7 @@ export default function App() {
                       view={view}
                       selection={round}
                       delivery={roundDelivery}
+                      collectorRounds={dashboard.collector?.unifiedRounds}
                     />
                     <ScorecardFeed
                       view={view}
@@ -382,16 +425,6 @@ export default function App() {
                       round={selectedRound}
                       collector={dashboard.collector}
                     />
-                  </>
-                )}
-                {section === "stats" && (
-                  <>
-                    <RoundStatsPanel
-                      view={view}
-                      selection={round}
-                      delivery={roundDelivery}
-                    />
-                    <RoundGrid view={view} />
                   </>
                 )}
                 {section === "odds" && (

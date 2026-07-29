@@ -20,9 +20,19 @@ function FightStatusChip({ fight }: { fight: EspnScheduledFight }) {
       return <span className="chip chip-live">END R{fight.currentRound}</span>;
     case "final": {
       const r = fight.result;
+      const winner =
+        r?.winner === "red" || r?.winner === "blue"
+          ? fight[r.winner].name.split(" ").at(-1)
+          : r?.winner === "draw"
+            ? "DRAW"
+            : r?.winner === "nc"
+              ? "NO CONTEST"
+              : undefined;
       return (
         <span className="chip chip-final">
-          {r ? `${fmtMethod(r.method)}${r.round ? ` R${r.round}` : ""}` : "FINAL"}
+          {r
+            ? `${winner ?? "FINAL"} · ${fmtMethod(r.method)}${r.round ? ` R${r.round}` : ""}`
+            : "FINAL"}
         </span>
       );
     }
@@ -75,6 +85,9 @@ export function ScheduledCardRail({
                 blue={{ name: fight.blue.name, photoUrl: fight.blue.headshotUrl }}
                 redIsLoser={winner === "blue"}
                 blueIsLoser={winner === "red"}
+                isLive={
+                  fight.status === "in-round" || fight.status === "between-rounds"
+                }
                 center={
                   <span className="event-card-center">
                     <FightStatusChip fight={fight} />

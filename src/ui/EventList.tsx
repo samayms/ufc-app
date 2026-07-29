@@ -7,6 +7,7 @@ export interface EventListEntry {
   id: string;
   name: string;
   startsAt: string;
+  isLive?: boolean;
   redFighter?: MatchupFighterEntry;
   blueFighter?: MatchupFighterEntry;
 }
@@ -45,6 +46,7 @@ export function EventList({
             blue={currentEvent.blueFighter}
             center={<span className="event-card-vs">vs</span>}
             isSelected={currentEvent.id === selectedId}
+            isLive={currentEvent.isLive}
             onSelect={() => onSelect(currentEvent.id)}
           />
         </section>
@@ -65,6 +67,7 @@ export function EventList({
               blue={entry.blueFighter}
               center={<span className="event-card-vs">vs</span>}
               isSelected={entry.id === selectedId}
+              isLive={entry.isLive}
               onSelect={() => onSelect(entry.id)}
             />
           ))}

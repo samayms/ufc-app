@@ -35,6 +35,12 @@ function FighterBlock({
   const firstName = fighter.name.split(" ")[0] ?? fighter.name;
   const lastName = fighter.name.split(" ").at(-1) ?? fighter.name;
   const badge = rankingBadge(fighter.ranking);
+  const lastNameClass =
+    lastName.length >= 14
+      ? "tot-name tot-name-tight"
+      : lastName.length >= 11
+        ? "tot-name tot-name-compact"
+        : "tot-name";
 
   return (
     <div className={`tot-fighter tot-${corner}`}>
@@ -55,12 +61,12 @@ function FighterBlock({
       </span>
       <span className="tot-firstname">{firstName}</span>
       <span className="tot-name-row">
-        <span className={`tot-name corner-${corner}`} title={fighter.name}>
+        <span className={`${lastNameClass} corner-${corner}`} title={fighter.name}>
           {lastName}
         </span>
         {badge && (
           <span className={`rank-badge${badge === "C" ? " rank-badge-champion" : ""}`}>
-            {badge}
+            <span className="rank-badge-text">{badge}</span>
           </span>
         )}
       </span>

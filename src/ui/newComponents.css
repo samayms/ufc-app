@@ -66,6 +66,12 @@
   border-color: var(--border-strong);
 }
 
+.event-card.is-live,
+.event-card.is-live:hover,
+.event-card.is-live.is-selected {
+  border-color: var(--red-corner-strong);
+}
+
 .event-card-matchup {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);

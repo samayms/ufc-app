@@ -1,13 +1,12 @@
-export type FightSection = "summary" | "stats" | "odds" | "tale";
+export type FightSection = "summary" | "odds" | "tale";
 
 const SECTION_LABEL: Record<FightSection, string> = {
   summary: "Fight",
-  stats: "Stats",
   odds: "Odds",
   tale: "Tale",
 };
 
-const DEFAULT_SECTIONS: FightSection[] = ["summary", "stats", "odds", "tale"];
+const DEFAULT_SECTIONS: FightSection[] = ["summary", "odds", "tale"];
 
 export function SectionTabs({
   active,

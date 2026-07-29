@@ -15,6 +15,7 @@ import {
 import { RoundStatsPanel } from "./RoundStatsPanel.tsx";
 import { ScorecardFeed } from "./ScorecardFeed.tsx";
 import { SourceStatus } from "./SourceStatus.tsx";
+import { SectionTabs } from "./SectionTabs.tsx";
 import { EventSubheader, TopBar } from "./TopBar.tsx";
 
 function toOddsPanelProps(view: BoutView) {
@@ -40,6 +41,16 @@ describe("dashboard state surfaces", () => {
     expect(dashboardDemoState("?demo=error")).toBe("error");
     expect(dashboardDemoState("?demo=live")).toBe("live");
     expect(dashboardDemoState("?demo=unknown")).toBe("default");
+  });
+
+  it("keeps the fight navigation focused on the remaining views", () => {
+    const tabs = renderToStaticMarkup(
+      <SectionTabs active="summary" onChange={() => undefined} />,
+    );
+    expect(tabs).toContain(">Fight</button>");
+    expect(tabs).toContain(">Odds</button>");
+    expect(tabs).toContain(">Tale</button>");
+    expect(tabs).not.toContain(">Stats</button>");
   });
 
   it("switches the selected round without enabling future rounds", async () => {
@@ -92,6 +103,18 @@ describe("dashboard state surfaces", () => {
     expect(stale).toContain("Last synced");
     expect(stale).toContain("On dashboard refresh");
     expect(stale).toContain("completed-round data stays");
+  });
+
+  it("uses the fixture market snapshot to preview round odds", async () => {
+    const state = await assembleDashboard();
+    const main = state.boutViews["bout-main"];
+    expect(main).toBeDefined();
+    if (!main) return;
+
+    const html = renderToStaticMarkup(<FightSummary view={main} selection={2} />);
+    expect(html).toContain('data-market-accent="kalshi"');
+    expect(html).toContain(">Odds<");
+    expect(html).not.toContain("round-end odds will appear");
   });
 
   it("keeps diagnostics in Data and the UFC masthead clear", async () => {

@@ -197,6 +197,7 @@ export function MatchupCard({
   redIsLoser,
   blueIsLoser,
   center,
+  isLive,
   isSelected,
   onSelect,
 }: {
@@ -206,13 +207,14 @@ export function MatchupCard({
   redIsLoser?: boolean;
   blueIsLoser?: boolean;
   center: ReactNode;
+  isLive?: boolean;
   isSelected: boolean;
   onSelect: () => void;
 }) {
   return (
     <button
       type="button"
-      className={`event-card${isSelected ? " is-selected" : ""}`}
+      className={`event-card${isLive ? " is-live" : ""}${isSelected ? " is-selected" : ""}`}
       onClick={onSelect}
       aria-current={isSelected ? "true" : undefined}
     >

@@ -38,8 +38,12 @@ describe("ranking badge", () => {
   it("shows C for the champion and 1 for the top contender", () => {
     const html = renderHeader("Islam Makhachev", "Ian Machado Garry");
 
-    expect(html).toContain('class="rank-badge rank-badge-champion">C<');
-    expect(html).toContain('class="rank-badge">1<');
+    expect(html).toContain(
+      'class="rank-badge rank-badge-champion"><span class="rank-badge-text">C</span></span>',
+    );
+    expect(html).toContain(
+      'class="rank-badge"><span class="rank-badge-text">1</span></span>',
+    );
   });
 
   it("renders no badge at all for an unranked fighter", () => {

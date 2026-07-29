@@ -779,6 +779,33 @@
   background: var(--blue-corner);
 }
 
+.round-odds {
+  margin-top: 2px;
+}
+
+.round-odds .compact-stat-values > span:nth-child(2) {
+  color: var(--market);
+  font-size: 0.56rem;
+}
+
+.round-odds[data-market-accent="kalshi"] .compact-stat-values > span:first-child,
+.round-odds[data-market-accent="kalshi"] .compact-stat-values > span:nth-child(2),
+.round-odds[data-market-accent="kalshi"] .compact-stat-values > span:last-child {
+  color: var(--market-color-kalshi);
+}
+
+.round-odds[data-market-accent="polymarket"] .compact-stat-values > span:first-child,
+.round-odds[data-market-accent="polymarket"] .compact-stat-values > span:nth-child(2),
+.round-odds[data-market-accent="polymarket"] .compact-stat-values > span:last-child {
+  color: var(--market-color-polymarket);
+}
+
+.round-odds[data-market-accent="sportsbook"] .compact-stat-values > span:first-child,
+.round-odds[data-market-accent="sportsbook"] .compact-stat-values > span:nth-child(2),
+.round-odds[data-market-accent="sportsbook"] .compact-stat-values > span:last-child {
+  color: var(--market-color-sportsbook);
+}
+
 .round-summary {
   padding: 12px;
 }

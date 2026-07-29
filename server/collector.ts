@@ -113,6 +113,7 @@ import {
   type Storage,
 } from "./storage.ts";
 import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
+import { loadLiveEventState } from "./liveEventState.ts";
 import { TheOddsApiActivePoller } from "./theOddsApiActivePoller.ts";
 import {
   MarketTickStore,
@@ -440,9 +441,10 @@ async function defaultStateLoader(
     return loadFixtureState(config);
   }
 
-  throw new Error(
-    "Live mode credentials are configured, but live transports are not installed",
-  );
+  // Live mode builds the card from ESPN's public schedule. Every bout starts
+  // with an empty BoutView; the lifecycle driver, tick store and round
+  // pipelines fill those in from real observations during the event.
+  return loadLiveEventState({ scorecardAccounts: SCORECARD_ACCOUNTS });
 }
 
 function sendJson(
@@ -815,12 +817,21 @@ export async function createCollector(
           lifecycleGetBouts,
           { clock: options.lifecycle?.clock },
         ));
+  // Cito is the lifecycle *fallback*; ESPN drives it. Cito uses its own event
+  // ids, so an ESPN-derived event legitimately has no "cito" ref — and when it
+  // does not, the collector runs ESPN-only rather than refusing to start.
+  // Requiring the ref here made live mode unbootable for every real card.
+  const citoEventExternalId = loaded.event.externalRefs.find(
+    (ref) => ref.source === "cito",
+  )?.id;
   const lifecycleCitoProvider =
     options.lifecycle?.citoProvider ??
-    (config.dataMode === "live" && config.citoApiBaseUrl !== undefined
+    (config.dataMode === "live" &&
+    config.citoApiBaseUrl !== undefined &&
+    citoEventExternalId !== undefined
       ? createLiveCitoLifecycleProvider(
           sourceConfig,
-          requiredEventExternalId("cito"),
+          citoEventExternalId,
           lifecycleGetBouts,
           { baseUrl: config.citoApiBaseUrl, clock: options.lifecycle?.clock },
         )
