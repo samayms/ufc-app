@@ -5,12 +5,12 @@ import type { Corner, Fighter, FightRecord } from "../schema.ts";
 
 import { BoutHeader } from "./BoutHeader.tsx";
 import { FighterProfile } from "./FighterProfile.tsx";
-import { MarketBlock } from "./OddsPanel.tsx";
+import { OddsPanel } from "./OddsPanel.tsx";
 import { RecentForm } from "./RecentForm.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
 import "./newComponents.css";
 
-const PREVIEW_SECTIONS: FightSection[] = ["odds", "tale", "stats"];
+const PREVIEW_SECTIONS: FightSection[] = ["odds", "tale"];
 
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -62,55 +62,27 @@ function toFighter(fighter: EspnScheduledFighter): Fighter {
 
 /**
  * Odds tab for a future (not-yet-started) fight. No real data pipeline
- * connects future ESPN fights to any market yet, so every slot reuses the
- * live Fight tab's own `MarketBlock` with `snapshot={null}`/`preFight={null}`
- * — its established empty state ("Odds aren't available yet." / "No opening
- * line captured for this market.") — which keeps this view visually
- * identical to the live Odds tab and means a future prompt wiring up real
- * Kalshi/Polymarket/sportsbook data only has to pass a snapshot in, not
- * rebuild this layout. Order and accent colors (Kalshi's existing default
- * amber, then Polymarket, then Sportsbooks) match the product direction to
- * "keep all those options ready."
+ * connects future ESPN fights to any market yet, so this renders the exact
+ * same `OddsPanel` the live Fight tab uses, with empty `latestOdds` /
+ * `marketMoves` / `preFightOdds` — its established empty state ("Odds
+ * aren't available yet." / "No opening line captured for this market.")
+ * — which guarantees this view is pixel-identical to the live Odds tab
+ * (same component, not a hand-duplicated copy) and means a future prompt
+ * wiring up real Kalshi/Polymarket/sportsbook data only has to pass
+ * snapshots in, not rebuild this layout.
  */
 function OddsSection({ fight }: { fight: EspnScheduledFight }) {
   const redName = fight.red.name.split(" ").at(-1) ?? fight.red.name;
   const blueName = fight.blue.name.split(" ").at(-1) ?? fight.blue.name;
-  const emptyText = "Odds aren't available yet.";
   return (
-    <section className="panel" aria-label="Odds comparison">
-      <div className="panel-head">
-        <h2>Markets</h2>
-        <span className="freshness">
-          implied win probability, {redName} vs {blueName}
-        </span>
-      </div>
-      <MarketBlock
-        title="Kalshi"
-        snapshot={null}
-        emptyText={emptyText}
-        preFight={null}
-        redName={redName}
-        blueName={blueName}
-      />
-      <MarketBlock
-        title="Polymarket"
-        accent="polymarket"
-        snapshot={null}
-        emptyText={emptyText}
-        preFight={null}
-        redName={redName}
-        blueName={blueName}
-      />
-      <MarketBlock
-        title="Sportsbooks"
-        accent="sportsbook"
-        snapshot={null}
-        emptyText={emptyText}
-        preFight={null}
-        redName={redName}
-        blueName={blueName}
-      />
-    </section>
+    <OddsPanel
+      redName={redName}
+      blueName={blueName}
+      latestOdds={{}}
+      marketMoves={{}}
+      preFightOdds={{}}
+      emptyText="Odds aren't available yet."
+    />
   );
 }
 
@@ -123,6 +95,21 @@ function TaleSection({ fight }: { fight: EspnScheduledFight }) {
     <>
       <FighterProfile fighters={fighters} />
       <RecentForm fighters={fighters} />
+      <section className="profile-panel" aria-label="Fight outlook">
+        <div className="outlook-panel">
+          <span className="outlook-heading">Fight outlook</span>
+          <p className="outlook-body">{OUTLOOK_PLACEHOLDER}</p>
+        </div>
+        <div className="profile-rows">
+          {STAT_ROWS.map(({ key, label }) => (
+            <div className="profile-row" key={key}>
+              <span className="num">{statValue(fight.red, key)}</span>
+              <span>{label}</span>
+              <span className="num">{statValue(fight.blue, key)}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     </>
   );
 }
@@ -145,29 +132,6 @@ const STAT_ROWS: { key: string; label: string }[] = [
 
 function statValue(fighter: EspnScheduledFighter, key: string): string {
   return fighter.stats?.find((stat) => stat.name === key)?.displayValue ?? "—";
-}
-
-function StatsSection({ fight }: { fight: EspnScheduledFight }) {
-  // The outlook paragraph above is still a placeholder pending a real
-  // AI-generated summary source; the stat rows below use ESPN's real
-  // per-fighter career-average stats.
-  return (
-    <section className="profile-panel" aria-label="Fight outlook">
-      <div className="outlook-panel">
-        <span className="outlook-heading">Fight outlook</span>
-        <p className="outlook-body">{OUTLOOK_PLACEHOLDER}</p>
-      </div>
-      <div className="profile-rows">
-        {STAT_ROWS.map(({ key, label }) => (
-          <div className="profile-row" key={key}>
-            <span className="num">{statValue(fight.red, key)}</span>
-            <span>{label}</span>
-            <span className="num">{statValue(fight.blue, key)}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
 }
 
 /**
@@ -208,7 +172,6 @@ export function ScheduledFightPreview({
 
       {active === "odds" && <OddsSection fight={fight} />}
       {active === "tale" && <TaleSection fight={fight} />}
-      {active === "stats" && <StatsSection fight={fight} />}
     </div>
   );
 }
