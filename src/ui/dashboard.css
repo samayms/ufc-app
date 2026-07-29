@@ -1280,11 +1280,23 @@
  * the same weight as its neighbours.
  */
 .upcoming-odds-panel .market[data-market-accent="sportsbook"] .market-head h3 img {
-  height: 30px;
+  height: 34px;
+}
+
+.upcoming-odds-panel .market[data-market-accent="kalshi"] .market-head h3 img {
+  transform: translateY(4px);
+}
+
+.upcoming-odds-panel .market[data-market-accent="sportsbook"] .market-head {
+  margin-bottom: 4px;
 }
 
 .upcoming-odds-panel > .market .market-bar {
   margin-block: auto;
+}
+
+.upcoming-odds-panel > .market[data-market-accent="sportsbook"] .market-bar {
+  margin-block: 0;
 }
 
 .upcoming-odds-panel .market-footer {
