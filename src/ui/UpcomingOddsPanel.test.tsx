@@ -143,8 +143,8 @@ describe("UpcomingOddsPanel", () => {
 
     expect(html).toContain('alt="Kalshi"');
     expect(html).toContain('alt="Polymarket"');
-    expect(html).toContain('alt="BetMGM"');
-    expect(html).toContain('class="market-head-text">Decision</h3>');
+    expect(html).toContain('alt="Bet365"');
+    expect(html).toContain('class="market-head-text">Go the distance</h3>');
     expect(html).not.toContain("Odds-API.io");
     expect(html).not.toContain("The Odds API");
     expect(html).not.toContain("Markets");
@@ -153,7 +153,7 @@ describe("UpcomingOddsPanel", () => {
     expect(html).not.toContain("Upcoming odds unavailable");
   });
 
-  it("renders real prices without names, native prices, or timestamps", () => {
+  it("renders real prices with fighter labels, without native prices or timestamps", () => {
     const html = render(
       <UpcomingOddsPanel
         bout={bout({ kalshi: loadedKalshi() })}
@@ -165,7 +165,10 @@ describe("UpcomingOddsPanel", () => {
 
     expect(html).toContain('class="market-pct num">69%</span>');
     expect(html).toContain('class="market-pct num">31%</span>');
-    expect(html).not.toContain("market-name");
+    expect(html).toContain('class="decision-label">Makhachev</span>');
+    expect(html).toContain('class="decision-label">Garry</span>');
+    expect(html.match(/class="decision-label">Makhachev<\/span>/g)).toHaveLength(3);
+    expect(html.match(/class="decision-label">Garry<\/span>/g)).toHaveLength(3);
     expect(html).not.toContain("market-native");
     expect(html).not.toContain("updated");
     expect(html).not.toContain("never updated");
@@ -277,7 +280,7 @@ describe("UpcomingOddsPanel", () => {
       />,
     );
 
-    const sportsbook = html.slice(html.indexOf('alt="BetMGM"'));
+    const sportsbook = html.slice(html.indexOf('alt="Bet365"'));
     expect(sportsbook).toContain('class="market-moneyline num">-385</span>');
     expect(sportsbook).toContain('class="market-moneyline-pct num">21%</span>');
     expect(sportsbook).toContain('class="market-moneyline num">+300</span>');
@@ -321,6 +324,7 @@ describe("UpcomingOddsPanel", () => {
     );
     const decision = html.slice(html.lastIndexOf('<section class="market"'));
     expect(decision).toContain('data-market-accent="kalshi"');
+    expect(decision).toContain('class="market-head-text">Go the distance</h3>');
     expect(decision).toContain('class="decision-label">DECISION</span>');
     expect(decision).toContain('class="decision-label">FINISH</span>');
     expect(decision).toContain('class="market-pct num">69%</span>');

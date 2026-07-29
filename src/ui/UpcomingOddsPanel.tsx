@@ -1,5 +1,5 @@
 import type { OddsQuote, OddsSnapshot } from "../schema.ts";
-import betmgmLogo from "../assets/brand/betmgm-logo.webp";
+import bet365Logo from "../assets/brand/Bet365-Logo.png";
 import kalshiLogo from "../assets/brand/kalshi-logo-primary-green-1-on-near-black.svg";
 import polymarketLogo from "../assets/brand/polymarket-logo-white.svg";
 import { averageImpliedProbability } from "../lib/oddsMath.ts";
@@ -43,7 +43,7 @@ const SPORTSBOOK_PROVIDERS: readonly UpcomingProviderId[] = [
 const PROVIDER_LOGO: Record<DisplayProvider, { alt: string; src: string }> = {
   kalshi: { alt: "Kalshi", src: kalshiLogo },
   polymarket: { alt: "Polymarket", src: polymarketLogo },
-  sportsbooks: { alt: "BetMGM", src: betmgmLogo },
+  sportsbooks: { alt: "Bet365", src: bet365Logo },
 };
 
 function compactUsd(value: number | undefined): string | null {
@@ -236,6 +236,7 @@ function ProviderBar({
   return (
     <div className="market-bar">
       <span className="market-side">
+        <span className="decision-label">{redName}</span>
         {sportsbookQuotes ? (
           <>
             <span className="market-moneyline num">{redMoneyline}</span>
@@ -249,6 +250,7 @@ function ProviderBar({
       </span>
       <SplitBar red={red} blue={blue} redName={redName} blueName={blueName} />
       <span className="market-side market-side-blue">
+        <span className="decision-label">{blueName}</span>
         {sportsbookQuotes ? (
           <>
             <span className="market-moneyline num">{blueMoneyline}</span>
@@ -291,10 +293,10 @@ function DecisionBlock({
       className="market"
       data-market-accent={accent}
       data-upcoming-status={status}
-      aria-label={`Decision odds, ${available ? "available" : "not available"}`}
+      aria-label={`Go the distance odds, ${available ? "available" : "not available"}`}
     >
       <div className="market-head">
-        <h3 className="market-head-text">Decision</h3>
+        <h3 className="market-head-text">Go the distance</h3>
       </div>
       <div className="market-bar">
         <span className="market-side decision-side">

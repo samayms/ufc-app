@@ -1209,7 +1209,15 @@
   color: var(--market-color-polymarket);
 }
 
-.market[data-market-accent="sportsbook"] .market-head h3 {
+/*
+ * The two sportsbook providers are their own accent values, because the
+ * Go-the-distance block names whichever source actually answered. Without
+ * them here the header fell back to the generic amber while its own
+ * numbers rendered sportsbook green — a gold heading over green figures.
+ */
+.market[data-market-accent="sportsbook"] .market-head h3,
+.market[data-market-accent="odds-api-io"] .market-head h3,
+.market[data-market-accent="odds-api"] .market-head h3 {
   color: var(--market-color-sportsbook);
 }
 
@@ -1261,6 +1269,18 @@
   height: 16px;
   max-width: 100%;
   object-fit: contain;
+  transform: translateY(2px);
+}
+
+/*
+ * Bet365 ships as a 3840x2160 canvas with generous internal padding, so a
+ * shared 16px box renders its glyph far smaller than the Kalshi and
+ * Polymarket wordmarks beside it. Sizing it by the box would keep it
+ * looking undersized; it gets its own height so the visible mark reads at
+ * the same weight as its neighbours.
+ */
+.upcoming-odds-panel .market[data-market-accent="sportsbook"] .market-head h3 img {
+  height: 30px;
 }
 
 .upcoming-odds-panel > .market .market-bar {
@@ -1277,10 +1297,6 @@
   text-align: center;
 }
 
-.upcoming-odds-panel .market[data-market-accent="sportsbook"] .market-head img {
-  filter: brightness(0) invert(1);
-}
-
 .upcoming-odds-panel .market-head-text {
   text-transform: uppercase;
 }
@@ -1288,6 +1304,20 @@
 .upcoming-odds-panel .num {
   font-family: var(--font-odds);
   font-variant-numeric: tabular-nums;
+}
+
+.upcoming-odds-panel .market[data-market-accent="kalshi"] .market-bar .num {
+  color: var(--market-color-kalshi);
+}
+
+.upcoming-odds-panel .market[data-market-accent="polymarket"] .market-bar .num {
+  color: var(--market-color-polymarket);
+}
+
+.upcoming-odds-panel .market[data-market-accent="sportsbook"] .market-bar .num,
+.upcoming-odds-panel .market[data-market-accent="odds-api-io"] .market-bar .num,
+.upcoming-odds-panel .market[data-market-accent="odds-api"] .market-bar .num {
+  color: var(--market-color-sportsbook);
 }
 
 @media (max-width: 767px) {
