@@ -27,6 +27,10 @@ __pycache__/
 /*NOTES*.md
 /*RESEARCH*.md
 /*ARCHITECTURE*.md
+/CLAUDE_*.md
+
+# Local agent run logs
+/claude-*.log
 
 # Local browser/UI test artifacts
 /playwright-report/

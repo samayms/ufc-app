@@ -6,6 +6,13 @@ import type {
 } from "../src/schema.ts";
 import type { Storage } from "./storage.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
+import {
+  matchFighterPair,
+  normalizeFighterName,
+  roundConfidence,
+} from "../src/lib/boutMatch.ts";
+
+export { normalizeFighterName };
 
 export const BOUT_MAPPING_STREAM = "bout-mappings";
 export const BOUT_MAPPING_OVERRIDE_STREAM = "bout-mapping-overrides";
@@ -175,83 +182,13 @@ function cloneManualOverride(
   };
 }
 
-function normalizeConfidence(confidence: number): number {
-  return Math.round(Math.max(0, Math.min(1, confidence)) * 1_000) / 1_000;
-}
-
-function levenshteinDistance(left: string, right: string): number {
-  if (left === right) return 0;
-  if (left.length === 0) return right.length;
-  if (right.length === 0) return left.length;
-
-  let previous = Array.from(
-    { length: right.length + 1 },
-    (_value, index) => index,
-  );
-
-  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
-    const current = [leftIndex];
-    for (
-      let rightIndex = 1;
-      rightIndex <= right.length;
-      rightIndex += 1
-    ) {
-      const insertion = (current[rightIndex - 1] ?? 0) + 1;
-      const deletion = (previous[rightIndex] ?? 0) + 1;
-      const substitution =
-        (previous[rightIndex - 1] ?? 0) +
-        (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1);
-      current[rightIndex] = Math.min(
-        insertion,
-        deletion,
-        substitution,
-      );
-    }
-    previous = current;
-  }
-
-  return previous[right.length] ?? Math.max(left.length, right.length);
-}
-
-export function normalizeFighterName(name: string): string {
-  const tokens = name
-    .normalize("NFKD")
-    .replace(/\p{M}/gu, "")
-    .toLocaleLowerCase("en-US")
-    .replace(/['’]/gu, "")
-    .replace(/[^a-z0-9]+/gu, " ")
-    .trim()
-    .split(/\s+/u)
-    .filter(
-      (token) =>
-        token.length > 0 &&
-        token !== "jr" &&
-        token !== "sr" &&
-        token !== "ii" &&
-        token !== "iii" &&
-        token !== "iv",
-    )
-    .sort();
-
-  return tokens.join(" ");
-}
-
-function fighterNameSimilarity(left: string, right: string): number {
-  const normalizedLeft = normalizeFighterName(left);
-  const normalizedRight = normalizeFighterName(right);
-
-  if (normalizedLeft.length === 0 || normalizedRight.length === 0) {
-    return 0;
-  }
-
-  const length = Math.max(normalizedLeft.length, normalizedRight.length);
-  return 1 - levenshteinDistance(normalizedLeft, normalizedRight) / length;
-}
-
 /**
  * Scores two fighter pairs without assuming that a source preserves red and
- * blue corner order. Automatic name matches are capped below manual/fixture
- * mappings so callers can distinguish discovery from verified identity.
+ * blue corner order. Delegates to the shared matcher in
+ * `src/lib/boutMatch.ts` so this registry, the upcoming-odds sync, and any
+ * future provider all agree on what "the same fight" means. Automatic name
+ * matches are capped below manual/fixture mappings so callers can distinguish
+ * discovery from verified identity.
  */
 export function fuzzyMatchBoutFighters(
   known: Pick<BoutMapping, "redFighter" | "blueFighter">,
@@ -260,21 +197,10 @@ export function fuzzyMatchBoutFighters(
     "redFighter" | "blueFighter"
   >,
 ): FuzzyBoutMatch {
-  const direct =
-    (fighterNameSimilarity(known.redFighter, discovered.redFighter) +
-      fighterNameSimilarity(known.blueFighter, discovered.blueFighter)) /
-    2;
-  const reversed =
-    (fighterNameSimilarity(known.redFighter, discovered.blueFighter) +
-      fighterNameSimilarity(known.blueFighter, discovered.redFighter)) /
-    2;
-  const cornersReversed = reversed > direct;
-
+  const pair = matchFighterPair(known, discovered);
   return {
-    confidence: normalizeConfidence(
-      Math.max(direct, reversed) * 0.95,
-    ),
-    cornersReversed,
+    confidence: roundConfidence(pair.confidence * 0.95),
+    cornersReversed: pair.cornersReversed,
   };
 }
 
