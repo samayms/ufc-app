@@ -24,14 +24,18 @@ import type { Storage } from "./storage.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
 import type { ParserErrorSink } from "./review.ts";
 
-export const SHERDOG_ROUND_JOB_TYPE = "sherdog_round";
 export const SHERDOG_FINAL_JOB_TYPE = "sherdog_final";
 export const SHERDOG_OBSERVATIONS_STORAGE_STREAM =
   "sherdog-observations";
-export const SHERDOG_MIN_INITIAL_DELAY_MS = 10_000;
-export const SHERDOG_MAX_INITIAL_DELAY_MS = 15_000;
-export const SHERDOG_MIN_RETRY_DELAY_MS = 20_000;
-export const SHERDOG_MAX_RETRY_DELAY_MS = 30_000;
+export const SHERDOG_ROUND_ATTEMPT_DELAYS_MS = [
+  15_000,
+  30_000,
+  60_000,
+] as const;
+
+export function sherdogRoundJobType(attempt: 1 | 2 | 3): string {
+  return `sherdog_round_${attempt}`;
+}
 
 export interface SherdogFetchResponse {
   status: number;
@@ -74,7 +78,6 @@ export interface SherdogRoundJobsOptions {
   permissionScope: string;
   requestIntervalMs: number;
   clock?: RoundJobClock;
-  random?: () => number;
   requestTimeoutMs?: number;
   quota?: RequestIntervalGuard;
   publishHealth?: (health: {
@@ -153,33 +156,6 @@ function copyRevision(
   };
 }
 
-function sampleDelay(
-  random: number,
-  minimum: number,
-  maximum: number,
-): number {
-  if (!Number.isFinite(random) || random < 0 || random > 1) {
-    throw new TypeError("Sherdog delay sample must be between 0 and 1");
-  }
-  return minimum + Math.round(random * (maximum - minimum));
-}
-
-export function sherdogInitialDelayMs(random: number): number {
-  return sampleDelay(
-    random,
-    SHERDOG_MIN_INITIAL_DELAY_MS,
-    SHERDOG_MAX_INITIAL_DELAY_MS,
-  );
-}
-
-export function sherdogRetryDelayMs(random: number): number {
-  return sampleDelay(
-    random,
-    SHERDOG_MIN_RETRY_DELAY_MS,
-    SHERDOG_MAX_RETRY_DELAY_MS,
-  );
-}
-
 function permissionAllowsLiveRead(scope: string): boolean {
   const permissions = new Set(
     scope
@@ -241,8 +217,6 @@ export class SherdogRoundJobs {
 
   private readonly clock: RoundJobClock;
 
-  private readonly random: () => number;
-
   private readonly requestTimeoutMs: number;
 
   private readonly publishHealth: SherdogRoundJobsOptions["publishHealth"];
@@ -286,7 +260,6 @@ export class SherdogRoundJobs {
     this.dataMode = options.dataMode;
     this.permissionScope = options.permissionScope;
     this.clock = options.clock ?? { now: () => Date.now() };
-    this.random = options.random ?? Math.random;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
     this.publishHealth = options.publishHealth;
     this.metrics = options.metrics ?? NOOP_METRICS;
@@ -300,10 +273,12 @@ export class SherdogRoundJobs {
         metrics: this.metrics,
       });
 
-    this.scheduler.registerHandler(
-      SHERDOG_ROUND_JOB_TYPE,
-      (job) => this.runRound(job),
-    );
+    for (const attempt of [1, 2, 3] as const) {
+      this.scheduler.registerHandler(
+        sherdogRoundJobType(attempt),
+        (job) => this.runRound(job),
+      );
+    }
     this.scheduler.registerHandler(
       SHERDOG_FINAL_JOB_TYPE,
       (job) => this.runFinal(job),
@@ -413,17 +388,16 @@ export class SherdogRoundJobs {
       { type: "PROVISIONAL_ROUND_ENDED" | "ROUND_ENDED" }
     >,
   ): Promise<void> {
-    const initialDelay = sherdogInitialDelayMs(this.random());
-    await this.scheduler.schedule({
-      boutId: event.boutId,
-      round: event.round,
-      jobType: SHERDOG_ROUND_JOB_TYPE,
-      dueAt: this.clock.now() + initialDelay,
-      retryPolicy: {
-        delayMs: sherdogRetryDelayMs(this.random()),
-        maxAttempts: 2,
-      },
-    });
+    const now = this.clock.now();
+    for (const [index, delayMs] of SHERDOG_ROUND_ATTEMPT_DELAYS_MS.entries()) {
+      await this.scheduler.schedule({
+        boutId: event.boutId,
+        round: event.round,
+        jobType: sherdogRoundJobType((index + 1) as 1 | 2 | 3),
+        dueAt: now + delayMs,
+        retryPolicy: { delayMs: 0, maxAttempts: 1 },
+      });
+    }
   }
 
   private async scheduleFinal(

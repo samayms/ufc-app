@@ -244,9 +244,6 @@ export async function runFixtureReplay(
       timer: clock,
       random: () => 0,
     },
-    sherdog: {
-      random: () => 0,
-    },
     x: {
       source: replayXSource(clock),
     },

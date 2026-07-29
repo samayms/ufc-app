@@ -66,6 +66,10 @@ import {
   type LifecycleObservationProvider,
 } from "./lifecycleDriver.ts";
 import {
+  PreEventPoller,
+  type PreEventPollerOptions,
+} from "./preEventPoller.ts";
+import {
   createBoutMappingRegistry,
   type BoutMapping,
   type BoutMappingRegistry,
@@ -168,7 +172,6 @@ export interface CollectorSportsbookOptions {
 
 export interface CollectorSherdogOptions {
   fetcher?: SherdogFetcher;
-  random?: () => number;
   requestTimeoutMs?: number;
 }
 
@@ -184,6 +187,15 @@ export interface CollectorLifecycleDriverOptions {
   citoProvider?: LifecycleObservationProvider;
   clock?: LifecycleDriverClock;
   timer?: LifecycleDriverTimer;
+}
+
+export interface CollectorPreEventPollOptions {
+  /** Overrides config.preEventPollEnabled (defaults to live mode only). */
+  enabled?: boolean;
+  runSync?: PreEventPollerOptions["runSync"];
+  readDocument?: PreEventPollerOptions["readDocument"];
+  clock?: PreEventPollerOptions["clock"];
+  timer?: PreEventPollerOptions["timer"];
 }
 
 export type NormalizedStateLoader = (
@@ -206,6 +218,7 @@ export interface CreateCollectorOptions {
   sherdog?: CollectorSherdogOptions;
   x?: CollectorXOptions;
   lifecycle?: CollectorLifecycleDriverOptions;
+  preEventPoll?: CollectorPreEventPollOptions;
   health?: {
     now?: () => string;
     persistIntervalMs?: number;
@@ -229,6 +242,7 @@ export interface Collector {
   readonly xJobs: XRoundJobs;
   readonly lifecycle: FightLifecycleMachine;
   readonly lifecycleDriver: LifecycleDriver;
+  readonly preEventPoller: PreEventPoller;
   readonly health: SourceHealthRegistry;
   readonly review: ReviewRegistry;
   readonly server: Server;
@@ -854,6 +868,28 @@ export async function createCollector(
     metrics: healthRegistry,
   });
 
+  const preEventPoller = new PreEventPoller({
+    storage,
+    eventBus,
+    getLifecycleStates: () => lifecycle.getStates(),
+    enabled:
+      options.preEventPoll?.enabled ?? config.preEventPollEnabled,
+    runSync: options.preEventPoll?.runSync,
+    readDocument:
+      options.preEventPoll?.readDocument ??
+      (() => readUpcomingOddsDocument(config.persistencePath)),
+    nonEventDayIntervalMs: config.preEventPollIntervalMs.nonEventDay,
+    eventDayIntervalMs: config.preEventPollIntervalMs.eventDay,
+    retryMs: config.preEventPollRetryMs,
+    metrics: healthRegistry,
+    ...(options.preEventPoll?.clock === undefined
+      ? {}
+      : { clock: options.preEventPoll.clock }),
+    ...(options.preEventPoll?.timer === undefined
+      ? {}
+      : { timer: options.preEventPoll.timer }),
+  });
+
   const initializedOddsApiIoSource =
     options.sportsbook?.oddsApiIoSource ??
     createOddsApiIoSource(sourceConfig);
@@ -940,9 +976,6 @@ export async function createCollector(
     metrics: healthRegistry,
     review,
     ...(roundJobClock === undefined ? {} : { clock: roundJobClock }),
-    ...(options.sherdog?.random === undefined
-      ? {}
-      : { random: options.sherdog.random }),
     ...(options.sherdog?.requestTimeoutMs === undefined
       ? {}
       : { requestTimeoutMs: options.sherdog.requestTimeoutMs }),
@@ -1271,6 +1304,7 @@ export async function createCollector(
     xJobs: initializedXJobs,
     lifecycle,
     lifecycleDriver,
+    preEventPoller,
     health: healthRegistry,
     review,
     server,
@@ -1281,6 +1315,11 @@ export async function createCollector(
         options.lifecycle?.enabled ?? config.lifecycleDriverEnabled;
       if (lifecycleDriverEnabled) {
         await lifecycleDriver.start();
+      }
+      const preEventPollEnabled =
+        options.preEventPoll?.enabled ?? config.preEventPollEnabled;
+      if (preEventPollEnabled) {
+        await preEventPoller.start();
       }
       if (config.dataMode === "live") {
         await Promise.all(
@@ -1307,6 +1346,7 @@ export async function createCollector(
     },
     async close() {
       for (const unsubscribe of unsubscribers) unsubscribe();
+      await preEventPoller.close();
       await lifecycleDriver.close();
       await initializedOddsApiIoPoller.close();
       await initializedTheOddsApiJob.close();

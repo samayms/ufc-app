@@ -12,7 +12,7 @@ import {
   CITO_ROUND_STATS_JOB_TYPE,
 } from "./roundStats.ts";
 import {
-  SHERDOG_ROUND_JOB_TYPE,
+  sherdogRoundJobType,
   type SherdogFetcher,
 } from "./sherdogJobs.ts";
 import {
@@ -272,7 +272,6 @@ async function runIsolationCase(options: {
       random: () => 0,
     },
     sherdog: {
-      random: () => 0,
       ...(options.sherdog === undefined
         ? {}
         : { fetcher: options.sherdog }),
@@ -323,7 +322,7 @@ describe("round-source failure isolation", () => {
       jobs.find((job) => job.jobType === CITO_ROUND_STATS_JOB_TYPE),
     ).toMatchObject({ status: "failed" });
     expect(
-      jobs.find((job) => job.jobType === SHERDOG_ROUND_JOB_TYPE),
+      jobs.find((job) => job.jobType === sherdogRoundJobType(1)),
     ).toMatchObject({ status: "completed" });
     expect(
       jobs.find((job) => job.jobType === THE_ODDS_API_ROUND_JOB_TYPE),
@@ -365,7 +364,7 @@ describe("round-source failure isolation", () => {
     const jobs = collector.roundStats.scheduler.getJobs();
 
     expect(
-      jobs.find((job) => job.jobType === SHERDOG_ROUND_JOB_TYPE),
+      jobs.find((job) => job.jobType === sherdogRoundJobType(1)),
     ).toMatchObject({ status: "failed" });
     expect(
       jobs.find((job) => job.jobType === CITO_ROUND_STATS_JOB_TYPE),

@@ -523,6 +523,45 @@ describe.skipIf(!localhostAvailable)(
     time.advance(collector.config.pollingMs.espn * 5);
     expect(collector.eventBus.getEventLog()).toHaveLength(1);
   });
+
+  it("starts and stops the collector-owned pre-event poller", async () => {
+    const time = new ManualRoundTime();
+    let syncCalls = 0;
+    const collector = await createCollector({
+      env: {
+        DATA_MODE: "fixture",
+        COLLECTOR_PORT: "0",
+        PRE_EVENT_POLL_NON_EVENT_DAY_MS: "1000",
+      },
+      storage: new MemoryStorage(),
+      sse: { heartbeatMs: 50 },
+      preEventPoll: {
+        enabled: true,
+        clock: time,
+        timer: time,
+        runSync: async () => {
+          syncCalls += 1;
+        },
+      },
+    });
+    collectors.push(collector);
+
+    await collector.start();
+    await collector.preEventPoller.idle();
+    expect(collector.preEventPoller.isStarted()).toBe(true);
+    expect(syncCalls).toBe(1);
+
+    // The injected timer proves the collector armed the next slot rather than
+    // running once at startup and going quiet.
+    time.advance(1_000);
+    await collector.preEventPoller.idle();
+    expect(syncCalls).toBe(2);
+
+    await collector.close();
+    time.advance(10_000);
+    await collector.preEventPoller.idle();
+    expect(syncCalls).toBe(2);
+  });
   },
 );
 
@@ -725,7 +764,6 @@ describe("fixture collector loading", () => {
       },
       storage,
       roundStats: { clock: time, timer: time },
-      sherdog: { random: () => 0 },
     });
     collectors.push(collector);
 
@@ -736,7 +774,7 @@ describe("fixture collector loading", () => {
       detectedAt: "2026-07-28T00:00:00Z",
     });
     await collector.roundStats.idle();
-    time.advance(10_000);
+    time.advance(15_000);
     await collector.sherdogJobs.idle();
 
     expect(collector.getBootstrap().unifiedRounds).toEqual([
