@@ -98,10 +98,12 @@ describe("ScheduledCardRail", () => {
     const markup = renderToStaticMarkup(
       <ScheduledCardRail card={card} onSelect={() => undefined} />,
     );
-    const mainRedIndex = markup.indexOf("Main Red");
-    const coRedIndex = markup.indexOf("Co Red");
-    const prelimRedIndex = markup.indexOf("Prelim Red");
-    const earlyRedIndex = markup.indexOf("Early Red");
+    // Fighter names render as separate first/last spans, so look for the
+    // (uniquely identifying) first name rather than the full string.
+    const mainRedIndex = markup.indexOf(">Main<");
+    const coRedIndex = markup.indexOf(">Co<");
+    const prelimRedIndex = markup.indexOf(">Prelim<");
+    const earlyRedIndex = markup.indexOf(">Early<");
 
     expect(mainRedIndex).toBeGreaterThan(-1);
     expect(mainRedIndex).toBeLessThan(coRedIndex);

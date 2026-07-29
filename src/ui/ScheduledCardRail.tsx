@@ -1,9 +1,8 @@
-import { useState } from "react";
 import type {
   EspnScheduledCard,
   EspnScheduledFight,
-  EspnScheduledFighter,
 } from "../sources/espnSchedule.ts";
+import { MatchupCard } from "./MatchupCard.tsx";
 import { fmtMethod, fmtTime } from "./format.ts";
 import "./newComponents.css";
 
@@ -41,44 +40,8 @@ function FightStatusChip({ fight }: { fight: EspnScheduledFight }) {
   }
 }
 
-function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2);
-}
-
-function RailPhoto({
-  fighter,
-  corner,
-}: {
-  fighter: EspnScheduledFighter;
-  corner: "red" | "blue";
-}) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const showImg = fighter.headshotUrl && !imgFailed;
-  return (
-    <span
-      className={`rail-photo rail-photo-${corner}`}
-      aria-hidden={showImg ? undefined : "true"}
-    >
-      {showImg ? (
-        <img
-          className="fighter-photo-img"
-          src={fighter.headshotUrl}
-          alt={fighter.name}
-          onError={() => setImgFailed(true)}
-        />
-      ) : (
-        initialsOf(fighter.name)
-      )}
-    </span>
-  );
-}
-
 /**
- * Renders an ESPN future card using the same rail markup as CardRail.
+ * Renders an ESPN future card using the same matchup markup as CardRail.
  * Clicking a fight opens the lightweight ScheduledFightPreview — there's no
  * live round data for a future fight, so it's a preview, not the full fight
  * screen.
@@ -98,29 +61,33 @@ export function ScheduledCardRail({
             {section.displayName}
             {section.startsAt ? ` · from ${fmtTime(section.startsAt)}` : ""}
           </h2>
-          {section.fights.map((fight) => (
-            <button
-              key={fight.competitionId}
-              type="button"
-              className="rail-bout"
-              onClick={() => onSelect(fight)}
-            >
-              <span className="rail-photos">
-                <RailPhoto fighter={fight.red} corner="red" />
-                <RailPhoto fighter={fight.blue} corner="blue" />
-              </span>
-              <span className="rail-names">
-                <span className="rail-name corner-red">{fight.red.name}</span>
-                <span className="rail-name corner-blue">{fight.blue.name}</span>
-              </span>
-              <span className="rail-meta">
-                <FightStatusChip fight={fight} />
-                {fight.weightClassLabel && (
-                  <span className="rail-weight">{fight.weightClassLabel}</span>
-                )}
-              </span>
-            </button>
-          ))}
+          {section.fights.map((fight) => {
+            const winner =
+              fight.status === "final" && fight.result
+                ? fight.result.winner
+                : null;
+            return (
+              <MatchupCard
+                key={fight.competitionId}
+                isSelected={false}
+                onSelect={() => onSelect(fight)}
+                red={{ name: fight.red.name, photoUrl: fight.red.headshotUrl }}
+                blue={{ name: fight.blue.name, photoUrl: fight.blue.headshotUrl }}
+                redIsLoser={winner === "blue"}
+                blueIsLoser={winner === "red"}
+                center={
+                  <span className="event-card-center">
+                    <FightStatusChip fight={fight} />
+                    {fight.weightClassLabel && (
+                      <span className="event-card-center-weight">
+                        {fight.weightClassLabel}
+                      </span>
+                    )}
+                  </span>
+                }
+              />
+            );
+          })}
         </section>
       ))}
     </nav>
