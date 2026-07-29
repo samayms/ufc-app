@@ -75,6 +75,7 @@ function sportsbookEntry(
   redProbability: number,
   blueMoneyline: number,
   blueProbability: number,
+  overrides: Partial<UpcomingProviderEntry> = {},
 ): UpcomingProviderEntry {
   return entry("sportsbook", [
     {
@@ -87,7 +88,7 @@ function sportsbookEntry(
       native: { kind: "american-moneyline", moneyline: blueMoneyline, book: "book" },
       impliedProbability: blueProbability,
     },
-  ]);
+  ], overrides);
 }
 
 function bout(
@@ -169,6 +170,77 @@ describe("UpcomingOddsPanel", () => {
     expect(html).not.toContain("updated");
     expect(html).not.toContain("never updated");
     expect(html).not.toContain("last known price retained");
+  });
+
+  it("renders provider metadata in quiet compact footers", () => {
+    const html = render(
+      <UpcomingOddsPanel
+        bout={bout({
+          kalshi: loadedKalshi({
+            metadata: { volume: 86938.54, openInterest: 73592.04 },
+          }),
+          polymarket: loadedPolymarket({
+            metadata: { volume: 2554.22, volume24hr: 733.78, liquidity: 70202.78 },
+          }),
+          "odds-api-io": sportsbookEntry(-110, 0.5, 110, 0.5, {
+            metadata: { bookmakerCount: 2 },
+          }),
+          "odds-api": sportsbookEntry(-120, 0.48, 120, 0.48, {
+            metadata: { bookmakerCount: 2 },
+          }),
+        })}
+        redName="Makhachev"
+        blueName="Garry"
+        nowMs={NOW_MS}
+      />,
+    );
+
+    expect(html).toContain("Vol $86.9K");
+    expect(html).toContain("OI $73.6K");
+    expect(html).toContain("Vol $2.6K");
+    expect(html).toContain("24h $734");
+    expect(html).toContain("Liq $70.2K");
+    expect(html).toContain("4 books");
+    expect(html.match(/class="market-footer"/g)).toHaveLength(3);
+  });
+
+  it("omits metadata footers when fields are missing", () => {
+    const html = render(
+      <UpcomingOddsPanel
+        bout={bout({
+          kalshi: loadedKalshi({ metadata: {} }),
+          polymarket: loadedPolymarket({ metadata: { liquidity: undefined } }),
+          "odds-api-io": sportsbookEntry(-110, 0.5, 110, 0.5),
+        })}
+        redName="Makhachev"
+        blueName="Garry"
+        nowMs={NOW_MS}
+      />,
+    );
+
+    expect(html).not.toContain("market-footer");
+    expect(html).not.toMatch(/\b(Vol|OI|24h|Liq|books?)\b/);
+  });
+
+  it("never renders metadata from synthetic snapshots", () => {
+    const synthetic = loadedKalshi({
+      metadata: { volume: 86938.54, openInterest: 73592.04 },
+      snapshot: {
+        ...loadedKalshi().snapshot!,
+        provenance: { ...loadedKalshi().snapshot!.provenance, synthetic: true },
+      },
+    });
+    const html = render(
+      <UpcomingOddsPanel
+        bout={bout({ kalshi: synthetic })}
+        redName="Makhachev"
+        blueName="Garry"
+        nowMs={NOW_MS}
+      />,
+    );
+
+    expect(html).not.toContain("86.9K");
+    expect(html).not.toContain("market-footer");
   });
 
   it("keeps the same structure and em-dashes when no provider has data", () => {

@@ -1,7 +1,7 @@
 import type { OddsQuote, OddsSnapshot } from "../schema.ts";
 import betmgmLogo from "../assets/brand/betmgm-logo.webp";
 import kalshiLogo from "../assets/brand/kalshi-logo-primary-green-1-on-near-black.svg";
-import polymarketLogo from "../assets/brand/polymarket-logo-blue.svg";
+import polymarketLogo from "../assets/brand/polymarket-logo-white.svg";
 import { averageImpliedProbability } from "../lib/oddsMath.ts";
 import {
   upcomingDecisionDisplayStatus,
@@ -45,6 +45,82 @@ const PROVIDER_LOGO: Record<DisplayProvider, { alt: string; src: string }> = {
   polymarket: { alt: "Polymarket", src: polymarketLogo },
   sportsbooks: { alt: "BetMGM", src: betmgmLogo },
 };
+
+function compactUsd(value: number | undefined): string | null {
+  if (value === undefined || !Number.isFinite(value)) return null;
+  if (value >= 1_000_000) {
+    return `$${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  }
+  if (value >= 1_000) {
+    return `$${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  }
+  return `$${value.toFixed(0)}`;
+}
+
+function MetadataFooter({
+  provider,
+  entry,
+  entries,
+}: {
+  provider: DisplayProvider;
+  entry: UpcomingProviderEntry | undefined;
+  entries?: Partial<Record<UpcomingProviderId, UpcomingProviderEntry>>;
+}) {
+  const isRealEntry = (candidate: UpcomingProviderEntry | undefined) =>
+    candidate?.snapshot?.provenance.synthetic === false &&
+    candidate.status === "loaded";
+
+  if (provider === "sportsbooks") {
+    const bookmakerCount = SPORTSBOOK_PROVIDERS.reduce((total, source) => {
+      const sourceEntry = entries?.[source];
+      const count = isRealEntry(sourceEntry)
+        ? sourceEntry?.metadata?.bookmakerCount
+        : undefined;
+      return count !== undefined && Number.isFinite(count) ? total + count : total;
+    }, 0);
+    const hasBookmakerCount = SPORTSBOOK_PROVIDERS.some((source) => {
+      const sourceEntry = entries?.[source];
+      const count = isRealEntry(sourceEntry)
+        ? sourceEntry?.metadata?.bookmakerCount
+        : undefined;
+      return count !== undefined && Number.isFinite(count);
+    });
+    if (!hasBookmakerCount) return null;
+    return (
+      <div className="market-footer">
+        {bookmakerCount} {bookmakerCount === 1 ? "book" : "books"}
+      </div>
+    );
+  }
+
+  const metadata = entry !== undefined && isRealEntry(entry)
+    ? entry.metadata
+    : undefined;
+  if (metadata === undefined) return null;
+  const values = provider === "kalshi"
+    ? [
+        ["Vol", compactUsd(metadata.volume)],
+        ["OI", compactUsd(metadata.openInterest)],
+      ]
+    : [
+        ["Vol", compactUsd(metadata.volume)],
+        ["24h", compactUsd(metadata.volume24hr)],
+        ["Liq", compactUsd(metadata.liquidity)],
+      ];
+  const present = values.filter(([, value]) => value !== null);
+  if (present.length === 0) return null;
+
+  return (
+    <div className="market-footer">
+      {present.map(([label, value], index) => (
+        <span key={label}>
+          {index > 0 && <span aria-hidden="true"> · </span>}
+          {label} {value}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function bestSportsbookQuote(
   entries: readonly (UpcomingProviderEntry | undefined)[],
@@ -302,6 +378,7 @@ export function UpcomingMarketBlock({
         redName={redName}
         blueName={blueName}
       />
+      <MetadataFooter provider={provider} entry={entry} entries={entries} />
     </section>
   );
 }

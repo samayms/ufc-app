@@ -30,6 +30,18 @@
   scrollbar-width: none;
 }
 
+/* Only the screen that contains the upcoming odds panel participates in the
+ * vertical fill. Other app-content screens keep their intrinsic layout. */
+.app-content:has(.upcoming-odds-panel) {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content:has(.upcoming-odds-panel) > .fight-screen,
+.app-content:has(.upcoming-odds-panel) > .scheduled-preview {
+  flex: 1 0 auto;
+}
+
 .app-content::-webkit-scrollbar,
 .rail::-webkit-scrollbar {
   display: none;
@@ -1249,6 +1261,24 @@
   height: 16px;
   max-width: 100%;
   object-fit: contain;
+}
+
+.upcoming-odds-panel > .market .market-bar {
+  margin-block: auto;
+}
+
+.upcoming-odds-panel .market-footer {
+  margin-top: 8px;
+  color: var(--text-faint);
+  font-family: var(--font-data);
+  font-size: 0.62rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.upcoming-odds-panel .market[data-market-accent="sportsbook"] .market-head img {
+  filter: brightness(0) invert(1);
 }
 
 .upcoming-odds-panel .market-head-text {
