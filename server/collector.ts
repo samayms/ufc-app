@@ -112,6 +112,7 @@ import {
   JsonlStorage,
   type Storage,
 } from "./storage.ts";
+import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
 import {
   MarketTickStore,
   type LocalOrderBookState,
@@ -1085,6 +1086,22 @@ export async function createCollector(
     }
     if (request.method === "GET" && url.pathname === "/api/metrics") {
       sendJson(response, 200, healthRegistry.getMetrics(), secrets);
+      return;
+    }
+    // Served straight off disk rather than held in memory: the sync is a
+    // separate one-shot process, so the collector has no in-process copy to
+    // serve and re-reading is how it picks up a fresh run without a restart.
+    // A missing file is 200 with `document: null` — "the sync has not run yet"
+    // is a state the dashboard renders, not an error.
+    if (request.method === "GET" && url.pathname === "/api/upcoming-odds") {
+      sendJson(
+        response,
+        200,
+        {
+          document: await readUpcomingOddsDocument(config.persistencePath),
+        },
+        secrets,
+      );
       return;
     }
     if (request.method === "GET" && url.pathname === "/api/review") {

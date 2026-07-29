@@ -109,10 +109,12 @@ function priceFor(
   return undefined;
 }
 
-function isFightWinnerMarket(
-  market: Record<string, unknown>,
-  outcomes: string[],
-): boolean {
+/**
+ * True for the moneyline market. Gamma attaches a dozen prop markets to every
+ * fight; the winner market is the only one whose outcomes are fighter names
+ * rather than Yes/No.
+ */
+function isFightWinnerMarket(outcomes: string[]): boolean {
   if (outcomes.length !== 2) return false;
   const [first, second] = outcomes;
   if (first === undefined || second === undefined) return false;
@@ -145,7 +147,7 @@ export function parsePolymarketUpcomingMarkets(
       if (market.closed === true) continue;
 
       const outcomes = readStringArray(market.outcomes);
-      if (!isFightWinnerMarket(market, outcomes)) continue;
+      if (!isFightWinnerMarket(outcomes)) continue;
 
       const conditionId = readString(market.conditionId);
       if (conditionId === undefined) continue;
@@ -219,7 +221,7 @@ export function polymarketOutcomeTokens(
       if (typeof rawMarket !== "object" || rawMarket === null) continue;
       const market = rawMarket as Record<string, unknown>;
       const outcomes = readStringArray(market.outcomes);
-      if (!isFightWinnerMarket(market, outcomes)) continue;
+      if (!isFightWinnerMarket(outcomes)) continue;
       const conditionId = readString(market.conditionId);
       const tokens = readStringArray(market.clobTokenIds);
       if (conditionId !== undefined && tokens.length === 2) {

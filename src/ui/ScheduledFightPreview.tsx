@@ -1,13 +1,23 @@
 import { useState } from "react";
 
 import type { EspnScheduledFight, EspnScheduledFighter } from "../sources/espnSchedule.ts";
-import type { Corner, Fighter, FightRecord } from "../schema.ts";
+import type {
+  Corner,
+  Fighter,
+  FightRecord,
+  OddsSnapshot,
+} from "../schema.ts";
 
+import {
+  findUpcomingBout,
+  type UpcomingBoutOdds,
+} from "../lib/upcomingOdds.ts";
+import type { UpcomingOddsState } from "../store/useUpcomingOdds.ts";
 import { BoutHeader } from "./BoutHeader.tsx";
 import { FighterProfile } from "./FighterProfile.tsx";
 import { MarketStrip } from "./MarketStrip.tsx";
-import { OddsPanel } from "./OddsPanel.tsx";
 import { RecentForm } from "./RecentForm.tsx";
+import { UpcomingOddsPanel } from "./UpcomingOddsPanel.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
 import "./newComponents.css";
 
@@ -62,21 +72,48 @@ function toFighter(fighter: EspnScheduledFighter): Fighter {
 }
 
 /**
- * Odds tab for a future (not-yet-started) fight. No real data pipeline
- * connects future ESPN fights to any market yet, so this renders the exact
- * same `OddsPanel` the live Fight tab uses, with empty `latestOdds` /
- * `preFightOdds` — which guarantees this view is pixel-identical to the
- * live Odds tab (same component, not a hand-duplicated copy) and means a
- * future prompt wiring up real Kalshi/Polymarket/sportsbook data only has
- * to pass snapshots in, not rebuild this layout. Missing numbers render as
- * "—" in the same bar layout the live tab uses, rather than swapping to a
- * different empty-state message.
+ * Odds tab for a future (not-yet-started) fight.
+ *
+ * Backed by the twice-daily upcoming-odds sync rather than the live
+ * collector's in-fight tick stream. Each of the four providers reports its
+ * own state, because before a fight starts "Kalshi hasn't listed it" and
+ * "Kalshi is down" are the two most common situations and they are not the
+ * same answer. Nothing here falls back to fixture prices: every number on
+ * this screen was published by a real provider for this exact bout.
  */
-function OddsSection({ fight }: { fight: EspnScheduledFight }) {
+function OddsSection({
+  fight,
+  upcoming,
+}: {
+  fight: EspnScheduledFight;
+  upcoming: UpcomingOddsState;
+}) {
   const redName = fight.red.name.split(" ").at(-1) ?? fight.red.name;
   const blueName = fight.blue.name.split(" ").at(-1) ?? fight.blue.name;
+  const bout = findUpcomingBout(upcoming.document, fight.competitionId);
+
+  const notice =
+    upcoming.status === "loading"
+      ? undefined
+      : upcoming.status === "error"
+        ? (upcoming.message ??
+          "The collector could not be reached. Start it with npm run dev:live.")
+        : upcoming.document === null
+          ? "No sync has run yet. Run npm run sync:upcoming:live to load provider odds."
+          : bout === undefined
+            ? "The last sync did not cover this card."
+            : undefined;
+
   return (
-    <OddsPanel redName={redName} blueName={blueName} latestOdds={{}} preFightOdds={{}} />
+    <UpcomingOddsPanel
+      bout={bout}
+      redName={redName}
+      blueName={blueName}
+      {...(upcoming.document === null
+        ? {}
+        : { syncedAt: upcoming.document.generatedAt })}
+      {...(notice === undefined ? {} : { notice })}
+    />
   );
 }
 
@@ -124,6 +161,30 @@ const STAT_ROWS: { key: string; label: string }[] = [
   { key: "submissionAvg", label: "Submission avg" },
 ];
 
+/**
+ * Collapses a bout's per-provider entries into the market-keyed shape
+ * `MarketStrip` already speaks. Kalshi and Polymarket map straight across; the
+ * two sportsbook providers share one slot, so the more recently updated of the
+ * two wins rather than whichever happened to be enumerated last.
+ */
+function latestOddsByMarket(
+  bout: UpcomingBoutOdds,
+): Partial<Record<OddsSnapshot["market"], OddsSnapshot>> {
+  const latest: Partial<Record<OddsSnapshot["market"], OddsSnapshot>> = {};
+  for (const entry of Object.values(bout.providers)) {
+    if (entry?.status !== "loaded" || entry.snapshot === undefined) continue;
+    const market = entry.snapshot.market;
+    const existing = latest[market];
+    if (
+      existing === undefined ||
+      (entry.updatedAt ?? "") > (existing.marketUpdatedAt ?? "")
+    ) {
+      latest[market] = entry.snapshot;
+    }
+  }
+  return latest;
+}
+
 function statValue(fighter: EspnScheduledFighter, key: string): string {
   return fighter.stats?.find((stat) => stat.name === key)?.displayValue ?? "—";
 }
@@ -137,8 +198,10 @@ function statValue(fighter: EspnScheduledFighter, key: string): string {
  */
 export function ScheduledFightPreview({
   fight,
+  upcoming,
 }: {
   fight: EspnScheduledFight;
+  upcoming: UpcomingOddsState;
 }) {
   const [active, setActive] = useState<FightSection>("tale");
 
@@ -147,6 +210,11 @@ export function ScheduledFightPreview({
   // main events go 5 rounds, everything else 3) rather than ESPN-supplied
   // data.
   const scheduledRounds = fight.titleFight || fight.mainEvent ? 5 : 3;
+
+  // The strip above the tabs previews whatever the sync actually has, so a
+  // fight with real upcoming odds shows them before the Odds tab is opened.
+  const upcomingBout = findUpcomingBout(upcoming.document, fight.competitionId);
+  const stripOdds = upcomingBout === undefined ? {} : latestOddsByMarket(upcomingBout);
 
   return (
     <div className="scheduled-preview">
@@ -161,11 +229,15 @@ export function ScheduledFightPreview({
           blue: fight.blue.headshotUrl,
         }}
       />
-      <MarketStrip latestOdds={{}} preFightOdds={{}} onOpen={() => setActive("odds")} />
+      <MarketStrip
+        latestOdds={stripOdds}
+        preFightOdds={{}}
+        onOpen={() => setActive("odds")}
+      />
 
       <SectionTabs active={active} onChange={setActive} sections={PREVIEW_SECTIONS} />
 
-      {active === "odds" && <OddsSection fight={fight} />}
+      {active === "odds" && <OddsSection fight={fight} upcoming={upcoming} />}
       {active === "tale" && <TaleSection fight={fight} />}
     </div>
   );

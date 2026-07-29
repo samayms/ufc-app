@@ -1199,7 +1199,7 @@ function upsertRound(
   );
 }
 
-function collectorBaseUrl(explicit?: string): string {
+export function collectorBaseUrl(explicit?: string): string {
   const configured =
     explicit ??
     import.meta.env.VITE_COLLECTOR_URL ??

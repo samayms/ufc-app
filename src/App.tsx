@@ -34,6 +34,7 @@ import { SourceStatus } from "./ui/SourceStatus.tsx";
 import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
 import { WEIGHT_LABEL } from "./ui/format.ts";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
+import { useUpcomingOdds } from "./store/useUpcomingOdds.ts";
 import {
   fighterEspnAthleteId,
   useCurrentEventAthletePhotos,
@@ -59,6 +60,9 @@ export default function App() {
   const mainContentRef = useRef<HTMLElement>(null);
 
   const upcomingEspn = useUpcomingEspnEvents();
+  // Loaded at the app level rather than per preview: one document covers every
+  // upcoming card, so drilling between fights must not refetch it.
+  const upcomingOdds = useUpcomingOdds();
   const currentEventId = state?.event.id;
   // scheduleSelection only names a real ESPN event id once it's neither the
   // list screen (null) nor the current event's own internal id.
@@ -313,7 +317,10 @@ export default function App() {
         <main className="app-content" id="main-content" ref={mainContentRef}>
           {tab === "fight" &&
             (selectedFutureFight ? (
-              <ScheduledFightPreview fight={selectedFutureFight} />
+              <ScheduledFightPreview
+                fight={selectedFutureFight}
+                upcoming={upcomingOdds}
+              />
             ) : view ? (
               <div className="fight-screen">
                 <BoutHeader
