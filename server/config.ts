@@ -49,6 +49,14 @@ export interface CollectorConfig {
   };
   /** Whether the lifecycle driver polls providers and drives FightLifecycleMachine. */
   lifecycleDriverEnabled: boolean;
+  /** Whether the collector owns the pre-event upcoming-market schedule. */
+  preEventPollEnabled: boolean;
+  preEventPollIntervalMs: {
+    nonEventDay: number;
+    eventDay: number;
+  };
+  /** Delay for a transient pre-event sync failure. */
+  preEventPollRetryMs: number;
   /** Consecutive ESPN failures before falling back to the Cito provider. */
   lifecycleEspnFailureThreshold: number;
   /** Base URL for Cito's (unverified) live-state endpoint; required to construct a live Cito lifecycle provider. */
@@ -387,6 +395,26 @@ export function loadConfig(
     lifecycleDriverEnabled:
       parseOptionalBoolean(env, "LIFECYCLE_DRIVER_ENABLED") ??
       dataMode === "live",
+    preEventPollEnabled:
+      parseOptionalBoolean(env, "PRE_EVENT_POLL_ENABLED") ??
+      dataMode === "live",
+    preEventPollIntervalMs: {
+      nonEventDay: parsePositiveInteger(
+        env,
+        "PRE_EVENT_POLL_NON_EVENT_DAY_MS",
+        12 * 60 * 60 * 1_000,
+      ),
+      eventDay: parsePositiveInteger(
+        env,
+        "PRE_EVENT_POLL_EVENT_DAY_MS",
+        60 * 60 * 1_000,
+      ),
+    },
+    preEventPollRetryMs: parsePositiveInteger(
+      env,
+      "PRE_EVENT_POLL_RETRY_MS",
+      900_000,
+    ),
     lifecycleEspnFailureThreshold: parsePositiveInteger(
       env,
       "LIFECYCLE_ESPN_FAILURE_THRESHOLD",

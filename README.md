@@ -62,6 +62,10 @@ Configuration is supplied through server environment variables:
 | `X_MODE` (`disabled`, `embed`, `manual`, or `api`) | `embed` |
 | `COLLECTOR_PORT` | `8600` |
 | `PERSISTENCE_PATH` | `./data` |
+| `PRE_EVENT_POLL_ENABLED` | `true` in live mode, `false` in fixture mode |
+| `PRE_EVENT_POLL_NON_EVENT_DAY_MS` | `43200000` (12 hours) |
+| `PRE_EVENT_POLL_EVENT_DAY_MS` | `3600000` (1 hour) |
+| `PRE_EVENT_POLL_RETRY_MS` | `900000` (15 minutes) |
 | `ODDS_API_IO_BOOKMAKERS` | `draftkings,fanduel` |
 | `X_SPEND_CAP_USD` | `0` |
 | `SHERDOG_PERMISSION_SCOPE` | `none` |
@@ -71,6 +75,13 @@ Staleness settings use `STALE_LIFECYCLE_MS`, `STALE_STATS_MS`,
 `STALE_MARKETS_MS`, and `STALE_COMMENTARY_MS`. Polling settings use
 `POLL_ESPN_MS`, `POLL_CITO_MS`, `POLL_ODDS_API_IO_MS`,
 `POLL_THE_ODDS_API_MS`, `POLL_KALSHI_MS`, and `POLL_POLYMARKET_MS`.
+
+The resident collector owns the pre-event market schedule for Kalshi,
+Polymarket, Odds-API.io, and The Odds API: twice daily on non-event days and
+hourly on an event's scheduled calendar day. It persists successful poll times
+to deduplicate restarts, suspends while a bout is active, and uses the retry
+delay above for transient failures. Set `PRE_EVENT_POLL_ENABLED=false` when a
+separate one-shot scheduler is the intended owner.
 
 Live credentials are server-only: `CITO_API_KEY`, `ODDS_API_IO_KEY`,
 `THE_ODDS_API_KEY`, `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY_PATH`, and

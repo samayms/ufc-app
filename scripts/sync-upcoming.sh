@@ -1,8 +1,9 @@
 #!/bin/sh
 #
-# Wrapper the scheduler invokes. Kept separate from the launchd job so the
-# schedule and the work stay independent: this script is what you run by hand
-# to check the job does what you think, and nothing in it knows about launchd.
+# Optional wrapper for a scheduler or a manual run. The resident collector is
+# the primary owner of the pre-event schedule; this remains useful, and is the
+# only way to get a sync when the collector is not running. Kept separate from
+# launchd so the schedule and the work stay independent.
 #
 # Exits 0 when a document was produced, including when individual providers
 # failed — a provider outage is something the dashboard displays, not something

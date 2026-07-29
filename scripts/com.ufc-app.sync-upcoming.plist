@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Twice-daily upcoming-odds sync: 06:00 and 18:00.
+  Optional twice-daily upcoming-odds sync: 06:00 and 18:00.
+
+  The resident collector is the primary owner of the pre-event schedule,
+  including event-day hourly polls, restart deduplication, and active-bout
+  suspension. This launchd path remains useful when the collector is not
+  running; it is the only way to get a sync in that case.
 
   launchd schedules StartCalendarInterval in the machine's *local* time and
   follows daylight saving automatically, so on a Mac set to America/New_York

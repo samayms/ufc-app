@@ -12,6 +12,12 @@ describe("loadConfig", () => {
     expect(config).toMatchObject({
       dataMode: "fixture",
       xMode: "embed",
+      preEventPollEnabled: false,
+      preEventPollIntervalMs: {
+        nonEventDay: 12 * 60 * 60 * 1_000,
+        eventDay: 60 * 60 * 1_000,
+      },
+      preEventPollRetryMs: 900_000,
       port: 8600,
       persistencePath: "./data",
       oddsApiIoBookmakers: ["Bet365", "DraftKings"],
@@ -46,6 +52,9 @@ describe("loadConfig", () => {
       SHERDOG_REQUEST_INTERVAL_MS: "600000",
       STALE_LIFECYCLE_MS: "1000",
       POLL_ESPN_MS: "2000",
+      PRE_EVENT_POLL_NON_EVENT_DAY_MS: "200",
+      PRE_EVENT_POLL_EVENT_DAY_MS: "100",
+      PRE_EVENT_POLL_RETRY_MS: "50",
     });
 
     expect(config.port).toBe(0);
@@ -71,10 +80,16 @@ describe("loadConfig", () => {
     });
     expect(config.staleAfterMs.lifecycle).toBe(1000);
     expect(config.pollingMs.espn).toBe(2000);
+    expect(config.preEventPollIntervalMs).toEqual({
+      nonEventDay: 200,
+      eventDay: 100,
+    });
+    expect(config.preEventPollRetryMs).toBe(50);
   });
 
   it("defaults the lifecycle driver on for live mode and off for fixture mode", () => {
     expect(loadConfig({}).lifecycleDriverEnabled).toBe(false);
+    expect(loadConfig({}).preEventPollEnabled).toBe(false);
     expect(loadConfig({}).lifecycleEspnFailureThreshold).toBe(3);
     expect(loadConfig({}).citoApiBaseUrl).toBeUndefined();
 
@@ -86,6 +101,21 @@ describe("loadConfig", () => {
     expect(
       loadConfig({ ...base, DATA_MODE: "live" }).lifecycleDriverEnabled,
     ).toBe(true);
+    expect(
+      loadConfig({ ...base, DATA_MODE: "live" }).preEventPollEnabled,
+    ).toBe(true);
+  });
+
+  it("parses an explicit PRE_EVENT_POLL_ENABLED override in either mode", () => {
+    expect(
+      loadConfig({ PRE_EVENT_POLL_ENABLED: "true" }).preEventPollEnabled,
+    ).toBe(true);
+    expect(
+      loadConfig({ PRE_EVENT_POLL_ENABLED: "false" }).preEventPollEnabled,
+    ).toBe(false);
+    expect(() =>
+      loadConfig({ PRE_EVENT_POLL_ENABLED: "sometimes" }),
+    ).toThrow(/PRE_EVENT_POLL_ENABLED/);
   });
 
   it("parses an explicit LIFECYCLE_DRIVER_ENABLED override in either mode", () => {
