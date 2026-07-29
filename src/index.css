@@ -33,6 +33,15 @@
   --market: #e0b341;
   --market-dim: rgba(224, 179, 65, 0.15);
 
+  /* Per-source market accents — Kalshi keeps the default amber above;
+     Polymarket/Sportsbooks get reserved colors so future-fight market
+     slots stay visually distinct before real data exists for any of
+     them. Kept as tokens now so a future data-wiring pass only has to
+     plug in values, not redesign anything. */
+  --market-color-kalshi: var(--market);
+  --market-color-polymarket: #2e5cff;
+  --market-color-sportsbook: #b19661;
+
   /* Status */
   --live: #7fc79b;
   --live-dim: rgba(127, 199, 155, 0.14);

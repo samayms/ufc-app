@@ -5,6 +5,7 @@ import type { Corner, Fighter, FightRecord } from "../schema.ts";
 
 import { BoutHeader } from "./BoutHeader.tsx";
 import { FighterProfile } from "./FighterProfile.tsx";
+import { MarketBlock } from "./OddsPanel.tsx";
 import { RecentForm } from "./RecentForm.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
 import "./newComponents.css";
@@ -54,18 +55,62 @@ function toFighter(fighter: EspnScheduledFighter): Fighter {
     age: fighter.age,
     country: fighter.country,
     recentBouts: fighter.recentBouts,
+    ranking: fighter.ranking,
     provenance: { source: "espn", fetchedAt: new Date().toISOString(), synthetic: false },
   };
 }
 
-function OddsSection() {
-  // No real data pipeline connects future ESPN fights to market odds yet —
-  // this always renders the "not available" state until one is wired up.
+/**
+ * Odds tab for a future (not-yet-started) fight. No real data pipeline
+ * connects future ESPN fights to any market yet, so every slot reuses the
+ * live Fight tab's own `MarketBlock` with `snapshot={null}`/`preFight={null}`
+ * — its established empty state ("Odds aren't available yet." / "No opening
+ * line captured for this market.") — which keeps this view visually
+ * identical to the live Odds tab and means a future prompt wiring up real
+ * Kalshi/Polymarket/sportsbook data only has to pass a snapshot in, not
+ * rebuild this layout. Order and accent colors (Kalshi's existing default
+ * amber, then Polymarket, then Sportsbooks) match the product direction to
+ * "keep all those options ready."
+ */
+function OddsSection({ fight }: { fight: EspnScheduledFight }) {
+  const redName = fight.red.name.split(" ").at(-1) ?? fight.red.name;
+  const blueName = fight.blue.name.split(" ").at(-1) ?? fight.blue.name;
+  const emptyText = "Odds aren't available yet.";
   return (
-    <div className="state-notice">
-      <strong>Odds</strong>
-      <span>Odds aren't available for this fight yet.</span>
-    </div>
+    <section className="panel" aria-label="Odds comparison">
+      <div className="panel-head">
+        <h2>Markets</h2>
+        <span className="freshness">
+          implied win probability, {redName} vs {blueName}
+        </span>
+      </div>
+      <MarketBlock
+        title="Kalshi"
+        snapshot={null}
+        emptyText={emptyText}
+        preFight={null}
+        redName={redName}
+        blueName={blueName}
+      />
+      <MarketBlock
+        title="Polymarket"
+        accent="polymarket"
+        snapshot={null}
+        emptyText={emptyText}
+        preFight={null}
+        redName={redName}
+        blueName={blueName}
+      />
+      <MarketBlock
+        title="Sportsbooks"
+        accent="sportsbook"
+        snapshot={null}
+        emptyText={emptyText}
+        preFight={null}
+        redName={redName}
+        blueName={blueName}
+      />
+    </section>
   );
 }
 
@@ -161,7 +206,7 @@ export function ScheduledFightPreview({
 
       <SectionTabs active={active} onChange={setActive} sections={PREVIEW_SECTIONS} />
 
-      {active === "odds" && <OddsSection />}
+      {active === "odds" && <OddsSection fight={fight} />}
       {active === "tale" && <TaleSection fight={fight} />}
       {active === "stats" && <StatsSection fight={fight} />}
     </div>

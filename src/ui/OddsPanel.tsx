@@ -1,5 +1,5 @@
 import type { BoutView, Corner, MarketMove, OddsSnapshot } from "../schema.ts";
-import { averageImpliedProbability, consensus } from "../lib/oddsMath.ts";
+import { averageImpliedProbability } from "../lib/oddsMath.ts";
 import type { CollectorValueDelivery } from "../store/collectorClient.ts";
 import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
 import { fmtMoneyline, fmtMove, fmtNative, fmtPct, fmtTime } from "./format.ts";
@@ -64,9 +64,13 @@ function openToNowMove(
 function OpeningLine({
   open,
   current,
+  redName,
+  blueName,
 }: {
   open: OddsSnapshot | null;
   current: OddsSnapshot | null;
+  redName: string;
+  blueName: string;
 }) {
   if (!open) {
     return (
@@ -102,6 +106,7 @@ function OpeningLine({
       <div className="market-bar">
         <span className="market-side">
           <span className="market-pct num">{fmtPct(red)}</span>
+          <span className="market-name">{redName}</span>
           {singleBook && redQuote && (
             <span className="market-native num">{fmtNative(redQuote.native)}</span>
           )}
@@ -109,6 +114,7 @@ function OpeningLine({
         </span>
         <span className="market-side market-side-blue">
           <span className="market-pct num">{fmtPct(blue)}</span>
+          <span className="market-name">{blueName}</span>
           {singleBook && blueQuote && (
             <span className="market-native num">{fmtNative(blueQuote.native)}</span>
           )}
@@ -125,38 +131,64 @@ function OpeningLine({
  * may not sum to 1 (vig, spread) — the gap position uses the red share of
  * the red+blue total, and the raw numbers are always printed beside it.
  */
-function SplitBar({ red, blue }: { red: number; blue: number }) {
+function SplitBar({
+  red,
+  blue,
+  redName,
+  blueName,
+}: {
+  red: number;
+  blue: number;
+  redName: string;
+  blueName: string;
+}) {
   const total = red + blue;
   const redShare = total > 0 ? (red / total) * 100 : 50;
   return (
-    <div className="split" role="img" aria-label={`Red ${fmtPct(red)}, blue ${fmtPct(blue)}`}>
+    <div
+      className="split"
+      role="img"
+      aria-label={`${redName} ${fmtPct(red)}, ${blueName} ${fmtPct(blue)}`}
+    >
       <span className="split-red" style={{ width: `calc(${redShare}% - 1px)` }} />
       <span className="split-blue" style={{ width: `calc(${100 - redShare}% - 1px)` }} />
     </div>
   );
 }
 
-function MarketBlock({
+/**
+ * Market slots render amber (`--market`) by default, matching the live
+ * panel's existing look. `accent` lets a caller opt a slot into its
+ * reserved color instead — used by the future-fight preview to keep
+ * Kalshi/Polymarket/Sportsbooks visually distinct even before real data
+ * exists for any of them. Kalshi intentionally has no accent value: it
+ * keeps the existing default amber, per product direction.
+ */
+export function MarketBlock({
   title,
-  note,
+  accent,
   snapshot,
   emptyText,
   delivery,
   moves,
   preFight,
+  redName,
+  blueName,
   children,
 }: {
   title: string;
-  note?: string;
+  accent?: "polymarket" | "sportsbook";
   snapshot: OddsSnapshot | null;
   emptyText: string;
   delivery?: CollectorValueDelivery;
   moves?: Partial<Record<Corner, MarketMove>>;
   preFight: OddsSnapshot | null;
+  redName: string;
+  blueName: string;
   children?: React.ReactNode;
 }) {
   return (
-    <section className="market" aria-label={`${title} odds`}>
+    <section className="market" data-market-accent={accent} aria-label={`${title} odds`}>
       <div className="market-head">
         <h3>{title}</h3>
         {snapshot &&
@@ -170,14 +202,13 @@ function MarketBlock({
       </div>
       {snapshot ? (
         <>
-          <MarketBar snapshot={snapshot} moves={moves} />
-          {note && <p className="market-note">{note}</p>}
+          <MarketBar snapshot={snapshot} moves={moves} redName={redName} blueName={blueName} />
           {children}
         </>
       ) : (
         <p className="empty">{emptyText}</p>
       )}
-      <OpeningLine open={preFight} current={snapshot} />
+      <OpeningLine open={preFight} current={snapshot} redName={redName} blueName={blueName} />
     </section>
   );
 }
@@ -185,9 +216,13 @@ function MarketBlock({
 function MarketBar({
   snapshot,
   moves,
+  redName,
+  blueName,
 }: {
   snapshot: OddsSnapshot;
   moves?: Partial<Record<Corner, MarketMove>>;
+  redName: string;
+  blueName: string;
 }) {
   const red = averageImpliedProbability(snapshot, "red");
   const blue = averageImpliedProbability(snapshot, "blue");
@@ -199,14 +234,16 @@ function MarketBar({
     <div className="market-bar">
       <span className="market-side">
         <span className="market-pct num">{fmtPct(red)}</span>
+        <span className="market-name">{redName}</span>
         {singleBook && redQuote && (
           <span className="market-native num">{fmtNative(redQuote.native)}</span>
         )}
         <MarketMoveTag move={moves?.red} />
       </span>
-      <SplitBar red={red} blue={blue} />
+      <SplitBar red={red} blue={blue} redName={redName} blueName={blueName} />
       <span className="market-side market-side-blue">
         <span className="market-pct num">{fmtPct(blue)}</span>
+        <span className="market-name">{blueName}</span>
         {singleBook && blueQuote && (
           <span className="market-native num">{fmtNative(blueQuote.native)}</span>
         )}
@@ -224,7 +261,15 @@ const BOOK_LABEL: Record<string, string> = {
   williamhill_us: "William Hill",
 };
 
-function BookRows({ snapshot }: { snapshot: OddsSnapshot }) {
+function BookRows({
+  snapshot,
+  redName,
+  blueName,
+}: {
+  snapshot: OddsSnapshot;
+  redName: string;
+  blueName: string;
+}) {
   const books = new Map<string, { red?: number; blue?: number }>();
   for (const q of snapshot.quotes) {
     if (q.native.kind !== "american-moneyline") continue;
@@ -239,10 +284,10 @@ function BookRows({ snapshot }: { snapshot: OddsSnapshot }) {
         <tr>
           <th scope="col">Book</th>
           <th scope="col" className="num">
-            Red
+            {redName}
           </th>
           <th scope="col" className="num">
-            Blue
+            {blueName}
           </th>
         </tr>
       </thead>
@@ -273,42 +318,26 @@ export function OddsPanel({
       : bout.status === "canceled" || bout.status === "postponed"
         ? `Market unavailable — bout ${bout.status}.`
         : "No market for this bout yet.";
-  const agg = consensus(Object.values(latestOdds));
   const sportsbook = latestOdds.sportsbook ?? null;
+  const redName = bout.fighters.red.name.split(" ").at(-1) ?? bout.fighters.red.name;
+  const blueName = bout.fighters.blue.name.split(" ").at(-1) ?? bout.fighters.blue.name;
   return (
     <section className="panel" aria-label="Odds comparison">
       <div className="panel-head">
         <h2>Markets</h2>
-        <span className="freshness">implied win probability, red vs blue</span>
+        <span className="freshness">
+          implied win probability, {redName} vs {blueName}
+        </span>
       </div>
-      {agg && agg.markets > 1 && (
-        <div className="consensus">
-          <span className="market-side">
-            <span className="market-pct num">{fmtPct(agg.red)}</span>
-            <span className="market-native num">
-              {fmtPct(agg.spread.red[0])}–{fmtPct(agg.spread.red[1])}
-            </span>
-          </span>
-          <SplitBar red={agg.red} blue={agg.blue} />
-          <span className="market-side market-side-blue">
-            <span className="market-pct num">{fmtPct(agg.blue)}</span>
-            <span className="market-native num">
-              {fmtPct(agg.spread.blue[0])}–{fmtPct(agg.spread.blue[1])}
-            </span>
-          </span>
-          <p className="market-note consensus-note">
-            Vig-free consensus across {agg.markets} markets · range shown below each side
-          </p>
-        </div>
-      )}
       <MarketBlock
         title="Kalshi"
-        note="Mid of bid/ask, in contract cents."
         snapshot={latestOdds.kalshi ?? null}
         emptyText={finalText}
         delivery={deliveries?.kalshi}
         moves={marketMoves.kalshi}
         preFight={preFightOdds.kalshi ?? null}
+        redName={redName}
+        blueName={blueName}
       />
       <MarketBlock
         title="Polymarket"
@@ -317,17 +346,20 @@ export function OddsPanel({
         delivery={deliveries?.polymarket}
         moves={marketMoves.polymarket}
         preFight={preFightOdds.polymarket ?? null}
+        redName={redName}
+        blueName={blueName}
       />
       <MarketBlock
         title="Sportsbooks"
-        note="Averaged across books; vig included, so sides sum past 100%."
         snapshot={sportsbook}
         emptyText={finalText}
         delivery={deliveries?.sportsbook}
         moves={marketMoves.sportsbook}
         preFight={preFightOdds.sportsbook ?? null}
+        redName={redName}
+        blueName={blueName}
       >
-        {sportsbook && <BookRows snapshot={sportsbook} />}
+        {sportsbook && <BookRows snapshot={sportsbook} redName={redName} blueName={blueName} />}
       </MarketBlock>
     </section>
   );
