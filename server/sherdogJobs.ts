@@ -51,6 +51,16 @@ export interface SherdogFetcher {
   ): Promise<SherdogFetchResponse>;
 }
 
+export interface LiveSherdogFetcherOptions {
+  permissionScope: string;
+  resolveBoutUrl: (boutId: string) => string | undefined;
+  baseUrl?: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  maxBytes?: number;
+  userAgent?: string;
+}
+
 export interface SherdogObservationRevision {
   observation: SherdogRoundObservation;
   revision: number;
@@ -168,6 +178,128 @@ function permissionAllowsLiveRead(scope: string): boolean {
     permissions.has("sherdog-read") ||
     permissions.has("all")
   );
+}
+
+async function readWithByteLimit(
+  response: Response,
+  maxBytes: number,
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new Error("Sherdog response exceeded the maximum response size");
+    }
+    return text;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value === undefined) continue;
+
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error("Sherdog response exceeded the maximum response size");
+    }
+    chunks.push(value);
+  }
+
+  const combined = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(combined);
+}
+
+function resolveSherdogRequestUrl(
+  baseUrl: string,
+  boutUrl: string,
+): string {
+  const parsed = new URL(boutUrl, baseUrl);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new TypeError("Sherdog bout URL must use HTTP or HTTPS");
+  }
+  return parsed.toString();
+}
+
+export function createLiveSherdogFetcher(
+  options: LiveSherdogFetcherOptions,
+): SherdogFetcher {
+  if (!permissionAllowsLiveRead(options.permissionScope)) {
+    throw new TerminalRoundJobError(
+      "Sherdog permission scope does not allow live-blog reads",
+    );
+  }
+
+  const baseUrl = options.baseUrl ?? "https://www.sherdog.com";
+  const parsedBaseUrl = new URL(baseUrl);
+  if (
+    parsedBaseUrl.protocol !== "http:" &&
+    parsedBaseUrl.protocol !== "https:"
+  ) {
+    throw new TypeError("Sherdog base URL must use HTTP or HTTPS");
+  }
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError("Sherdog request timeout must be positive");
+  }
+  const maxBytes = options.maxBytes ?? SHERDOG_MAX_PAYLOAD_BYTES;
+  if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+    throw new TypeError("Sherdog maximum response size must be positive");
+  }
+  const userAgent =
+    options.userAgent ??
+    "UFC Live Dashboard/1.0 (personal non-commercial dashboard)";
+  if (userAgent.trim().length === 0) {
+    throw new TypeError("Sherdog User-Agent must not be empty");
+  }
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+
+  return {
+    async fetchBout(boutId) {
+      const boutUrl = options.resolveBoutUrl(boutId)?.trim();
+      if (boutUrl === undefined || boutUrl.length === 0) {
+        throw new TerminalRoundJobError(
+          `Sherdog bout ${boutId} has no mapped live-blog URL`,
+        );
+      }
+      const requestedUrl = resolveSherdogRequestUrl(baseUrl, boutUrl);
+      const controller = new AbortController();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const request = (async (): Promise<SherdogFetchResponse> => {
+        const response = await fetchImpl(requestedUrl, {
+          signal: controller.signal,
+          headers: { "User-Agent": userAgent },
+        });
+        const html = await readWithByteLimit(response, maxBytes);
+        return {
+          status: response.status,
+          html,
+          sourceUrl: requestedUrl,
+        };
+      })();
+
+      try {
+        return await Promise.race([
+          request,
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(() => {
+              controller.abort();
+              reject(new Error("Sherdog request timed out"));
+            }, timeoutMs);
+          }),
+        ]);
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+      }
+    },
+  };
 }
 
 function errorText(error: unknown): string {

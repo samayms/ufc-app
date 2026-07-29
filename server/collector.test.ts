@@ -810,6 +810,127 @@ describe("fixture collector loading", () => {
     );
   });
 
+  it("keeps the live Sherdog transport fail-closed without permission and wires it when permitted", async () => {
+    const liveEnv = Object.fromEntries(
+      CREDENTIAL_ENV_NAMES.filter((name) => name !== "X_BEARER_TOKEN").map(
+        (name) => [name, `secret-${name}`],
+      ),
+    );
+    const stateLoader = async () => {
+      const state = await loadFixtureState();
+      const fixtureBout = state.event.bouts.find(
+        (candidate) => candidate.id === "bout-main",
+      );
+      const fixtureView = state.boutViews["bout-main"];
+      if (fixtureBout === undefined || fixtureView === undefined) {
+        throw new Error("Missing fixture main bout");
+      }
+      const mappedBout = {
+        ...fixtureBout,
+        externalRefs: [
+          ...fixtureBout.externalRefs,
+          {
+            source: "sherdog" as const,
+            id: "/news/news/live-card",
+          },
+        ],
+      };
+      return {
+        ...state,
+        event: {
+          ...state.event,
+          bouts: state.event.bouts.map((candidate) =>
+            candidate.id === mappedBout.id ? mappedBout : candidate,
+          ),
+        },
+        boutViews: {
+          ...state.boutViews,
+          "bout-main": { ...fixtureView, bout: mappedBout },
+        },
+      };
+    };
+
+    const blockedFetch = vi.fn<typeof fetch>();
+    const blockedCollector = await createCollector({
+      env: {
+        ...liveEnv,
+        DATA_MODE: "live",
+        COLLECTOR_PORT: "0",
+        CITO_API_BASE_URL: "https://cito.example.invalid/api/v1",
+        SHERDOG_PERMISSION_SCOPE: "none",
+        LIFECYCLE_DRIVER_ENABLED: "false",
+        PRE_EVENT_POLL_ENABLED: "false",
+      },
+      storage: new MemoryStorage(),
+      stateLoader,
+      market: { transports: [] },
+      sherdog: { fetchImpl: blockedFetch },
+    });
+    collectors.push(blockedCollector);
+    blockedCollector.eventBus.emit({
+      type: "FIGHT_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: "2026-07-28T00:00:00Z",
+    });
+    await blockedCollector.sherdogJobs.idle();
+    expect(blockedFetch).not.toHaveBeenCalled();
+
+    const liveFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(
+          "<article><h3>Round 1</h3><p>Collector live transport</p><p>Sherdog scores the round 10-9 Reyes.</p></article>",
+          { status: 200 },
+        ),
+      );
+    const liveTime = new ManualRoundTime();
+    const liveCollector = await createCollector({
+      env: {
+        ...liveEnv,
+        DATA_MODE: "live",
+        COLLECTOR_PORT: "0",
+        CITO_API_BASE_URL: "https://cito.example.invalid/api/v1",
+        SHERDOG_PERMISSION_SCOPE: "sherdog-read",
+        LIFECYCLE_DRIVER_ENABLED: "false",
+        PRE_EVENT_POLL_ENABLED: "false",
+      },
+      storage: new MemoryStorage(),
+      stateLoader,
+      market: { transports: [] },
+      roundStats: { clock: liveTime, timer: liveTime },
+      sherdog: {
+        fetchImpl: liveFetch,
+        baseUrl: "https://sherdog.example.invalid",
+      },
+    });
+    collectors.push(liveCollector);
+    liveCollector.eventBus.emit({
+      type: "FIGHT_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: "2026-07-28T00:00:00Z",
+    });
+    await liveCollector.sherdogJobs.idle();
+    liveTime.advance(0);
+    await liveCollector.sherdogJobs.idle();
+
+    expect(
+      liveCollector.roundStats.scheduler.getJobs().find(
+        (job) => job.jobType === "sherdog_final",
+      ),
+    ).toMatchObject({ status: "completed" });
+    expect(liveFetch).toHaveBeenCalledWith(
+      "https://sherdog.example.invalid/news/news/live-card",
+      expect.objectContaining({
+        headers: {
+          "User-Agent":
+            "UFC Live Dashboard/1.0 (personal non-commercial dashboard)",
+        },
+      }),
+    );
+  });
+
   it("wires configured manual X score links into the unified round", async () => {
     const collector = await createCollector({
       env: {

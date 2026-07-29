@@ -70,6 +70,7 @@ Configuration is supplied through server environment variables:
 | `X_SPEND_CAP_USD` | `0` |
 | `SHERDOG_PERMISSION_SCOPE` | `none` |
 | `SHERDOG_REQUEST_INTERVAL_MS` | `300000` |
+| `SHERDOG_BASE_URL` | `https://www.sherdog.com` |
 
 Staleness settings use `STALE_LIFECYCLE_MS`, `STALE_STATS_MS`,
 `STALE_MARKETS_MS`, and `STALE_COMMENTARY_MS`. Polling settings use
@@ -88,6 +89,10 @@ Live credentials are server-only: `CITO_API_KEY`, `ODDS_API_IO_KEY`,
 `X_BEARER_TOKEN`. Live startup fails when required credentials are missing;
 `X_BEARER_TOKEN` is required only when `X_MODE=api`.
 
+Sherdog live reads require both a permitting `SHERDOG_PERMISSION_SCOPE`
+(`live-blog-read`, `sherdog-read`, or `all`) and actual permission from
+Sherdog. The transport remains fail-closed without both.
+
 Every source behavior that only a real card can confirm is tracked in
 [`LIVE_CARD_VALIDATION.md`](LIVE_CARD_VALIDATION.md). A green test suite proves
 the collector handles the payload shapes we believe the sources emit; it proves
@@ -101,8 +106,7 @@ which in turn drives every downstream round job (round stats, Sherdog, X,
 The Odds API, Odds-API.io). It is constructed on every collector startup and
 stopped on `close()`, but it is **not started automatically in fixture
 mode** — set `LIFECYCLE_DRIVER_ENABLED=true` to turn it on for a manual
-fixture-mode demo run. It defaults to on automatically once `DATA_MODE=live`
-(live transports are not implemented yet, so this has no effect today).
+fixture-mode demo run. It defaults to on automatically once `DATA_MODE=live`.
 
 This default exists because the bundled fixture event already has a bout
 "between rounds" (`bout-main`, round 2, clock `0:00`); a poll loop that's on
@@ -129,8 +133,11 @@ the driver falls back to polling Cito (at `POLL_CITO_MS`) until ESPN
 succeeds again. ESPN and Cito live fetchers (`src/sources/espn.ts`,
 `src/sources/cito.ts`) are only constructed under `DATA_MODE=live`, are
 never invoked by tests, and fail closed without `CITO_API_KEY` /
-`CITO_API_BASE_URL`. Their endpoint shapes are best-effort placeholders —
-see the "unverified" notes in those files — pending real API access.
+`CITO_API_BASE_URL`. Their URLs are the vendor-documented ones and the ESPN
+scoreboard path is verified; what remains unverified is the shape of the
+per-round and per-bout response bodies. See
+[`LIVE_CARD_VALIDATION.md`](LIVE_CARD_VALIDATION.md) for exactly which
+assumptions a real card still needs to confirm.
 
 ## Keep it running with tmux
 

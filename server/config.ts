@@ -69,6 +69,7 @@ export interface CollectorConfig {
   sherdog: {
     permissionScope: string;
     requestIntervalMs: number;
+    baseUrl: string;
   };
   credentials: Readonly<Partial<Record<CredentialEnvName, string>>>;
 }
@@ -443,6 +444,8 @@ export function loadConfig(
         "SHERDOG_REQUEST_INTERVAL_MS",
         300_000,
       ),
+      baseUrl:
+        env.SHERDOG_BASE_URL?.trim() || "https://www.sherdog.com",
     },
     credentials,
   };

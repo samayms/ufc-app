@@ -25,6 +25,7 @@ describe("loadConfig", () => {
       sherdog: {
         permissionScope: "none",
         requestIntervalMs: 300_000,
+        baseUrl: "https://www.sherdog.com",
       },
       credentials: {},
     });
@@ -50,6 +51,7 @@ describe("loadConfig", () => {
       ]),
       SHERDOG_PERMISSION_SCOPE: "live-blog-read",
       SHERDOG_REQUEST_INTERVAL_MS: "600000",
+      SHERDOG_BASE_URL: "https://sherdog.example.invalid",
       STALE_LIFECYCLE_MS: "1000",
       POLL_ESPN_MS: "2000",
       PRE_EVENT_POLL_NON_EVENT_DAY_MS: "200",
@@ -77,6 +79,7 @@ describe("loadConfig", () => {
     expect(config.sherdog).toEqual({
       permissionScope: "live-blog-read",
       requestIntervalMs: 600_000,
+      baseUrl: "https://sherdog.example.invalid",
     });
     expect(config.staleAfterMs.lifecycle).toBe(1000);
     expect(config.pollingMs.espn).toBe(2000);

@@ -110,6 +110,10 @@ Every item below should end with an observation written into this file
 
 ## Commentary and scores
 
+- [ ] **Sherdog live transport permission.** The permission-gated transport is
+      built but remains inert until permission is obtained from Sherdog and
+      `SHERDOG_PERMISSION_SCOPE` is set to a permitting value. The URL pattern
+      and live page shape are both unverified; no live request has been made.
 - [ ] **Sherdog access from this runtime.** Confirm the requests are permitted
       from the actual machine and IP. On HTTP 403 the collector stops by
       design — it must not be "fixed" by rotating proxies, identities, or user

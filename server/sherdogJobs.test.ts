@@ -10,6 +10,7 @@ import type {
 } from "./roundJobs.ts";
 import { RoundStatsPipeline } from "./roundStats.ts";
 import {
+  createLiveSherdogFetcher,
   SHERDOG_ROUND_ATTEMPT_DELAYS_MS,
   SHERDOG_FINAL_JOB_TYPE,
   SherdogRoundJobs,
@@ -112,6 +113,7 @@ async function setup(
   options: {
     dataMode?: "fixture" | "live";
     permissionScope?: string;
+    requestIntervalMs?: number;
     storage?: MemoryStorage;
     time?: ManualTime;
   } = {},
@@ -136,7 +138,7 @@ async function setup(
       boutId === bout.id ? bout : undefined,
     dataMode: options.dataMode ?? "fixture",
     permissionScope: options.permissionScope ?? "none",
-    requestIntervalMs: 0,
+    requestIntervalMs: options.requestIntervalMs ?? 0,
     clock: time,
   });
   return { eventBus, storage, time, roundStats, jobs };
@@ -494,6 +496,45 @@ describe("SherdogRoundJobs", () => {
         .getJobs()
         .find((job) => job.jobType === sherdogRoundJobType(1)),
     ).toMatchObject({ status: "failed", attemptCount: 1 });
+    await jobs.close();
+    await roundStats.close();
+  });
+
+  it("enforces the configured request interval through the existing guard", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(html(1, "Interval-limited"), { status: 200 }));
+    const fetcher = createLiveSherdogFetcher({
+      permissionScope: "sherdog-read",
+      resolveBoutUrl: () => "/news/news/live-card",
+      baseUrl: "https://sherdog.example.invalid",
+      fetchImpl,
+    });
+    const { eventBus, time, roundStats, jobs } = await setup(fetcher, {
+      dataMode: "live",
+      permissionScope: "sherdog-read",
+      requestIntervalMs: 60_000,
+    });
+
+    roundEnded(eventBus);
+    await jobs.idle();
+    time.advance(SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0]);
+    await jobs.idle();
+    time.advance(
+      SHERDOG_ROUND_ATTEMPT_DELAYS_MS[1] -
+        SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0],
+    );
+    await jobs.idle();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(
+      roundStats.scheduler.getJob(
+        bout.id + ":1:" + sherdogRoundJobType(2),
+      ),
+    ).toMatchObject({
+      status: "failed",
+      lastError: expect.stringContaining("request interval has not elapsed"),
+    });
     await jobs.close();
     await roundStats.close();
   });

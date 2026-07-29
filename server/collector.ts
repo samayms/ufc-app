@@ -103,9 +103,10 @@ import {
 } from "./push.ts";
 import { ReviewRegistry } from "./review.ts";
 import type { QuotaPolicy } from "./quota.ts";
-import type {
-  RoundJobClock,
-  RoundJobTimer,
+import {
+  TerminalRoundJobError,
+  type RoundJobClock,
+  type RoundJobTimer,
 } from "./roundJobs.ts";
 import {
   RoundStatsPipeline,
@@ -113,6 +114,7 @@ import {
 } from "./roundStats.ts";
 import {
   createFixtureSherdogFetcher,
+  createLiveSherdogFetcher,
   SherdogRoundJobs,
   type SherdogFetcher,
 } from "./sherdogJobs.ts";
@@ -181,6 +183,8 @@ export interface CollectorSportsbookOptions {
 export interface CollectorSherdogOptions {
   fetcher?: SherdogFetcher;
   requestTimeoutMs?: number;
+  fetchImpl?: typeof fetch;
+  baseUrl?: string;
 }
 
 export interface CollectorXOptions {
@@ -975,6 +979,38 @@ export async function createCollector(
     options.sportsbook?.timer ?? options.roundStats?.timer;
   const findBout = (boutId: string) =>
     loaded.event.bouts.find((bout) => bout.id === boutId);
+  let defaultSherdogFetcher: SherdogFetcher;
+  if (config.dataMode === "fixture") {
+    defaultSherdogFetcher = createFixtureSherdogFetcher();
+  } else {
+    try {
+      defaultSherdogFetcher = createLiveSherdogFetcher({
+        permissionScope: config.sherdog.permissionScope,
+        resolveBoutUrl: (boutId) =>
+          initializedBoutMappings
+            .getExternalRefs(boutId)
+            .find((ref) => ref.source === "sherdog")?.id,
+        baseUrl: options.sherdog?.baseUrl ?? config.sherdog.baseUrl,
+        ...(options.sherdog?.fetchImpl === undefined
+          ? {}
+          : { fetchImpl: options.sherdog.fetchImpl }),
+        ...(options.sherdog?.requestTimeoutMs === undefined
+          ? {}
+          : { timeoutMs: options.sherdog.requestTimeoutMs }),
+      });
+    } catch (error) {
+      if (!(error instanceof TerminalRoundJobError)) throw error;
+      defaultSherdogFetcher = {
+        async fetchBout() {
+          return {
+            status: 503,
+            html: "",
+            sourceUrl: config.sherdog.baseUrl,
+          };
+        },
+      };
+    }
+  }
   const initializedSherdogJobs = await SherdogRoundJobs.create({
     eventBus,
     scheduler: initializedRoundStats.scheduler,
@@ -982,17 +1018,7 @@ export async function createCollector(
     roundStats: initializedRoundStats,
     fetcher:
       options.sherdog?.fetcher ??
-      (config.dataMode === "fixture"
-        ? createFixtureSherdogFetcher()
-        : {
-            async fetchBout() {
-              return {
-                status: 503,
-                html: "",
-                sourceUrl: "https://www.sherdog.com/",
-              };
-            },
-          }),
+      defaultSherdogFetcher,
     getBout: findBout,
     dataMode: config.dataMode,
     permissionScope: config.sherdog.permissionScope,
