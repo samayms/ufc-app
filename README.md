@@ -86,8 +86,12 @@ separate one-shot scheduler is the intended owner.
 Live credentials are server-only: `CITO_API_KEY`, `ODDS_API_IO_KEY`,
 `THE_ODDS_API_KEY`, `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY_PATH`, and
 `X_BEARER_TOKEN`. Live startup fails when required credentials are missing;
-`X_BEARER_TOKEN` is required only when `X_MODE=api`. Live transports are not
-enabled yet.
+`X_BEARER_TOKEN` is required only when `X_MODE=api`.
+
+Every source behavior that only a real card can confirm is tracked in
+[`LIVE_CARD_VALIDATION.md`](LIVE_CARD_VALIDATION.md). A green test suite proves
+the collector handles the payload shapes we believe the sources emit; it proves
+nothing about whether they emit them.
 
 #### Lifecycle driver
 
