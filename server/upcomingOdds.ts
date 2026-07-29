@@ -152,6 +152,13 @@ const DECISION_PROVIDER_ORDER = [
   "odds-api-io",
 ] as const;
 
+/**
+ * A thin Polymarket book should not outrank sportsbook consensus for the
+ * fight-distance read. Total market volume is used instead of 24-hour volume
+ * because it is the more stable signal for whether a market is established.
+ */
+export const POLYMARKET_MIN_VOLUME_USD = 10_000;
+
 function toSnapshot(
   provider: UpcomingProviderId,
   boutId: string,
@@ -247,6 +254,17 @@ function resolveDecision(
     const attachment = attachments.get(`${providerId}\u0000${boutId}`);
     const decision = attachment?.market.decision;
     if (decision === undefined) continue;
+
+    if (providerId === "polymarket") {
+      const volume = attachment?.market.metadata?.volume;
+      if (
+        volume === undefined ||
+        !Number.isFinite(volume) ||
+        volume < POLYMARKET_MIN_VOLUME_USD
+      ) {
+        continue;
+      }
+    }
 
     return {
       state: "loaded",

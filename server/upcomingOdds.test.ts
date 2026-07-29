@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  POLYMARKET_MIN_VOLUME_USD,
   syncUpcomingOdds,
   type UpcomingCard,
 } from "./upcomingOdds.ts";
@@ -110,6 +111,76 @@ describe("syncUpcomingOdds", () => {
       finishProbability: 0.6,
       source: "odds-api-io",
       synthetic: false,
+    });
+  });
+
+  it("lets sportsbook odds outrank a thin Polymarket distance market", async () => {
+    const polymarket = {
+      ...kalshiMainEvent(),
+      externalId: "polymarket-thin",
+      metadata: { volume: POLYMARKET_MIN_VOLUME_USD - 1 },
+      decision: {
+        externalId: "polymarket-thin-distance",
+        decisionProbability: 0.7,
+        finishProbability: 0.3,
+      },
+    };
+    const sportsbook = {
+      ...kalshiMainEvent(),
+      externalId: "sportsbook-distance",
+      decision: {
+        externalId: "sportsbook-distance-market",
+        decisionProbability: 0.4,
+        finishProbability: 0.6,
+      },
+    };
+    const document = await syncUpcomingOdds({
+      cards: [CARD],
+      providers: [
+        stubProvider("polymarket", [polymarket]),
+        stubProvider("odds-api-io", [sportsbook]),
+      ],
+      now: NOW,
+    });
+
+    expect(document.events[0]?.bouts[0]?.decision).toMatchObject({
+      source: "odds-api-io",
+      decisionProbability: 0.4,
+    });
+  });
+
+  it("uses Polymarket when its distance market clears the volume floor", async () => {
+    const polymarket = {
+      ...kalshiMainEvent(),
+      externalId: "polymarket-liquid",
+      metadata: { volume: POLYMARKET_MIN_VOLUME_USD },
+      decision: {
+        externalId: "polymarket-liquid-distance",
+        decisionProbability: 0.7,
+        finishProbability: 0.3,
+      },
+    };
+    const sportsbook = {
+      ...kalshiMainEvent(),
+      externalId: "sportsbook-distance",
+      decision: {
+        externalId: "sportsbook-distance-market",
+        decisionProbability: 0.4,
+        finishProbability: 0.6,
+      },
+    };
+    const document = await syncUpcomingOdds({
+      cards: [CARD],
+      providers: [
+        stubProvider("polymarket", [polymarket]),
+        stubProvider("odds-api-io", [sportsbook]),
+      ],
+      now: NOW,
+    });
+
+    expect(document.events[0]?.bouts[0]?.decision).toMatchObject({
+      source: "polymarket",
+      decisionProbability: 0.7,
     });
   });
 
