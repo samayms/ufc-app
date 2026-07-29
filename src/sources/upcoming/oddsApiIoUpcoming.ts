@@ -142,7 +142,12 @@ export function parseOddsApiIoUpcomingEvents(
  * Implied probability is taken straight from the decimal rather than round-
  * tripping through American, which would round twice.
  */
-export function parseOddsApiIoUpcomingOdds(payload: unknown): {
+export function parseOddsApiIoUpcomingOdds(
+  payload: unknown,
+  bookmakers?: readonly string[],
+): {
+  firstFighter?: string;
+  secondFighter?: string;
   quotes: UpcomingQuote[];
   marketUpdatedAt?: string;
   metadata?: UpcomingMarketMetadata;
@@ -151,8 +156,25 @@ export function parseOddsApiIoUpcomingOdds(payload: unknown): {
   if (typeof payload !== "object" || payload === null) {
     throw new TypeError("Odds-API.io /odds response was not a JSON object");
   }
+  const firstFighter = readString(
+    (payload as Record<string, unknown>).home,
+  );
+  const secondFighter = readString(
+    (payload as Record<string, unknown>).away,
+  );
   const books = (payload as Record<string, unknown>).bookmakers;
-  if (typeof books !== "object" || books === null) return { quotes: [] };
+  if (typeof books !== "object" || books === null) {
+    return {
+      ...(firstFighter === undefined ? {} : { firstFighter }),
+      ...(secondFighter === undefined ? {} : { secondFighter }),
+      quotes: [],
+    };
+  }
+
+  const wanted =
+    bookmakers === undefined
+      ? undefined
+      : new Set(bookmakers.map((bookmaker) => bookmaker.toLowerCase()));
 
   const quotes: UpcomingQuote[] = [];
   let marketUpdatedAt: string | undefined;
@@ -164,6 +186,9 @@ export function parseOddsApiIoUpcomingOdds(payload: unknown): {
   for (const [bookName, markets] of Object.entries(
     books as Record<string, unknown>,
   )) {
+    if (wanted !== undefined && !wanted.has(bookName.toLowerCase())) {
+      continue;
+    }
     if (!Array.isArray(markets)) continue;
     const moneyline = markets.find(
       (market: unknown) =>
@@ -278,6 +303,8 @@ export function parseOddsApiIoUpcomingOdds(payload: unknown): {
         })();
 
   return {
+    ...(firstFighter === undefined ? {} : { firstFighter }),
+    ...(secondFighter === undefined ? {} : { secondFighter }),
     quotes,
     ...(marketUpdatedAt === undefined ? {} : { marketUpdatedAt }),
     ...(Object.keys(metadata).length === 0 ? {} : { metadata }),

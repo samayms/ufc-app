@@ -23,10 +23,14 @@ import { createEspnSource } from "../src/sources/espn.ts";
 import { createKalshiSource } from "../src/sources/kalshi.ts";
 import {
   createOddsApiSource,
+  createTheOddsApiLiveHook,
+  type TheOddsApiLiveHook,
   type TheOddsApiSource,
 } from "../src/sources/oddsapi.ts";
 import {
+  createOddsApiIoLiveHook,
   createOddsApiIoSource,
+  type OddsApiIoLiveHook,
   type OddsApiIoSource,
 } from "../src/sources/oddsApiIo.ts";
 import { createPolymarketSource } from "../src/sources/polymarket.ts";
@@ -165,6 +169,10 @@ export interface CollectorSportsbookOptions {
   clock?: RoundJobClock;
   timer?: OddsApiIoPollTimer & RoundJobTimer;
   random?: () => number;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  oddsApiIoLiveHook?: OddsApiIoLiveHook;
+  theOddsApiLiveHook?: TheOddsApiLiveHook;
   oddsApiIoSource?: OddsApiIoSource;
   theOddsApiSource?: TheOddsApiSource;
   oddsApiIoQuotaPolicy?: QuotaPolicy;
@@ -890,9 +898,23 @@ export async function createCollector(
       : { timer: options.preEventPoll.timer }),
   });
 
+  const oddsApiIoLiveHook =
+    options.sportsbook?.oddsApiIoLiveHook ??
+    (config.dataMode === "live" &&
+    config.credentials.ODDS_API_IO_KEY !== undefined
+      ? createOddsApiIoLiveHook({
+          bookmakers: config.oddsApiIoBookmakers,
+          ...(options.sportsbook?.fetchImpl === undefined
+            ? {}
+            : { fetchImpl: options.sportsbook.fetchImpl }),
+          ...(options.sportsbook?.timeoutMs === undefined
+            ? {}
+            : { timeoutMs: options.sportsbook.timeoutMs }),
+        })
+      : undefined);
   const initializedOddsApiIoSource =
     options.sportsbook?.oddsApiIoSource ??
-    createOddsApiIoSource(sourceConfig);
+    createOddsApiIoSource(sourceConfig, oddsApiIoLiveHook);
   if (config.dataMode === "fixture") {
     for (const discoveredEvent of
       await initializedOddsApiIoSource.discoverEvents()) {
@@ -1043,8 +1065,22 @@ export async function createCollector(
   });
   // One client shared by the round job and the active poller, so both count
   // against the same account and neither can double-instantiate it.
+  const theOddsApiLiveHook =
+    options.sportsbook?.theOddsApiLiveHook ??
+    (config.dataMode === "live" &&
+    config.credentials.THE_ODDS_API_KEY !== undefined
+      ? createTheOddsApiLiveHook({
+          ...(options.sportsbook?.fetchImpl === undefined
+            ? {}
+            : { fetchImpl: options.sportsbook.fetchImpl }),
+          ...(options.sportsbook?.timeoutMs === undefined
+            ? {}
+            : { timeoutMs: options.sportsbook.timeoutMs }),
+        })
+      : undefined);
   const theOddsApiSource =
-    options.sportsbook?.theOddsApiSource ?? createOddsApiSource(sourceConfig);
+    options.sportsbook?.theOddsApiSource ??
+    createOddsApiSource(sourceConfig, theOddsApiLiveHook);
   const initializedTheOddsApiJob = new TheOddsApiRoundJob({
     eventBus,
     scheduler: initializedRoundStats.scheduler,

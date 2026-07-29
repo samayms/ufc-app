@@ -113,10 +113,17 @@ export const MAX_DISCOVERY_BYTES = 12 * 1024 * 1024;
 export class UpcomingProviderError extends Error {
   readonly provider: UpcomingProviderId;
 
-  constructor(provider: UpcomingProviderId, message: string) {
+  readonly status?: number;
+
+  constructor(
+    provider: UpcomingProviderId,
+    message: string,
+    status?: number,
+  ) {
     super(message);
     this.name = "UpcomingProviderError";
     this.provider = provider;
+    if (status !== undefined) this.status = status;
   }
 }
 
@@ -146,10 +153,11 @@ export async function fetchProviderJson(
       throw new UpcomingProviderError(
         provider,
         `HTTP ${response.status} from ${redactUrl(url)}`,
+        response.status,
       );
     }
     const text = await response.text();
-    if (text.length > MAX_DISCOVERY_BYTES) {
+    if (new TextEncoder().encode(text).byteLength > MAX_DISCOVERY_BYTES) {
       throw new UpcomingProviderError(
         provider,
         "discovery response exceeded the maximum allowed size",

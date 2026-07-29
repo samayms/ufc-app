@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import liveOdds from "../fixtures/theOddsApiLive.json" with { type: "json" };
 import {
   createOddsApiSource,
+  createTheOddsApiLiveHook,
   parseTheOddsApiSnapshot,
+  THE_ODDS_API_H2H_REQUEST,
   type OddsApiEvent,
 } from "./oddsapi.ts";
 
@@ -99,6 +101,21 @@ describe("createOddsApiSource", () => {
       source.getOddsSnapshot(getFixtureBout("bout-comain")),
     ).resolves.toBeNull();
   });
+
+  it("fails closed in live mode when the credential or hook is absent", async () => {
+    const missingCredential = createOddsApiSource({ mode: "live" });
+    await expect(
+      missingCredential.getOddsSnapshot(getFixtureBout("bout-main")),
+    ).rejects.toThrow("The Odds API live source is not installed");
+
+    const missingHook = createOddsApiSource({
+      mode: "live",
+      credentials: { THE_ODDS_API_KEY: "server-only" },
+    });
+    await expect(
+      missingHook.getOddsSnapshot(getFixtureBout("bout-main")),
+    ).rejects.toThrow("The Odds API live source is not installed");
+  });
 });
 
 describe("createOddsApiSource getTickHistory", () => {
@@ -174,6 +191,92 @@ describe("parseTheOddsApiSnapshot against the captured live payload", () => {
   it("returns null for a bout the payload does not cover", () => {
     expect(
       parseTheOddsApiSnapshot(liveOdds as OddsApiEvent[], base, false),
-    ).toBeNull();
+      ).toBeNull();
+  });
+
+  it("fetches the captured live market with the required request shape", async () => {
+    const liveEvent = liveOdds[0];
+    const bout = getFixtureBout("bout-main");
+    const liveBout: Bout = {
+      ...bout,
+      id: "bout-live",
+      fighters: {
+        red: { ...bout.fighters.red, name: liveEvent?.home_team ?? "" },
+        blue: { ...bout.fighters.blue, name: liveEvent?.away_team ?? "" },
+      },
+    };
+    let requestedUrl = "";
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      requestedUrl = String(input);
+      return new Response(JSON.stringify(liveOdds), { status: 200 });
+    }) as typeof fetch;
+    const hook = createTheOddsApiLiveHook({ fetchImpl });
+    const source = createOddsApiSource(
+      {
+        mode: "live",
+        credentials: { THE_ODDS_API_KEY: "server-only" },
+      },
+      hook,
+    );
+
+    const snapshot = await source.getH2hSnapshot(
+      liveBout,
+      THE_ODDS_API_H2H_REQUEST,
+    );
+    expect(snapshot?.quotes).toHaveLength(4);
+    expect(snapshot?.provenance).toMatchObject({
+      source: "odds-api",
+      synthetic: false,
+    });
+    expect(requestedUrl).toContain("/sports/mma_mixed_martial_arts/odds");
+    expect(requestedUrl).toContain("regions=us");
+    expect(requestedUrl).toContain("markets=h2h");
+    expect(requestedUrl).toContain("oddsFormat=american");
+  });
+
+  it("omits the live snapshot when the market does not list the bout", async () => {
+    const hook = createTheOddsApiLiveHook({
+      fetchImpl: (async () =>
+        new Response(JSON.stringify(liveOdds), { status: 200 })) as typeof fetch,
+    });
+    const source = createOddsApiSource(
+      {
+        mode: "live",
+        credentials: { THE_ODDS_API_KEY: "server-only" },
+      },
+      hook,
+    );
+
+    await expect(
+      source.getH2hSnapshot(
+        getFixtureBout("bout-main"),
+        THE_ODDS_API_H2H_REQUEST,
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it("omits a failed live request without retrying", async () => {
+    let calls = 0;
+    const hook = createTheOddsApiLiveHook({
+      fetchImpl: (async () => {
+        calls += 1;
+        return new Response("{}", { status: 503 });
+      }) as typeof fetch,
+    });
+    const source = createOddsApiSource(
+      {
+        mode: "live",
+        credentials: { THE_ODDS_API_KEY: "server-only" },
+      },
+      hook,
+    );
+
+    await expect(
+      source.getH2hSnapshot(
+        getFixtureBout("bout-main"),
+        THE_ODDS_API_H2H_REQUEST,
+      ),
+    ).resolves.toBeNull();
+    expect(calls).toBe(1);
   });
 });

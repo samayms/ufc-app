@@ -64,13 +64,25 @@ Every item below should end with an observation written into this file
 - [ ] **Odds-API.io UFC freshness and bookmaker availability.** Are DraftKings
       and FanDuel actually present for UFC, and do prices move during a round
       or only between fights? A feed that only updates between fights makes the
-      30s active-bout cadence pointless.
+      30s active-bout cadence pointless. The captured payload
+      (`src/fixtures/oddsApiIoOddsLive.json`) contains **only Bet365**, so the
+      configured `draftkings,fanduel` default is unproven against a real
+      response — multi-book filtering is tested against an augmented copy of
+      that payload, which proves the filter works but not that those two books
+      exist for UFC.
+- [ ] **Odds-API.io event grouping.** The vendor's events endpoint returns one
+      event per fight, with no card-level id, so live discovery groups bouts
+      under an id derived from the league name. Confirm against a real card that
+      this groups the way the mapper expects.
 - [ ] **Odds-API.io quota reality.** The 90/hour and 450/day soft caps and the
       30/45/60s degradation ladder are configured defaults, not measured
       limits. Confirm against the vendor's real headers.
 - [ ] **The Odds API post-round usefulness.** One `h2h` snapshot at T+20–30s
       after each round: confirm the prices have actually moved off the
-      pre-fight line by then, or the snapshot is decoration.
+      pre-fight line by then, or the snapshot is decoration. The captured
+      payload (`src/fixtures/theOddsApiLive.json`) holds a single event, so
+      multi-event responses and the region/market parameters are exercised only
+      against that one shape.
 
 ## Commentary and scores
 

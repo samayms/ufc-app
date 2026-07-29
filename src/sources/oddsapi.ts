@@ -13,6 +13,15 @@ import type {
   OddsSource,
   SourceConfig,
 } from "./contract.ts";
+import {
+  fetchProviderJson,
+  type UpcomingFetchOptions,
+} from "./upcoming/types.ts";
+import {
+  buildTheOddsApiUpcomingUrl,
+  parseTheOddsApiUpcomingMarkets,
+  THE_ODDS_API_SPORT,
+} from "./upcoming/theOddsApiUpcoming.ts";
 
 export const THE_ODDS_API_H2H_REQUEST = {
   sport: "mma_mixed_martial_arts",
@@ -36,6 +45,16 @@ export interface TheOddsApiSource extends OddsSource {
     source?: MarketSource,
   ): Promise<MarketTick[]>;
 }
+
+export interface TheOddsApiLiveHook {
+  getH2hSnapshot(
+    apiKey: string,
+    bout: Bout,
+    request: TheOddsApiH2hRequest,
+  ): Promise<OddsSnapshot | null>;
+}
+
+export type TheOddsApiLiveHookOptions = UpcomingFetchOptions;
 
 interface OddsApiOutcome {
   name: string;
@@ -156,11 +175,115 @@ function parseSnapshot(bout: Bout): OddsSnapshot | null {
   return parseTheOddsApiSnapshot(oddsEvents, bout, true);
 }
 
-export function createOddsApiSource(config: SourceConfig): TheOddsApiSource {
+function sameFighterPair(
+  first: string,
+  second: string,
+  bout: Bout,
+): boolean {
+  const names = new Set([bout.fighters.red.name, bout.fighters.blue.name]);
+  return names.has(first) && names.has(second);
+}
+
+export function createTheOddsApiLiveHook(
+  options: TheOddsApiLiveHookOptions = {},
+): TheOddsApiLiveHook {
+  return {
+    async getH2hSnapshot(
+      apiKey: string,
+      bout: Bout,
+      request: TheOddsApiH2hRequest,
+    ): Promise<OddsSnapshot | null> {
+      if (
+        apiKey.trim().length === 0 ||
+        request.sport !== THE_ODDS_API_SPORT ||
+        request.region !== "us" ||
+        request.market !== "h2h"
+      ) {
+        return null;
+      }
+
+      try {
+        const markets = parseTheOddsApiUpcomingMarkets(
+          await fetchProviderJson(
+            "odds-api",
+            buildTheOddsApiUpcomingUrl(apiKey, "us"),
+            options,
+          ),
+        );
+        const market = markets.find((candidate) =>
+          sameFighterPair(candidate.firstFighter, candidate.secondFighter, bout),
+        );
+        if (market === undefined || market.quotes.length === 0) return null;
+
+        const quotes = market.quotes.flatMap((quote) => {
+          const corner =
+            quote.side === "first"
+              ? bout.fighters.red.name === market.firstFighter
+                ? "red"
+                : "blue"
+              : bout.fighters.red.name === market.secondFighter
+                ? "red"
+                : "blue";
+          return [{
+            corner,
+            native: quote.native,
+            impliedProbability: quote.impliedProbability,
+          } satisfies OddsQuote];
+        });
+        if (quotes.length === 0) return null;
+
+        const fetchedAt = new Date().toISOString();
+        return {
+          boutId: bout.id,
+          market: "sportsbook",
+          quotes,
+          ...(market.marketUpdatedAt === undefined
+            ? {}
+            : { marketUpdatedAt: market.marketUpdatedAt }),
+          provenance: {
+            source: "odds-api",
+            fetchedAt,
+            synthetic: false,
+          },
+        };
+      } catch {
+        // This source is a broad comparison only; a failed request is omitted
+        // and the round job deliberately has no retry policy.
+        return null;
+      }
+    },
+  };
+}
+
+export function createOddsApiSource(
+  config: SourceConfig,
+  liveHook?: TheOddsApiLiveHook,
+): TheOddsApiSource {
   if (config.mode === "live") {
+    const apiKey = config.credentials?.THE_ODDS_API_KEY?.trim();
     const failClosed = (): never => {
       throw new Error("The Odds API live source is not installed");
     };
+    if (liveHook !== undefined && apiKey !== undefined && apiKey.length > 0) {
+      return {
+        async getH2hSnapshot(
+          bout: Bout,
+          request: TheOddsApiH2hRequest,
+        ): Promise<OddsSnapshot | null> {
+          return liveHook.getH2hSnapshot(apiKey, bout, request);
+        },
+        async getOddsSnapshot(bout: Bout): Promise<OddsSnapshot | null> {
+          return liveHook.getH2hSnapshot(
+            apiKey,
+            bout,
+            THE_ODDS_API_H2H_REQUEST,
+          );
+        },
+        async getTickHistory() {
+          return failClosed();
+        },
+      };
+    }
     return {
       async getH2hSnapshot() {
         return failClosed();
