@@ -420,7 +420,6 @@ export default function App() {
               <section className="card-screen" aria-labelledby="card-title">
                 <div className="page-heading">
                   <div>
-                    <span className="page-kicker">Browse</span>
                     <h2 id="card-title">Events</h2>
                   </div>
                 </div>
