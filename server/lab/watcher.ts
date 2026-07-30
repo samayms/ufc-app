@@ -35,6 +35,12 @@ import {
 import { parseSherdogRoundObservations } from "../../src/sources/sherdog.ts";
 import type { WatchStatus, WatchTarget } from "./contract.ts";
 import { redactSecrets } from "./contract.ts";
+import {
+  diffEspnCoreStats,
+  fetchEspnCoreStats,
+  hasNonzeroEspnCoreStats,
+  type EspnCoreStatsSample,
+} from "./espnStats.ts";
 import type { LabTimeline } from "./timeline.ts";
 
 const DEFAULT_ESPN_INTERVAL_MS = 5_000;
@@ -89,6 +95,12 @@ interface EspnSample {
   entry: EspnLifecycleEntry;
 }
 
+interface EspnStatsPairSample {
+  boutId: string;
+  red: EspnCoreStatsSample;
+  blue: EspnCoreStatsSample;
+}
+
 export interface LabWatcherOptions {
   timeline: LabTimeline;
   env: Record<string, string | undefined>;
@@ -119,6 +131,10 @@ export class LabWatcher {
   private espnLastSample?: EspnSample;
 
   private espnPending?: PendingEspnRound;
+
+  private espnStatsLast?: EspnStatsPairSample;
+
+  private espnStatsSampleNumber = 0;
 
   /** (bout,round) keys already recorded as found — never recorded twice. */
   private readonly foundCito = new Set<string>();
@@ -171,6 +187,10 @@ export class LabWatcher {
   }
 
   start(target: WatchTarget): WatchStatus {
+    const sameEspnStatsFight = this.target?.boutId === target.boutId;
+    const previousEspnStats = sameEspnStatsFight
+      ? this.espnStatsLast
+      : undefined;
     if (this.running) this.stop();
 
     this.pollers.clear();
@@ -180,6 +200,8 @@ export class LabWatcher {
     this.espnSeen.clear();
     this.espnLastSample = undefined;
     this.espnPending = undefined;
+    this.espnStatsLast = previousEspnStats;
+    if (!sameEspnStatsFight) this.espnStatsSampleNumber = 0;
     this.foundCito.clear();
     this.foundSherdog.clear();
     this.kalshiComplete = false;
@@ -201,6 +223,23 @@ export class LabWatcher {
         "espn",
         Math.max(MIN_INTERVAL_MS, target.espnIntervalMs ?? DEFAULT_ESPN_INTERVAL_MS),
         () => this.pollEspn(),
+      );
+    }
+    if (
+      (target.espnEventId ?? "").trim().length > 0 &&
+      (target.espnBoutId ?? "").trim().length > 0 &&
+      (target.espnRedAthleteId ?? "").trim().length > 0 &&
+      (target.espnBlueAthleteId ?? "").trim().length > 0
+    ) {
+      this.schedule(
+        "espn-stats",
+        Math.max(
+          MIN_INTERVAL_MS,
+          target.espnStatsIntervalMs ??
+            target.espnIntervalMs ??
+            DEFAULT_ESPN_INTERVAL_MS,
+        ),
+        () => this.pollEspnStats(),
       );
     }
     if ((target.citoBoutIds ?? []).length > 0) {
@@ -382,8 +421,9 @@ export class LabWatcher {
       return;
     }
 
-    const { json } = await this.getJson(buildEspnScoreboardUrl(eventId));
-    const entries = parseEspnScoreboardLifecycle(json);
+    const { json } = await this.getJson(buildEspnScoreboardUrl());
+    // ESPN ignores an `event` query param, so the event is selected here.
+    const entries = parseEspnScoreboardLifecycle(json, eventId);
     const observedAtMs = this.now();
     const observedAt = new Date(observedAtMs).toISOString();
     const entry = entries.find(
@@ -455,6 +495,93 @@ export class LabWatcher {
         this.pausePoller("espn");
       }
     }
+  }
+
+  /**
+   * ESPN's core endpoint exposes one fight-cumulative split per fighter. Every
+   * sample is kept, including identical ones, because the lab is measuring
+   * publication timing and cache behavior rather than manufacturing rounds.
+   */
+  private async pollEspnStats(): Promise<void> {
+    const eventId = this.target?.espnEventId?.trim() ?? "";
+    const competitionId = this.target?.espnBoutId?.trim() ?? "";
+    const redAthleteId = this.target?.espnRedAthleteId?.trim() ?? "";
+    const blueAthleteId = this.target?.espnBlueAthleteId?.trim() ?? "";
+    const boutId = this.target?.boutId;
+    if (
+      eventId.length === 0 ||
+      competitionId.length === 0 ||
+      redAthleteId.length === 0 ||
+      blueAthleteId.length === 0 ||
+      boutId === undefined
+    ) {
+      return;
+    }
+
+    const [red, blue] = await Promise.all([
+      fetchEspnCoreStats({
+        eventId,
+        competitionId,
+        athleteId: redAthleteId,
+        fetchImpl: this.fetchImpl,
+        now: this.now,
+      }),
+      fetchEspnCoreStats({
+        eventId,
+        competitionId,
+        athleteId: blueAthleteId,
+        fetchImpl: this.fetchImpl,
+        now: this.now,
+      }),
+    ]);
+    const previous =
+      this.espnStatsLast?.boutId === boutId
+        ? this.espnStatsLast
+        : undefined;
+    const redChanges = diffEspnCoreStats(previous?.red, red);
+    const blueChanges = diffEspnCoreStats(previous?.blue, blue);
+    const previousHadValues =
+      previous !== undefined &&
+      (hasNonzeroEspnCoreStats(previous.red) ||
+        hasNonzeroEspnCoreStats(previous.blue));
+    const hasValues =
+      hasNonzeroEspnCoreStats(red) || hasNonzeroEspnCoreStats(blue);
+    const firstNonzero = !previousHadValues && hasValues;
+    const changedFields = [
+      ...redChanges.map((change) => ({ corner: "red", ...change })),
+      ...blueChanges.map((change) => ({ corner: "blue", ...change })),
+    ];
+    const sampleNumber = ++this.espnStatsSampleNumber;
+    this.espnStatsLast = { boutId, red, blue };
+
+    this.timeline.record({
+      kind: "observation",
+      source: "espn-stats",
+      at: maxIsoTimestamp(red.response.receivedAt, blue.response.receivedAt),
+      boutId,
+      ...(this.target?.round === undefined
+        ? {}
+        : { round: this.target.round }),
+      label:
+        changedFields.length === 0
+          ? `ESPN cumulative stats sample ${sampleNumber} — no field changes`
+          : `ESPN cumulative stats sample ${sampleNumber} — ${changedFields.length} fields changed`,
+      detail: {
+        cumulativeOnly: true,
+        exactRoundStats: false,
+        sampleNumber,
+        firstNonzero,
+        hasValues,
+        changedCount: changedFields.length,
+        changedFields,
+        responseChanged:
+          previous === undefined ||
+          previous.red.response.sha256 !== red.response.sha256 ||
+          previous.blue.response.sha256 !== blue.response.sha256,
+        red,
+        blue,
+      },
+    });
   }
 
   // -- Cito -----------------------------------------------------------------
@@ -705,6 +832,10 @@ function espnFingerprint(entry: EspnLifecycleEntry): string {
     entry.completed,
     entry.clockSeconds === undefined ? "-" : Math.round(entry.clockSeconds),
   ].join("/");
+}
+
+function maxIsoTimestamp(left: string, right: string): string {
+  return Date.parse(left) >= Date.parse(right) ? left : right;
 }
 
 function espnClockCorrectionSeconds(

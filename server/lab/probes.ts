@@ -304,10 +304,13 @@ const espnScoreboard = jsonProbe({
       },
     ],
   },
-  url: (params) =>
-    buildEspnScoreboardUrl(param(params, "eventId", WEEKEND.espnEventId)),
-  summarize: ({ json }) => {
-    const entries = parseEspnScoreboardLifecycle(json);
+  // ESPN ignores an `event` query param; the id filters the parsed payload.
+  url: () => buildEspnScoreboardUrl(),
+  summarize: ({ json, params }) => {
+    const entries = parseEspnScoreboardLifecycle(
+      json,
+      param(params, "eventId", WEEKEND.espnEventId),
+    );
     const live = entries.filter((entry) => entry.state === "in");
     const summary = [
       `${entries.length} bouts parsed, ${live.length} in progress`,

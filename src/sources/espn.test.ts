@@ -115,15 +115,40 @@ describe("createEspnSource", () => {
 });
 
 describe("buildEspnScoreboardUrl", () => {
-  it("builds a scoreboard URL scoped to the requested event", () => {
-    const url = buildEspnScoreboardUrl("600051234");
+  it("builds a bare scoreboard URL when no date is given", () => {
+    const url = buildEspnScoreboardUrl();
 
-    expect(url).toContain("event=600051234");
     expect(() => new URL(url)).not.toThrow();
+    expect(new URL(url).search).toBe("");
   });
 
-  it("rejects an empty event id", () => {
-    expect(() => buildEspnScoreboardUrl("  ")).toThrow(/non-empty event id/);
+  it("addresses a specific card by date", () => {
+    const url = buildEspnScoreboardUrl({
+      date: new Date("2026-07-11T23:00:00Z"),
+    });
+
+    expect(new URL(url).searchParams.get("dates")).toBe("20260711");
+  });
+
+  // Regression guard. ESPN silently ignores an `event` parameter — verified
+  // 2026-07-30, where a bogus id returned the current scoreboard unchanged —
+  // so emitting one would look like event-scoped addressing while actually
+  // returning whatever card happens to be live.
+  it("never emits an event query parameter", () => {
+    expect(new URL(buildEspnScoreboardUrl()).searchParams.has("event")).toBe(
+      false,
+    );
+    expect(
+      new URL(
+        buildEspnScoreboardUrl({ date: new Date("2026-07-11T23:00:00Z") }),
+      ).searchParams.has("event"),
+    ).toBe(false);
+  });
+
+  it("rejects an invalid date", () => {
+    expect(() => buildEspnScoreboardUrl({ date: new Date("nonsense") })).toThrow(
+      /valid date/,
+    );
   });
 });
 
@@ -223,6 +248,66 @@ describe("parseEspnScoreboardLifecycle", () => {
         completed: false,
       },
     ]);
+  });
+
+  // ESPN ignores the `event` query parameter, so a scoreboard response can
+  // carry a card the caller never asked for. Selecting the event here is the
+  // only thing standing between the lifecycle machine and another fight's
+  // clock, so an absent event must fail loudly rather than fall through to
+  // whatever happens to be on the board.
+  it("selects only the requested event when several are on the board", () => {
+    const payload = {
+      events: [
+        {
+          id: "600051234",
+          competitions: [
+            {
+              id: "401770001",
+              status: { period: 1, displayClock: "2:30", type: { state: "in" } },
+            },
+          ],
+        },
+        {
+          id: "600059999",
+          competitions: [
+            {
+              id: "401880001",
+              status: { period: 3, displayClock: "5:00", type: { state: "in" } },
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(parseEspnScoreboardLifecycle(payload, "600051234")).toEqual([
+      {
+        externalId: "401770001",
+        state: "in",
+        period: 1,
+        completed: false,
+        clockSeconds: 150,
+      },
+    ]);
+  });
+
+  it("throws when the requested event is absent from the scoreboard", () => {
+    const payload = {
+      events: [{ id: "600059999", competitions: [] }],
+    };
+
+    expect(() =>
+      parseEspnScoreboardLifecycle(payload, "600051234"),
+    ).toThrow(/did not contain event 600051234/);
+  });
+
+  it("throws when a summary payload is for a different event", () => {
+    const payload = {
+      event: { header: { id: "600059999", competitions: [] } },
+    };
+
+    expect(() =>
+      parseEspnScoreboardLifecycle(payload, "600051234"),
+    ).toThrow(/was for event 600059999/);
   });
 
   it("rejects a non-object payload", () => {

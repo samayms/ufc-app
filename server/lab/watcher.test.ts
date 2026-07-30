@@ -26,6 +26,10 @@ function espnResponse(clock: string): Response {
     JSON.stringify({
       events: [
         {
+          // Real scoreboard payloads carry the event id, and the parser now
+          // relies on it to select the requested card — ESPN ignores the
+          // `event` query parameter.
+          id: "600059339",
           competitions: [
             {
               id: "401870843",
@@ -40,6 +44,48 @@ function espnResponse(clock: string): Response {
       ],
     }),
     { status: 200 },
+  );
+}
+
+function espnStatsResponse(
+  athleteId: string,
+  strikesLanded: number,
+): Response {
+  return new Response(
+    JSON.stringify({
+      athlete: { id: athleteId },
+      splits: {
+        id: "0",
+        name: "All Splits",
+        type: "total",
+        categories: [
+          {
+            name: "general",
+            stats: [
+              {
+                name: "totalStrikesLanded",
+                displayName: "Total Strikes Landed",
+                value: strikesLanded,
+                displayValue: String(strikesLanded),
+              },
+              {
+                name: "sigStrikesLanded",
+                displayName: "Significant Strikes Landed",
+                value: strikesLanded,
+                displayValue: String(strikesLanded),
+              },
+            ],
+          },
+        ],
+      },
+    }),
+    {
+      status: 200,
+      headers: {
+        "cache-control": "max-age=5",
+        age: "1",
+      },
+    },
   );
 }
 
@@ -298,6 +344,7 @@ describe("LabWatcher continuous ESPN fight polling", () => {
         JSON.stringify({
           events: [
             {
+              id: "600059339",
               competitions: [
                 {
                   id: "401870843",
@@ -372,6 +419,94 @@ describe("LabWatcher continuous ESPN fight polling", () => {
     expect(watcher.status()).toMatchObject({
       running: true,
       pollers: [expect.objectContaining({ name: "espn", polls: 3 })],
+    });
+    watcher.stop();
+  });
+
+  it("samples both fighters' cumulative core stats every five seconds", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TIME);
+    let redCalls = 0;
+    let blueCalls = 0;
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes("site.api.espn.com")) return espnResponse("0:10");
+      if (url.includes("/competitors/4685870/statistics")) {
+        redCalls += 1;
+        return espnStatsResponse("4685870", redCalls === 1 ? 0 : 4);
+      }
+      if (url.includes("/competitors/4426312/statistics")) {
+        blueCalls += 1;
+        return espnStatsResponse("4426312", blueCalls === 1 ? 0 : 3);
+      }
+      throw new Error(`unexpected URL ${url}`);
+    });
+    const timeline = new LabTimeline({ now: () => Date.now() });
+    const watcher = new LabWatcher({
+      timeline,
+      fetchImpl,
+      now: () => Date.now(),
+      env: {},
+    });
+
+    watcher.start({
+      boutId: "12879",
+      espnEventId: "600059339",
+      espnBoutId: "401870843",
+      espnRedAthleteId: "4685870",
+      espnBlueAthleteId: "4426312",
+      continuousEspn: true,
+      espnIntervalMs: 5_000,
+      espnStatsIntervalMs: 5_000,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    const samples = timeline
+      .since(0)
+      .filter((entry) => entry.source === "espn-stats");
+    expect(samples).toHaveLength(2);
+    expect(samples[0]).toMatchObject({
+      boutId: "12879",
+      detail: {
+        cumulativeOnly: true,
+        exactRoundStats: false,
+        sampleNumber: 1,
+        changedCount: 0,
+        hasValues: false,
+        red: {
+          athleteId: "4685870",
+          response: { cacheControl: "max-age=5", age: "1" },
+        },
+        blue: { athleteId: "4426312" },
+      },
+    });
+    expect(samples[1]).toMatchObject({
+      detail: {
+        sampleNumber: 2,
+        firstNonzero: true,
+        hasValues: true,
+        changedCount: 4,
+        changedFields: expect.arrayContaining([
+          expect.objectContaining({
+            corner: "red",
+            name: "totalStrikesLanded",
+            delta: 4,
+          }),
+          expect.objectContaining({
+            corner: "blue",
+            name: "sigStrikesLanded",
+            delta: 3,
+          }),
+        ]),
+      },
+    });
+    expect(watcher.status()).toMatchObject({
+      running: true,
+      pollers: expect.arrayContaining([
+        expect.objectContaining({ name: "espn", polls: 2 }),
+        expect.objectContaining({ name: "espn-stats", polls: 2 }),
+      ]),
     });
     watcher.stop();
   });
