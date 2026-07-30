@@ -7,6 +7,7 @@ import {
   createLiveEspnLifecycleFetcher,
 } from "../src/sources/espn.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
+import { ROUND_LENGTH_SECONDS } from "./lifecycle.ts";
 import type {
   FightLifecycleMachine,
   FightLifecycleObservation,
@@ -130,7 +131,9 @@ export function boutLifecycleEntry(bout: Bout): LifecycleScoreboardEntry {
       state: "in",
       period: bout.currentRound ?? 1,
       completed: false,
-      clockSeconds: 0,
+      // A finished round reads as a full clock, not an empty one — ESPN's
+      // clock counts up (see ROUND_LENGTH_SECONDS in lifecycle.ts).
+      clockSeconds: ROUND_LENGTH_SECONDS,
     };
   }
   if (bout.status === "in-round") {

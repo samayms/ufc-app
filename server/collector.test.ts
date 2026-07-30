@@ -503,7 +503,7 @@ describe.skipIf(!localhostAvailable)(
     expect(collector.lifecycle.getState("bout-main")).toMatchObject({
       state: "in",
       period: 2,
-      clockSeconds: 0,
+      clockSeconds: 300,
     });
     expect(collector.eventBus.getEventLog()).toEqual([]);
 
