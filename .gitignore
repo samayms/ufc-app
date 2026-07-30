@@ -8,6 +8,18 @@ dist/
 tsconfig.tsbuildinfo
 __pycache__/
 
+# Local editor and language tooling
+/.vscode/
+/.idea/
+*.swp
+*.swo
+/.venv/
+/venv/
+/.pytest_cache/
+/.ruff_cache/
+/.mypy_cache/
+/design-system/
+
 # Local AI-agent tooling and configuration
 /.agents/
 /.claude/
