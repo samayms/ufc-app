@@ -12,9 +12,17 @@ believe the sources emit. It proves nothing about whether they emit them.
 ## How to run a validation session
 
 ```bash
+npm run lab                   # the fallback console + timing instrument, :5055
 npm run collector:live        # resident collector, live transports
 npm run dev                   # SPA against the collector
 ```
+
+`WEEKEND_RUNBOOK.md` is the operating procedure: identifiers, pre-flight order,
+and what to check when a source goes quiet. The lab is what turns most items
+below into a measurement rather than an impression — press "round ended" at the
+horn and every source's first appearance is stamped with its delay from that
+press. Its log lands in `data/lab-timeline.jsonl`; paste the relevant lines
+into this file afterwards.
 
 Keep `/api/metrics` and the collector's stderr in view for the whole card.
 Every item below should end with an observation written into this file
@@ -42,13 +50,20 @@ Every item below should end with an observation written into this file
 
 ## Round statistics
 
-- [ ] **Cito exact-round response shape.** The exact-round response has never
-      been captured and remains unverified. The current parser accepts a
-      single round object, one `data` wrapper, arrays of explicitly
-      round-matched rows, and the six defined stat fields in either camelCase
-      or snake_case. A shape mismatch degrades to an absent or incomplete
-      round; it does not announce itself. Confirm the actual fighter
-      identifiers/corner fields and revise the parser from a real response.
+- [x] **Cito exact-round response shape.** Captured 2026-07-30 from bout
+      `9009ec7b91f2be14` and pinned as `src/fixtures/citoRoundStatsLive.json` /
+      `citoRoundRowsLive.json`. The old parser, written against an invented
+      fixture, extracted **nothing** from it — `stats?round=1` parsed to `null`
+      and `rounds?round=1` to a round number with no fighter stats. Three
+      reasons, all now handled:
+      - counting stats are strings, `"39 of 63"` (landed of attempted), and
+        `controlTime` is `"8:26"`; `"0:00"` is a real zero that must survive,
+      - rows carry `fighterSlug` and `fighterName` and **no corner** — corners
+        come from `/ufc/bouts/{id}`, so the slug→corner map is resolved once per
+        bout and cached, and an unknown slug is skipped rather than assigned by
+        row order (swapping two fighters' stats looks correct),
+      - `availability: "pending_stat_enrichment"` with an empty `roundStats`
+        array is Cito saying "not yet" over HTTP 200.
 
 - [ ] **Cito publication latency.** The T+5–8s initial job and single T+20–30s
       retry are guesses at when exact round data appears. Measure the real
@@ -65,19 +80,52 @@ Every item below should end with an observation written into this file
       depended on. Confirm before any future work relies on it.
 - [ ] **Cito serialization below 10/min.** Verified in tests against the quota
       guard; confirm the real endpoint agrees about what counts as a request.
-- [ ] **Which of Cito's two exact-round endpoints is actually needed.** Each
-      round boundary currently spends **two** requests — `stats?round=N` and
-      `rounds?round=N` — and merges them, because without a captured response we
-      cannot tell which one carries the per-fighter figures. Once a real card
-      shows that one endpoint is sufficient, drop the other and halve the
-      per-round Cito quota cost. `cito-live-round-stats-weekend-test.md` is the
-      procedure for establishing this.
+- [x] **Which of Cito's two exact-round endpoints is actually needed.** Settled
+      2026-07-30 without needing a live card: `rounds?round=N` returns exactly
+      the `roundStats` array that `stats?round=N` already contains, so `stats`
+      alone is sufficient and the live path no longer requests `rounds`. The
+      once-per-bout corner lookup that replaced it costs less than the request
+      it removed. `buildCitoRoundRowsUrl` is kept for the lab's manual probe so
+      the two can still be compared on the day.
+
+- [ ] **Does Cito publish round stats *during* a fight?** New question, and the
+      most important one for the round-stats panel. Every bout on Saturday's
+      card reads `dataAvailability.roundStats:
+      "ufcstats_enrichment_when_available"`, and `hasStats` was `false` on all
+      50 most recent bouts checked. A bout from 2026-07-25 has complete
+      per-round stats, so enrichment does happen — but whether it happens
+      between rounds or only after the fight is unknown. If it is only
+      afterwards, no retry ladder will help and the live panel stays empty as a
+      property of the vendor.
+
+- [ ] **Cito's live worker was not running on 2026-07-30.** `/ufc/live/health`
+      reported `workerAlive: false`, `emptyReason: "worker_stale"`, a heartbeat
+      **32.6 hours** stale, and tracked only the long-finished `ufc-304`.
+      `/ufc/live/events/{slug}` 404s for Saturday's card and
+      `/ufc/live/{boutId}/state` 404s for its bouts. Check this first on the
+      day: if the worker is still dead, Cito contributes no live clock or bout
+      state at all, and its silence is not our bug. The lab's
+      `cito.live.health` probe exists for exactly this.
 
 ## Markets
+
+- [x] **Kalshi authenticated requests worked at all.** They did not. The
+      account's key file is a PKCS#1 `BEGIN RSA PRIVATE KEY` PEM while the
+      loader imported it as PKCS#8, the only form WebCrypto accepts, so every
+      signed request failed with `Invalid keyData`. Fixed 2026-07-30 by wrapping
+      the PKCS#1 DER in a PKCS#8 envelope; a signed
+      `GET /trade-api/v2/portfolio/balance` then returned HTTP 200, which also
+      proves the signing itself was already correct. The lab's `kalshi.signed`
+      probe re-checks this in one press.
 
 - [ ] **Kalshi bout coverage and liquidity.** Which bouts on a real card have
       Kalshi markets at all, and do they have two-sided books? The
       bid/ask-midpoint preference degrades to nothing without both sides.
+      Partially answered 2026-07-30: 14 open `KXUFCFIGHT-26AUG01…` events exist
+      for Saturday's card, two markets each, but **none had a two-sided book**
+      five days out and `liquidity_dollars` was `0.0000`. Re-check on the day —
+      prices are decimal-dollar strings (`"0.8500"`), which is what the shipped
+      transport reads.
 - [ ] **Kalshi reconnect behavior.** Force a disconnect mid-round and confirm
       reauthenticate → resubscribe → rebuild leaves no stale state marked fresh.
 - [ ] **Polymarket bout coverage and token discovery.** Confirm outcome token

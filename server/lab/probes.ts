@@ -1299,9 +1299,26 @@ const collectorBootstrap = collectorProbe(
     const state = field(json, "state");
     const boutViews = asArray(field(state, "boutViews"));
     const event = field(state, "event");
+    const mappings = asArray(field(json, "boutMappings"));
+    // Which vendors each bout can actually be looked up by. A bout with only
+    // an `espn` ref cannot have its Cito round stats fetched at all, which is
+    // invisible everywhere else — it looks exactly like Cito being slow.
+    const refCounts = new Map<string, number>();
+    for (const mapping of mappings) {
+      for (const ref of asArray(field(mapping, "externalRefs"))) {
+        const source = String(field(ref, "source"));
+        refCounts.set(source, (refCounts.get(source) ?? 0) + 1);
+      }
+    }
     return [
       `event: ${String(field(event, "name") ?? "none")}`,
       `${boutViews.length} bout views, ${asArray(field(json, "unifiedRounds")).length} unified rounds`,
+      `${mappings.length} bout mappings; refs per source: ${[...refCounts]
+        .map(([source, count]) => `${source}=${count}`)
+        .join(", ")}`,
+      refCounts.get("cito") === undefined
+        ? "no bout carries a cito ref — round stats cannot be fetched"
+        : `cito refs on ${refCounts.get("cito")}/${mappings.length} bouts`,
       ...boutViews
         .slice(0, 6)
         .map(

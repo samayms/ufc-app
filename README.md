@@ -186,10 +186,28 @@ tmux attach -t ufcbuild
 
 List existing sessions with `tmux ls`.
 
+## The lab
+
+```bash
+npm run lab        # http://localhost:5055
+```
+
+A single page with one button per API call, and a timeline that measures how
+late each source is. It shares nothing with the app — no collector, no event
+bus, no React — so it keeps working when the dashboard does not, which is when
+you need to know whether ESPN is late, whether Cito has published a round yet,
+or whether the collector is the problem.
+
+Each result shows status, latency, bytes, the vendor's quota headers, and what
+the shipped parser made of the payload. Press **Round ended (broadcast)** at the
+horn and every source's first appearance afterwards is stamped with its delay
+from that press. `WEEKEND_RUNBOOK.md` is the fight-night procedure.
+
 ## Useful commands
 
 ```bash
 npm run dev        # Start the local development server
+npm run lab        # Start the fallback console and timing instrument
 npm run collector  # Start the local data collector
 npm test           # Run the test suite once
 npm run test:collector # Run collector/server tests
