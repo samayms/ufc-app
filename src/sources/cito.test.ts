@@ -356,11 +356,13 @@ describe("createLiveCitoRoundStatsFetcher", () => {
     },
   };
 
-  it("sends x-api-key and fetches both exact-round endpoints", async () => {
+  it("sends x-api-key and fetches the bout plus one exact-round endpoint", async () => {
     const calls: Array<{ url: string; headers: Headers }> = [];
     const fetchImpl = vi.fn(async (input, init) => {
       calls.push({ url: String(input), headers: new Headers(init?.headers) });
-      return response(roundBody);
+      return String(input).endsWith("/ufc/bouts/bout-123")
+        ? response({ data: { fighters: [] } })
+        : response(roundBody);
     }) as unknown as typeof fetch;
     const fetcher = createLiveCitoRoundStatsFetcher({
       baseUrl: "https://cito.example.invalid/api/v1/",
@@ -375,8 +377,8 @@ describe("createLiveCitoRoundStatsFetcher", () => {
       fighterB: { knockdowns: 1 },
     });
     expect(calls.map(({ url }) => url)).toEqual([
+      "https://cito.example.invalid/api/v1/ufc/bouts/bout-123",
       "https://cito.example.invalid/api/v1/ufc/bouts/bout-123/stats?round=2",
-      "https://cito.example.invalid/api/v1/ufc/bouts/bout-123/rounds?round=2",
     ]);
     expect(calls.every(({ headers }) => headers.get("x-api-key") === "test-secret")).toBe(true);
   });
@@ -469,7 +471,7 @@ describe("createLiveCitoRoundStatsFetcher", () => {
 
     await expect(fetcher.fetchAllRounds("bout-123")).resolves.toHaveLength(5);
     expect(maximumActive).toBe(1);
-    expect(rounds).toEqual([1, 2, 3, 4, 5]);
+    expect(rounds).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });
 

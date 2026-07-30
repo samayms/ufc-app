@@ -1,9 +1,9 @@
 /**
- * Cito base URL, auth scheme, and the `GET /ufc/live` response envelope are
- * confirmed live (see src/fixtures/citoLiveLive.json / citoEventsLive.json).
- * Per-bout live-update shape and cadence during an actual event card are
- * still unverified — the captured response had empty `liveBouts`/
- * `nextBouts` arrays.
+ * Cito base URL, auth scheme, the `GET /ufc/live` response envelope, and the
+ * exact-round stats/bout response shapes are confirmed by captured responses
+ * (see src/fixtures/cito*Live.json). Per-bout live-state field names and
+ * cadence during an actual event card remain unverified because the captured
+ * `liveBouts`/`nextBouts` arrays were empty.
  */
 
 import rawFixture from "../fixtures/cito.json" with { type: "json" };
@@ -103,6 +103,11 @@ export interface CitoFighterRoundStats {
   takedownsAttempted?: number;
   controlTimeSeconds?: number;
   knockdowns?: number;
+}
+
+/** The corner assigned to each Cito fighter slug in a bout. */
+export interface CitoCornerMap {
+  readonly [fighterSlug: string]: "red" | "blue";
 }
 
 export interface CitoRoundStatsPayload {
@@ -442,6 +447,42 @@ function finiteNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function countValue(value: unknown): {
+  landed: number;
+  attempted: number;
+} | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return { landed: value, attempted: value };
+  }
+  if (typeof value !== "string") return undefined;
+
+  const match = value.match(/^\s*(\d+)\s+of\s+(\d+)\s*$/u);
+  if (match === null) return undefined;
+  const landed = Number(match[1]);
+  const attempted = Number(match[2]);
+  if (
+    !Number.isSafeInteger(landed) ||
+    !Number.isSafeInteger(attempted) ||
+    landed < 0 ||
+    attempted < landed
+  ) {
+    return undefined;
+  }
+  return { landed, attempted };
+}
+
+function controlTimeSeconds(value: unknown): number | undefined {
+  const numeric = finiteNumber(value);
+  if (numeric !== undefined && numeric >= 0) return numeric;
+  if (typeof value !== "string") return undefined;
+
+  const match = value.match(/^(\d+):(\d{2})$/u);
+  if (match === null) return undefined;
+  const minutes = Number(match[1]);
+  const seconds = Number(match[2]);
+  return minutes * 60 + seconds;
+}
+
 function roundNumber(value: unknown): number | undefined {
   if (typeof value === "number") {
     return Number.isSafeInteger(value) && value >= 1 ? value : undefined;
@@ -460,15 +501,6 @@ function property(
   }
   return undefined;
 }
-
-const STAT_FIELDS = [
-  ["significantStrikes", ["significantStrikes", "significant_strikes"]],
-  ["totalStrikes", ["totalStrikes", "total_strikes"]],
-  ["takedowns", ["takedowns"]],
-  ["takedownsAttempted", ["takedownsAttempted", "takedowns_attempted"]],
-  ["controlTimeSeconds", ["controlTimeSeconds", "control_time_seconds"]],
-  ["knockdowns", ["knockdowns"]],
-] as const;
 
 type FighterPosition = "A" | "B";
 
@@ -505,11 +537,55 @@ function fighterStats(value: unknown): CitoFighterRoundStats | undefined {
   if (cumulativeMarker(source)) return undefined;
 
   const stats: CitoFighterRoundStats = {};
-  for (const [normalizedName, names] of STAT_FIELDS) {
-    const parsed = finiteNumber(property(source, names));
-    if (parsed !== undefined && parsed >= 0) {
-      stats[normalizedName] = parsed;
+  const significantStrikes = countValue(
+    property(source, ["significantStrikes", "significant_strikes"]),
+  );
+  if (significantStrikes !== undefined) {
+    stats.significantStrikes = significantStrikes.landed;
+  }
+
+  const totalStrikes = countValue(
+    property(source, ["totalStrikes", "total_strikes"]),
+  );
+  if (totalStrikes !== undefined) stats.totalStrikes = totalStrikes.landed;
+
+  const takedownsValue = property(source, [
+    "takedowns",
+    "takedown",
+    "takedown_count",
+  ]);
+  const takedowns = countValue(takedownsValue);
+  if (takedowns !== undefined) {
+    stats.takedowns = takedowns.landed;
+    if (
+      typeof takedownsValue === "string" &&
+      property(source, ["takedownsAttempted", "takedowns_attempted"]) ===
+      undefined
+    ) {
+      stats.takedownsAttempted = takedowns.attempted;
     }
+  }
+
+  const takedownsAttempted = finiteNumber(
+    property(source, ["takedownsAttempted", "takedowns_attempted"]),
+  );
+  if (takedownsAttempted !== undefined && takedownsAttempted >= 0) {
+    stats.takedownsAttempted = takedownsAttempted;
+  }
+
+  const controlSeconds = controlTimeSeconds(
+    property(source, [
+      "controlTime",
+      "control_time",
+      "controlTimeSeconds",
+      "control_time_seconds",
+    ]),
+  );
+  if (controlSeconds !== undefined) stats.controlTimeSeconds = controlSeconds;
+
+  const knockdowns = finiteNumber(property(source, ["knockdowns"]));
+  if (knockdowns !== undefined && knockdowns >= 0) {
+    stats.knockdowns = knockdowns;
   }
   return Object.keys(stats).length === 0 ? undefined : stats;
 }
@@ -555,7 +631,14 @@ function boutIdFrom(value: unknown): string | undefined {
 function sourceUpdatedAtFrom(value: unknown): string | undefined {
   if (!isRecord(value)) return undefined;
   return nonEmptyString(
-    property(value, ["sourceUpdatedAt", "source_updated_at", "updatedAt", "updated_at"]),
+    property(value, [
+      "sourceUpdatedAt",
+      "source_updated_at",
+      "lastSyncedAt",
+      "last_synced_at",
+      "updatedAt",
+      "updated_at",
+    ]),
   );
 }
 
@@ -579,7 +662,7 @@ function findRoundRows(payload: unknown, round: number): Record<string, unknown>
   }
   if (!isRecord(wrapped)) return [];
 
-  const nestedRows = property(wrapped, ["rounds", "rows"]);
+  const nestedRows = property(wrapped, ["roundStats", "round_stats", "rounds", "rows"]);
   if (Array.isArray(nestedRows)) {
     return nestedRows.filter(
       (item): item is Record<string, unknown> =>
@@ -591,6 +674,7 @@ function findRoundRows(payload: unknown, round: number): Record<string, unknown>
 
 function parseRoundRows(
   rows: readonly Record<string, unknown>[],
+  corners?: ReadonlyMap<string, "red" | "blue">,
 ): {
   fighterA?: CitoFighterRoundStats;
   fighterB?: CitoFighterRoundStats;
@@ -602,6 +686,18 @@ function parseRoundRows(
     const container = property(row, ["stats", "statistics"]);
     const source = isRecord(container) ? container : row;
     const direct = fighterStats(row) ?? fighterStats(row.fighter);
+
+    const slug = nonEmptyString(property(row, ["fighterSlug", "fighter_slug"]));
+    if (slug !== undefined && corners !== undefined) {
+      const corner = corners.get(slug);
+      if (corner === undefined) continue;
+      if (corner === "red") fighterA = addStats(fighterA, direct);
+      else fighterB = addStats(fighterB, direct);
+      continue;
+    }
+
+    // Real round rows are slug-keyed and carry no corner. Without the map,
+    // leave those stats absent rather than assigning by row order.
     for (const position of ["A", "B"] as const) {
       const candidate = property(source, POSITION_NAMES[position]);
       const parsed = fighterStats(candidate);
@@ -621,14 +717,40 @@ function parseRoundRows(
   };
 }
 
+/** Extracts the only safe fighter identity mapping from a Cito bout payload. */
+export function parseCitoBoutCorners(
+  payload: unknown,
+): Map<string, "red" | "blue"> {
+  const bout = dataWrapper(payload);
+  if (!isRecord(bout) || !Array.isArray(bout.fighters)) return new Map();
+
+  const corners = new Map<string, "red" | "blue">();
+  for (const fighter of bout.fighters) {
+    if (!isRecord(fighter)) continue;
+    const slug = nonEmptyString(
+      property(fighter, ["fighterSlug", "fighter_slug"]),
+    );
+    const corner = property(fighter, ["corner"]);
+    if (
+      slug !== undefined &&
+      (corner === "red" || corner === "blue")
+    ) {
+      corners.set(slug, corner);
+    }
+  }
+  return corners;
+}
+
 /**
- * Parses only explicitly per-round-looking data. The exact Cito round-stats
- * response has not been captured, so this accepts documented-ish wrappers and
- * corner-labeled rows while leaving unrecognized fighters absent.
+ * Parses the captured Cito exact-round response plus the older corner-labeled
+ * shapes already accepted by this source. The captured `stats` response has
+ * cumulative `boutStats` alongside per-round `roundStats`; only the latter is
+ * considered. A slug-to-corner map is required to safely assign real rows.
  */
 export function parseCitoRoundStatsResponse(
   payload: unknown,
   round: number,
+  options?: { corners?: ReadonlyMap<string, "red" | "blue"> },
 ): CitoRoundStatsPayload | null {
   const rows = findRoundRows(payload, round);
   if (rows.length === 0) return null;
@@ -637,7 +759,7 @@ export function parseCitoRoundStatsResponse(
     return { round };
   }
 
-  const parsed = parseRoundRows(rows);
+  const parsed = parseRoundRows(rows, options?.corners);
   const first = rows[0];
   return {
     ...(boutIdFrom(first) === undefined ? {} : { boutId: boutIdFrom(first) }),
@@ -650,37 +772,24 @@ export function parseCitoRoundStatsResponse(
   };
 }
 
-function mergeRoundPayloads(
-  boutId: string,
-  round: number,
-  left: CitoRoundStatsPayload | null,
-  right: CitoRoundStatsPayload | null,
-): CitoRoundStatsPayload | null {
-  if (left === null && right === null) return null;
-  return {
-    boutId,
-    round,
-    ...(left?.fighterA === undefined && right?.fighterA === undefined
-      ? {}
-      : { fighterA: { ...left?.fighterA, ...right?.fighterA } }),
-    ...(left?.fighterB === undefined && right?.fighterB === undefined
-      ? {}
-      : { fighterB: { ...left?.fighterB, ...right?.fighterB } }),
-    ...(right?.sourceUpdatedAt ?? left?.sourceUpdatedAt) === undefined
-      ? {}
-      : {
-          sourceUpdatedAt:
-            right?.sourceUpdatedAt ?? left?.sourceUpdatedAt,
-        },
-  };
-}
-
 export interface LiveCitoRoundStatsFetcherOptions {
   baseUrl: string;
   apiKey: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   maxBytes?: number;
+}
+
+function buildCitoBoutUrl(baseUrl: string, boutId: string): string {
+  if (baseUrl.trim().length === 0) {
+    throw new TypeError("Cito bout URL requires a non-empty base URL");
+  }
+  if (boutId.trim().length === 0) {
+    throw new TypeError("Cito bout URL requires a non-empty bout id");
+  }
+
+  const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  return new URL(`ufc/bouts/${encodeURIComponent(boutId)}`, base).toString();
 }
 
 export function createLiveCitoRoundStatsFetcher(
@@ -713,27 +822,71 @@ export function createLiveCitoRoundStatsFetcher(
       headers: { "x-api-key": apiKey },
     });
 
+  const cornerCache = new Map<
+    string,
+    ReadonlyMap<string, "red" | "blue">
+  >();
+  const cornerRequests = new Map<
+    string,
+    Promise<ReadonlyMap<string, "red" | "blue"> | undefined>
+  >();
+
+  const resolveCorners = async (
+    boutId: string,
+  ): Promise<ReadonlyMap<string, "red" | "blue"> | undefined> => {
+    const cached = cornerCache.get(boutId);
+    if (cached !== undefined) return cached;
+
+    const inFlight = cornerRequests.get(boutId);
+    if (inFlight !== undefined) return inFlight;
+
+    const requestPromise = (async (): Promise<
+      ReadonlyMap<string, "red" | "blue"> | undefined
+    > => {
+      try {
+        const corners = parseCitoBoutCorners(
+          await request(buildCitoBoutUrl(options.baseUrl, boutId)),
+        );
+        cornerCache.set(boutId, corners);
+        cornerRequests.delete(boutId);
+        return corners;
+      } catch (error) {
+        // Corner lookup is enrichment: a failed lookup must not hide usable
+        // round-level stats, and is deliberately not cached so the next round
+        // can retry it.
+        cornerRequests.delete(boutId);
+        console.warn(
+          "Cito bout-corner lookup failed; returning round-level stats",
+          error instanceof CitoRoundStatsRequestError
+            ? `${error.kind}${error.status === undefined ? "" : ` (HTTP ${error.status})`}`
+            : "unknown error",
+        );
+        return undefined;
+      }
+    })();
+    cornerRequests.set(boutId, requestPromise);
+    return requestPromise;
+  };
+
   return {
     async fetchRound(boutId, round) {
+      const corners = await resolveCorners(boutId);
       const statsPayload = await request(
         buildCitoRoundStatsUrl(options.baseUrl, boutId, round),
       );
-      const rowsPayload = await request(
-        buildCitoRoundRowsUrl(options.baseUrl, boutId, round),
-      );
-      return mergeRoundPayloads(
-        boutId,
-        round,
-        parseCitoRoundStatsResponse(statsPayload, round),
-        parseCitoRoundStatsResponse(rowsPayload, round),
-      );
+      const parsed = parseCitoRoundStatsResponse(statsPayload, round, {
+        corners,
+      });
+      return parsed === null ? null : { ...parsed, boutId };
     },
     async fetchAllRounds(boutId) {
       const payloads: CitoRoundStatsPayload[] = [];
+      const corners = await resolveCorners(boutId);
       for (let round = 1; round <= 5; round += 1) {
         const payload = parseCitoRoundStatsResponse(
           await request(buildCitoRoundStatsUrl(options.baseUrl, boutId, round)),
           round,
+          { corners },
         );
         if (payload !== null) payloads.push({ ...payload, boutId });
       }
@@ -1056,12 +1209,10 @@ async function fetchJsonWithLimits(
 }
 
 /**
- * Constructs the live Cito live-state fetcher. Fails closed unless
- * DATA_MODE=live, CITO_API_KEY is present, and a base URL is configured —
- * never constructed in fixture mode, never invoked by tests (which exercise
- * buildCitoLiveStateUrl/parseCitoLiveStateLifecycle as pure functions
- * instead). The API key is used only as a request header; it is never
- * logged or included in thrown error messages.
+ * Constructs the live Cito live-state fetcher. The caller selects live mode
+ * and supplies the configured credentials/base URL before constructing it;
+ * tests use a stub fetch implementation. The API key is used only as a
+ * request header; it is never logged or included in thrown error messages.
  */
 export function createLiveCitoLifecycleFetcher(
   config: SourceConfig,
