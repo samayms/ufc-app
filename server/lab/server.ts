@@ -57,27 +57,36 @@ function espnFightOptions(source: unknown): Array<{
   id: string;
   firstFighter: string;
   secondFighter: string;
+  firstAthleteId: string;
+  secondAthleteId: string;
 }> {
   const events = arrayField(source, "events");
   return events.flatMap((event) =>
     arrayField(event, "competitions").flatMap((competition) => {
       const id = stringField(competition, "id");
-      const names = arrayField(competition, "competitors").flatMap(
+      const athletes = arrayField(competition, "competitors").flatMap(
         (competitor) => {
           const athlete = (competitor as { athlete?: unknown } | null)?.athlete;
+          const athleteId = stringField(competitor, "id");
           const name =
             stringField(athlete, "displayName") ??
             stringField(athlete, "fullName");
-          return name === undefined ? [] : [name];
+          return name === undefined || athleteId === undefined
+            ? []
+            : [{ name, athleteId }];
         },
       );
-      return id === undefined || names.length !== 2
+      const first = athletes[0];
+      const second = athletes[1];
+      return id === undefined || first === undefined || second === undefined
         ? []
         : [
             {
               id,
-              firstFighter: names[0] as string,
-              secondFighter: names[1] as string,
+              firstFighter: first.name,
+              secondFighter: second.name,
+              firstAthleteId: first.athleteId,
+              secondAthleteId: second.athleteId,
             },
           ];
     }),
@@ -124,11 +133,27 @@ export function buildLabCard(
           ),
         }))
         .sort((left, right) => right.match.confidence - left.match.confidence)[0];
+      const matchedEspn =
+        espnMatch !== undefined && espnMatch.match.confidence >= 0.85
+          ? espnMatch
+          : undefined;
+      const redEspnAthleteId =
+        matchedEspn === undefined
+          ? undefined
+          : matchedEspn.match.cornersReversed
+            ? matchedEspn.fight.secondAthleteId
+            : matchedEspn.fight.firstAthleteId;
+      const blueEspnAthleteId =
+        matchedEspn === undefined
+          ? undefined
+          : matchedEspn.match.cornersReversed
+            ? matchedEspn.fight.firstAthleteId
+            : matchedEspn.fight.secondAthleteId;
       return {
         id,
-        ...(espnMatch !== undefined && espnMatch.match.confidence >= 0.85
-          ? { espnBoutId: espnMatch.fight.id }
-          : {}),
+        ...(matchedEspn === undefined
+          ? {}
+          : { espnBoutId: matchedEspn.fight.id }),
         cardSection: stringField(row, "cardSection") ?? "Card",
         cardPosition: stringField(row, "cardPosition") ?? "",
         weightClass: (stringField(row, "weightClass") ?? "Bout").replace(
@@ -138,10 +163,16 @@ export function buildLabCard(
         red: {
           name: redName,
           ...(redSlug === undefined ? {} : { slug: redSlug }),
+          ...(redEspnAthleteId === undefined
+            ? {}
+            : { espnAthleteId: redEspnAthleteId }),
         },
         blue: {
           name: blueName,
           ...(blueSlug === undefined ? {} : { slug: blueSlug }),
+          ...(blueEspnAthleteId === undefined
+            ? {}
+            : { espnAthleteId: blueEspnAthleteId }),
         },
         order: numberField(row, "boutOrder") ?? Number.MAX_SAFE_INTEGER,
       };
@@ -219,6 +250,19 @@ function watchTargetField(source: unknown): WatchTarget {
     ...(stringField(source, "espnEventId") === undefined
       ? {}
       : { espnEventId: stringField(source, "espnEventId") as string }),
+    ...(stringField(source, "espnBoutId") === undefined
+      ? {}
+      : { espnBoutId: stringField(source, "espnBoutId") as string }),
+    ...(stringField(source, "espnRedAthleteId") === undefined
+      ? {}
+      : {
+          espnRedAthleteId: stringField(source, "espnRedAthleteId") as string,
+        }),
+    ...(stringField(source, "espnBlueAthleteId") === undefined
+      ? {}
+      : {
+          espnBlueAthleteId: stringField(source, "espnBlueAthleteId") as string,
+        }),
     ...(stringField(source, "citoEventSlug") === undefined
       ? {}
       : { citoEventSlug: stringField(source, "citoEventSlug") as string }),
@@ -239,6 +283,14 @@ function watchTargetField(source: unknown): WatchTarget {
     ...(numberField(source, "espnIntervalMs") === undefined
       ? {}
       : { espnIntervalMs: numberField(source, "espnIntervalMs") as number }),
+    ...(numberField(source, "espnStatsIntervalMs") === undefined
+      ? {}
+      : {
+          espnStatsIntervalMs: numberField(
+            source,
+            "espnStatsIntervalMs",
+          ) as number,
+        }),
     ...(numberField(source, "citoIntervalMs") === undefined
       ? {}
       : { citoIntervalMs: numberField(source, "citoIntervalMs") as number }),
@@ -444,8 +496,15 @@ export function createLabServer(options: LabServerOptions = {}) {
         ...(fight.espnBoutId === undefined
           ? {}
           : { espnBoutId: fight.espnBoutId }),
+        ...(fight.red.espnAthleteId === undefined
+          ? {}
+          : { espnRedAthleteId: fight.red.espnAthleteId }),
+        ...(fight.blue.espnAthleteId === undefined
+          ? {}
+          : { espnBlueAthleteId: fight.blue.espnAthleteId }),
         continuousEspn: true,
         espnIntervalMs: LAB_ESPN_INTERVAL_MS,
+        espnStatsIntervalMs: LAB_ESPN_INTERVAL_MS,
         citoBoutIds: [boutId],
         citoIntervalMs: LAB_CITO_INTERVAL_MS,
         redFighter: fight.red.name,
@@ -484,8 +543,15 @@ export function createLabServer(options: LabServerOptions = {}) {
         boutId,
         espnEventId: WEEKEND.espnEventId,
         espnBoutId: fight.espnBoutId,
+        ...(fight.red.espnAthleteId === undefined
+          ? {}
+          : { espnRedAthleteId: fight.red.espnAthleteId }),
+        ...(fight.blue.espnAthleteId === undefined
+          ? {}
+          : { espnBlueAthleteId: fight.blue.espnAthleteId }),
         continuousEspn: true,
         espnIntervalMs: LAB_ESPN_INTERVAL_MS,
+        espnStatsIntervalMs: LAB_ESPN_INTERVAL_MS,
       });
       sendJson(response, 200, { entry, watch: watcher.status() });
       return;

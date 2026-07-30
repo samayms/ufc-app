@@ -403,6 +403,7 @@
     }
 
     .source-item[data-source="kalshi"] .source-name { color: var(--amber); }
+    .source-item[data-source="espn-stats"] .source-name { color: var(--blue); }
 
     .source-status {
       color: var(--muted);
@@ -432,6 +433,143 @@
       color: var(--red);
       background: var(--red-dim);
       border-color: rgba(255, 118, 104, 0.45);
+    }
+
+    .espn-stats-panel {
+      margin-top: 32px;
+      padding-top: 28px;
+      border-top: 1px solid var(--border);
+    }
+
+    .espn-stats-panel[hidden] { display: none; }
+
+    .stats-heading {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 16px;
+    }
+
+    .stats-heading h2 {
+      margin: 0;
+      font-family: "Asap Condensed", "Arial Narrow", sans-serif;
+      font-size: 1.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .stats-heading p {
+      max-width: 68ch;
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 0.8125rem;
+    }
+
+    .stats-badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    .stats-badge {
+      padding: 4px 8px;
+      color: var(--blue);
+      background: var(--blue-dim);
+      border: 1px solid rgba(120, 172, 255, 0.4);
+      border-radius: 999px;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .stats-badge.is-warning {
+      color: var(--amber);
+      background: var(--amber-dim);
+      border-color: rgba(242, 184, 75, 0.4);
+    }
+
+    .stats-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .stats-metric {
+      min-width: 0;
+      padding: 12px 14px;
+      background: var(--surface);
+    }
+
+    .stats-metric span {
+      display: block;
+      color: var(--faint);
+      font-size: 0.625rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .stats-metric strong {
+      display: block;
+      overflow: hidden;
+      margin-top: 3px;
+      color: var(--text);
+      font-size: 0.875rem;
+      font-variant-numeric: tabular-nums;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stats-metric strong.is-live { color: var(--green); }
+
+    .core-stat-value {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+    }
+
+    .core-stat-value:first-child { justify-content: flex-end; }
+
+    .sample-delta {
+      color: var(--green);
+      font-size: 0.6875rem;
+      font-weight: 700;
+    }
+
+    .stats-row.is-changed {
+      background: var(--green-dim);
+    }
+
+    .core-meta {
+      padding: 0 13px 13px;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      font-size: 0.75rem;
+    }
+
+    .core-meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 20px;
+      padding-top: 12px;
+    }
+
+    .core-meta-grid strong {
+      display: block;
+      color: var(--text);
+      font-size: 0.6875rem;
+    }
+
+    .core-meta-grid span {
+      display: block;
+      margin-top: 2px;
+      overflow-wrap: anywhere;
     }
 
     .results {
@@ -595,6 +733,10 @@
       .fighter { padding-inline: 10px; font-size: 0.9375rem; }
       .stats-row { grid-template-columns: minmax(0, 1fr) 104px minmax(0, 1fr); }
       .stat-value { padding-inline: 10px; }
+      .stats-heading { display: block; }
+      .stats-badges { justify-content: flex-start; margin-top: 10px; }
+      .stats-metrics { grid-template-columns: 1fr 1fr; }
+      .core-meta-grid { grid-template-columns: 1fr; }
       .result-heading { display: block; }
       .received { display: block; margin-top: 3px; }
     }
@@ -689,6 +831,17 @@
               <span id="espn-latency">—</span>
             </div>
           </article>
+          <article class="source-item" data-source="espn-stats">
+            <div class="source-head">
+              <span class="source-name">ESPN Core stats</span>
+              <span id="espn-stats-status" class="source-status">Ready</span>
+            </div>
+            <p id="espn-stats-detail" class="source-detail">Waiting for the fight-start button.</p>
+            <div class="source-meta">
+              <span id="espn-stats-checks">0 checks</span>
+              <span id="espn-stats-latency">—</span>
+            </div>
+          </article>
           <article class="source-item" data-source="cito">
             <div class="source-head">
               <span class="source-name">CITO</span>
@@ -715,6 +868,47 @@
         <button id="stop-polling" class="stop" type="button" disabled>Stop polling</button>
       </aside>
     </div>
+
+    <section id="espn-stats-panel" class="espn-stats-panel" aria-labelledby="espn-stats-title" hidden>
+      <div class="stats-heading">
+        <div>
+          <h2 id="espn-stats-title">ESPN granular stats</h2>
+          <p>Direct from ESPN’s core API. These numbers are fight-cumulative; green deltas show only what changed since the previous five-second sample.</p>
+        </div>
+        <div class="stats-badges" aria-label="ESPN stats limitations">
+          <span class="stats-badge">Every 5 seconds</span>
+          <span class="stats-badge">Fight cumulative</span>
+          <span class="stats-badge is-warning">Not exact rounds</span>
+        </div>
+      </div>
+      <div class="stats-metrics">
+        <div class="stats-metric">
+          <span>Samples</span>
+          <strong id="espn-stats-samples">0</strong>
+        </div>
+        <div class="stats-metric">
+          <span>Latest changes</span>
+          <strong id="espn-stats-changes">0 fields</strong>
+        </div>
+        <div class="stats-metric">
+          <span>First non-zero data</span>
+          <strong id="espn-stats-first-data">Waiting</strong>
+        </div>
+        <div class="stats-metric">
+          <span>Response body</span>
+          <strong id="espn-stats-response">Baseline</strong>
+        </div>
+      </div>
+      <div id="espn-stats-highlight" class="stats"></div>
+      <details id="espn-all-fields">
+        <summary id="espn-all-fields-summary">View every ESPN field</summary>
+        <div id="espn-all-fields-table" class="stats"></div>
+      </details>
+      <details>
+        <summary>View ESPN response and cache metadata</summary>
+        <div id="espn-core-meta" class="core-meta"></div>
+      </details>
+    </section>
 
     <section id="results" class="results" aria-labelledby="result-title" hidden>
       <div class="result-heading">
@@ -762,6 +956,22 @@
       ["clinch", "Clinch"],
       ["ground", "Ground"],
     ];
+
+    const ESPN_FEATURED_STATS = new Set([
+      "knockdowns",
+      "totalstrikeslanded",
+      "totalstrikesattempted",
+      "sigstrikeslanded",
+      "sigstrikesattempted",
+      "significantstrikeslanded",
+      "significantstrikesattempted",
+      "takedownslanded",
+      "takedownsattempted",
+      "submissionattempts",
+      "submissionsattempted",
+      "timeincontrol",
+      "controltime",
+    ]);
 
     const $ = (id) => document.getElementById(id);
     const text = (value, fallback = "—") =>
@@ -876,6 +1086,13 @@
       if (name === "espn" && state.session && state.session.espnLatest) {
         return state.session.espnLatest;
       }
+      if (
+        name === "espn-stats" &&
+        state.session &&
+        state.session.espnStatsLatest
+      ) {
+        return state.session.espnStatsLatest;
+      }
       return state.session && state.session.sources
         ? state.session.sources[name]
         : null;
@@ -978,12 +1195,40 @@
 
       if (!state.session) {
         status.textContent = "Ready";
-        detail.textContent = name === "espn"
+        detail.textContent = name === "espn" || name === "espn-stats"
           ? "Waiting for the fight-start button."
           : "Waiting for the horn.";
         return;
       }
 
+      if (name === "espn-stats" && entry) {
+        const changed = Number(entry.detail && entry.detail.changedCount) || 0;
+        const sample = Number(entry.detail && entry.detail.sampleNumber) || 0;
+        status.textContent = `Sample ${sample}`;
+        status.classList.toggle(
+          "is-complete",
+          entry.detail && entry.detail.hasValues === true,
+        );
+        detail.textContent = changed
+          ? `${changed} cumulative fields changed in this sample.`
+          : "Both fighter responses arrived; no cumulative fields changed.";
+        const redMs = Number(
+          entry.detail &&
+          entry.detail.red &&
+          entry.detail.red.response &&
+          entry.detail.red.response.durationMs,
+        );
+        const blueMs = Number(
+          entry.detail &&
+          entry.detail.blue &&
+          entry.detail.blue.response &&
+          entry.detail.blue.response.durationMs,
+        );
+        latency.textContent = Number.isFinite(redMs) && Number.isFinite(blueMs)
+          ? `${Math.max(redMs, blueMs)}ms HTTP`
+          : "—";
+        return;
+      }
       if (name === "espn" && entry) {
         const lifecycle = entry.detail && entry.detail.lifecycle;
         const done = lifecycle && lifecycle.completed === true;
@@ -1038,6 +1283,8 @@
       status.textContent = "Checking";
       if (name === "espn") {
         detail.textContent = "Polling every 5 seconds for ESPN’s clock, round, state, and completion flag.";
+      } else if (name === "espn-stats") {
+        detail.textContent = "Fetching both fighters’ fight-cumulative core stats every 5 seconds.";
       } else if (name === "cito") {
         detail.textContent = "The first check fired at the horn; pending stats retry every 5 seconds.";
       } else {
@@ -1056,7 +1303,7 @@
         elapsed = formatElapsed(
           (state.session.completedAtMs || Date.now()) - state.session.startedAtMs,
         );
-        const hasError = ["espn", "cito", "kalshi"].some((name) => {
+        const hasError = ["espn", "espn-stats", "cito", "kalshi"].some((name) => {
           const poller = pollerFor(name);
           return poller && poller.lastError && !sourceEntry(name);
         });
@@ -1085,6 +1332,7 @@
       $("elapsed").textContent = elapsed;
       renderEspnClock();
       renderSource("espn");
+      renderSource("espn-stats");
       renderSource("cito");
       renderSource("kalshi");
       syncControls();
@@ -1103,6 +1351,185 @@
       cell.className = className;
       cell.textContent = text(value);
       return cell;
+    }
+
+    function normalizedStatName(name) {
+      return String(name || "").replace(/[^a-z0-9]/giu, "").toLowerCase();
+    }
+
+    function coreStatsFor(entry, corner) {
+      const stats =
+        entry &&
+        entry.detail &&
+        entry.detail[corner] &&
+        entry.detail[corner].stats;
+      return Array.isArray(stats) ? stats : [];
+    }
+
+    function coreStatChanges(entry, corner) {
+      const changes =
+        entry &&
+        entry.detail &&
+        Array.isArray(entry.detail.changedFields)
+          ? entry.detail.changedFields
+          : [];
+      return new Map(
+        changes
+          .filter((change) => change.corner === corner)
+          .map((change) => [change.name, change]),
+      );
+    }
+
+    function coreValueCell(stat, change, side) {
+      const cell = document.createElement("div");
+      cell.className = "stat-value core-stat-value";
+      if (side === "red") cell.style.justifyContent = "flex-end";
+      const value = document.createElement("span");
+      value.textContent = stat ? text(stat.displayValue, stat.value) : "—";
+      cell.append(value);
+      if (change && Number.isFinite(Number(change.delta))) {
+        const delta = document.createElement("span");
+        delta.className = "sample-delta";
+        const amount = Number(change.delta);
+        delta.textContent = `${amount > 0 ? "+" : ""}${amount}`;
+        delta.title = `Changed from ${text(change.previousDisplayValue, change.previous)}`;
+        cell.append(delta);
+      }
+      return cell;
+    }
+
+    function coreFighterRow(fight) {
+      const row = document.createElement("div");
+      row.className = "stats-row fighter-row";
+      const redName = statCell("fighter fighter-red", fight.red.name);
+      const redCorner = document.createElement("small");
+      redCorner.textContent = "Red corner";
+      redName.append(redCorner);
+      const middle = statCell("round-label", "Cumulative");
+      const blueName = statCell("fighter fighter-blue", fight.blue.name);
+      const blueCorner = document.createElement("small");
+      blueCorner.textContent = "Blue corner";
+      blueName.append(blueCorner);
+      row.append(redName, middle, blueName);
+      return row;
+    }
+
+    function renderCoreStatsTable(host, entry, names) {
+      const fight = state.session && state.session.fight;
+      if (!fight) return;
+      const redStats = coreStatsFor(entry, "red");
+      const blueStats = coreStatsFor(entry, "blue");
+      const redByName = new Map(redStats.map((stat) => [stat.name, stat]));
+      const blueByName = new Map(blueStats.map((stat) => [stat.name, stat]));
+      const redChanges = coreStatChanges(entry, "red");
+      const blueChanges = coreStatChanges(entry, "blue");
+      const orderedNames = names || [
+        ...redStats.map((stat) => stat.name),
+        ...blueStats
+          .map((stat) => stat.name)
+          .filter((name) => !redByName.has(name)),
+      ];
+      host.replaceChildren(coreFighterRow(fight));
+      orderedNames.forEach((name) => {
+        const red = redByName.get(name);
+        const blue = blueByName.get(name);
+        const redChange = redChanges.get(name);
+        const blueChange = blueChanges.get(name);
+        const row = document.createElement("div");
+        row.className = "stats-row";
+        row.classList.toggle("is-changed", Boolean(redChange || blueChange));
+        row.append(
+          coreValueCell(red, redChange, "red"),
+          statCell(
+            "stat-name",
+            text(
+              (red && red.displayName) || (blue && blue.displayName),
+              name,
+            ),
+          ),
+          coreValueCell(blue, blueChange, "blue"),
+        );
+        host.append(row);
+      });
+    }
+
+    function metadataBlock(label, sample) {
+      const wrapper = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = label;
+      const response = sample && sample.response ? sample.response : {};
+      const body = document.createElement("span");
+      const cache = text(response.cacheControl, "no cache-control header");
+      const age = response.age === undefined ? "age unavailable" : `age ${response.age}s`;
+      const hash = response.sha256 ? response.sha256.slice(0, 12) : "no hash";
+      body.textContent =
+        `${text(response.status, "—")} · ${text(response.durationMs, "—")}ms · ${text(response.bytes, "—")} bytes · ${age} · ${cache} · SHA ${hash}`;
+      wrapper.append(title, body);
+      return wrapper;
+    }
+
+    function renderEspnStats(entry) {
+      const redStats = coreStatsFor(entry, "red");
+      const blueStats = coreStatsFor(entry, "blue");
+      if (redStats.length === 0 && blueStats.length === 0) return;
+      const allNames = [
+        ...redStats.map((stat) => stat.name),
+        ...blueStats
+          .map((stat) => stat.name)
+          .filter((name) => !redStats.some((stat) => stat.name === name)),
+      ];
+      const changedNames = new Set(
+        (entry.detail.changedFields || []).map((change) => change.name),
+      );
+      let featured = allNames.filter((name) =>
+        ESPN_FEATURED_STATS.has(normalizedStatName(name)),
+      );
+      changedNames.forEach((name) => {
+        if (!featured.includes(name)) featured.push(name);
+      });
+      if (featured.length === 0) featured = allNames.slice(0, 12);
+
+      renderCoreStatsTable($("espn-stats-highlight"), entry, featured);
+      renderCoreStatsTable($("espn-all-fields-table"), entry, allNames);
+      $("espn-all-fields-summary").textContent =
+        `View every ESPN field (${allNames.length})`;
+      $("espn-stats-samples").textContent =
+        String(state.session.espnStatsHistory.length);
+      const changedCount = Number(entry.detail.changedCount) || 0;
+      $("espn-stats-changes").textContent =
+        `${changedCount} ${changedCount === 1 ? "field" : "fields"}`;
+      const firstData = state.session.espnStatsFirstNonzeroAt;
+      $("espn-stats-first-data").textContent = firstData
+        ? new Date(firstData).toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+            second: "2-digit",
+          })
+        : "Waiting";
+      $("espn-stats-first-data").classList.toggle("is-live", Boolean(firstData));
+      $("espn-stats-response").textContent =
+        entry.detail.responseChanged === true ? "New body" : "Unchanged";
+      $("espn-stats-response").classList.toggle(
+        "is-live",
+        entry.detail.responseChanged === true,
+      );
+
+      const meta = $("espn-core-meta");
+      meta.replaceChildren();
+      const grid = document.createElement("div");
+      grid.className = "core-meta-grid";
+      grid.append(
+        metadataBlock(
+          `${state.session.fight.red.name} response`,
+          entry.detail.red,
+        ),
+        metadataBlock(
+          `${state.session.fight.blue.name} response`,
+          entry.detail.blue,
+        ),
+      );
+      meta.append(grid);
+      $("espn-stats-panel").hidden = false;
     }
 
     function renderResult(entry) {
@@ -1151,7 +1578,7 @@
     function renderRawJson() {
       if (!state.session) return;
       const sources = {};
-      ["espn", "cito", "kalshi"].forEach((name) => {
+      ["espn", "espn-stats", "cito", "kalshi"].forEach((name) => {
         const entry = sourceEntry(name);
         if (entry) {
           sources[name] = {
@@ -1171,6 +1598,7 @@
         hornAt: new Date(state.session.startedAtMs).toISOString(),
         sources,
         espnSamples: state.session.espnHistory,
+        espnCoreStatsSamples: state.session.espnStatsHistory,
       }, null, 2);
       $("raw-json").textContent = state.rawJson;
       $("source-json").hidden = Object.keys(sources).length === 0;
@@ -1197,7 +1625,7 @@
       if (
         !state.session ||
         entry.kind !== "observation" ||
-        !["espn", "cito", "kalshi"].includes(entry.source) ||
+        !["espn", "espn-stats", "cito", "kalshi"].includes(entry.source) ||
         entry.boutId !== state.session.boutId ||
         Number(entry.seq) <= state.session.markerSeq
       ) {
@@ -1219,6 +1647,17 @@
         ) {
           state.session.sources.espn = entry;
         }
+      } else if (entry.source === "espn-stats") {
+        state.session.espnStatsLatest = entry;
+        state.session.espnStatsHistory.push(entry);
+        if (
+          !state.session.espnStatsFirstNonzeroAt &&
+          entry.detail &&
+          entry.detail.firstNonzero === true
+        ) {
+          state.session.espnStatsFirstNonzeroAt = entry.at;
+        }
+        renderEspnStats(entry);
       } else if (
         state.session.mode !== "round" ||
         Number(entry.round) !== state.session.round
@@ -1289,16 +1728,26 @@
       const fight = selectedFight();
       if (!fight || !state.card) return;
 
+      const continuingFight =
+        state.session && state.session.boutId === fight.id;
       const espnHistory =
-        state.session && state.session.boutId === fight.id
+        continuingFight
           ? state.session.espnHistory
           : [];
       const espnLastChange =
-        state.session && state.session.boutId === fight.id
+        continuingFight
           ? state.session.espnLastChange
           : null;
+      const espnStatsHistory =
+        continuingFight
+          ? state.session.espnStatsHistory
+          : [];
+      const espnStatsFirstNonzeroAt =
+        continuingFight
+          ? state.session.espnStatsFirstNonzeroAt
+          : null;
       $("results").hidden = true;
-      $("source-json").hidden = true;
+      if (!continuingFight) $("espn-stats-panel").hidden = true;
       state.rawJson = "";
       state.session = {
         mode: "round",
@@ -1315,6 +1764,11 @@
           : null,
         espnHistory,
         espnLastChange,
+        espnStatsLatest: espnStatsHistory.length
+          ? espnStatsHistory[espnStatsHistory.length - 1]
+          : null,
+        espnStatsHistory,
+        espnStatsFirstNonzeroAt,
         sources: {
           espn: null,
           cito: null,
@@ -1352,6 +1806,7 @@
       if (!fight || !state.card) return;
 
       $("results").hidden = true;
+      $("espn-stats-panel").hidden = true;
       $("source-json").hidden = true;
       state.rawJson = "";
       state.session = {
@@ -1367,6 +1822,9 @@
         espnLatest: null,
         espnHistory: [],
         espnLastChange: null,
+        espnStatsLatest: null,
+        espnStatsHistory: [],
+        espnStatsFirstNonzeroAt: null,
         sources: {
           espn: null,
           cito: null,

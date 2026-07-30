@@ -21,8 +21,16 @@ describe("buildLabCard", () => {
       cardSection: "Main Card",
       cardPosition: "Main Card 1",
       weightClass: "Welterweight",
-      red: { name: "Uroš Medić", slug: "uros-medic" },
-      blue: { name: "Daniel Rodriguez", slug: "daniel-rodriguez" },
+      red: {
+        name: "Uroš Medić",
+        slug: "uros-medic",
+        espnAthleteId: "4685870",
+      },
+      blue: {
+        name: "Daniel Rodriguez",
+        slug: "daniel-rodriguez",
+        espnAthleteId: "4426312",
+      },
     });
   });
 

@@ -122,6 +122,8 @@ export interface WatchTarget {
   round?: number;
   espnEventId?: string;
   espnBoutId?: string;
+  espnRedAthleteId?: string;
+  espnBlueAthleteId?: string;
   citoEventSlug?: string;
   /** Cito bout ids to chase round stats for; empty means "the whole card". */
   citoBoutIds?: string[];
@@ -131,6 +133,7 @@ export interface WatchTarget {
   /** Keep ESPN running after it observes a round-end signal. */
   continuousEspn?: boolean;
   espnIntervalMs?: number;
+  espnStatsIntervalMs?: number;
   citoIntervalMs?: number;
   kalshiIntervalMs?: number;
   sherdogIntervalMs?: number;
@@ -161,10 +164,12 @@ export interface LabFight {
   red: {
     name: string;
     slug?: string;
+    espnAthleteId?: string;
   };
   blue: {
     name: string;
     slug?: string;
+    espnAthleteId?: string;
   };
 }
 
