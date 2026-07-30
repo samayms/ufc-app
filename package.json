@@ -17,7 +17,8 @@
     "sync:upcoming:live": "DATA_MODE=live node --env-file-if-exists=.env server/syncUpcoming.ts",
     "collector:live": "DATA_MODE=live node --env-file-if-exists=.env server/collector.ts",
     "dev:live": "DATA_MODE=live node --env-file-if-exists=.env scripts/devLive.mjs",
-    "weekend": "node scripts/weekend.mjs",
+    "app": "node scripts/weekend.mjs",
+    "weekend": "npm run app",
     "lab": "node --env-file-if-exists=.env server/lab/server.ts"
   },
   "dependencies": {

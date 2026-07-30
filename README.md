@@ -210,9 +210,9 @@ is not. `WEEKEND_RUNBOOK.md` is the fight-night procedure.
 ## Useful commands
 
 ```bash
-npm run weekend    # Fight day: compiled app + live collector + lab, one command
+npm run app        # Real app only: compiled dashboard on 4173 + collector
 npm run dev        # Start the local development server
-npm run lab        # Start the fallback console and timing instrument
+npm run lab        # Lab only: timing instrument on 5055
 npm run collector  # Start the local data collector
 npm test           # Run the test suite once
 npm run test:collector # Run collector/server tests

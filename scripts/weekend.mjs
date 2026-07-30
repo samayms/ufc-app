@@ -1,22 +1,21 @@
 /**
- * One-command fight-day launcher.
+ * One-command real-app launcher.
  *
- * `npm run weekend` owns the complete local production stack:
- *   - independent latency lab on 5055
+ * `npm run app` owns the local production app stack:
  *   - best-effort live upcoming-odds prime
  *   - compiled dashboard build
  *   - live collector on 8600
  *   - compiled dashboard server on 4173
  *   - readiness checks and browser opening
  *
- * It intentionally never starts Vite's development server on 5173.
+ * It intentionally never starts the independent lab on 5055 or Vite's
+ * development server on 5173.
  */
 
 import { spawn } from "node:child_process";
 import process from "node:process";
 
 export const WEEKEND_DASHBOARD_URL = "http://127.0.0.1:4173";
-export const WEEKEND_LAB_URL = "http://127.0.0.1:5055";
 export const WEEKEND_COLLECTOR_URL = "http://127.0.0.1:8600";
 
 const args = new Set(process.argv.slice(2));
@@ -27,30 +26,28 @@ const residents = new Map();
 let shuttingDown = false;
 
 function usage() {
-  console.log(`Usage: npm run weekend -- [--no-open | --dry-run]
+  console.log(`Usage: npm run app -- [--no-open | --dry-run]
 
-Starts the compiled weekend dashboard and every service it needs.
+Starts only the compiled real app and the services it needs.
 
   Dashboard  ${WEEKEND_DASHBOARD_URL}
-  Lab        ${WEEKEND_LAB_URL}
   Collector  ${WEEKEND_COLLECTOR_URL}
 
 Options:
-  --no-open  Start everything without opening browser tabs
+  --no-open  Start the app without opening a browser tab
   --dry-run  Print the launch sequence without running anything`);
 }
 
 function printPlan() {
-  console.log(`Weekend launch sequence:
-  1. Start independent latency lab on 5055
-  2. Prime live upcoming odds (best effort)
-  3. Build the compiled dashboard
-  4. Start live collector on 8600
-  5. Serve compiled dashboard on 4173
-  6. Health-check all three services
-  7. Open ${WEEKEND_DASHBOARD_URL} and ${WEEKEND_LAB_URL}
+  console.log(`Real-app launch sequence:
+  1. Prime live upcoming odds (best effort)
+  2. Build the compiled dashboard
+  3. Start live collector on 8600
+  4. Serve compiled dashboard on 4173
+  5. Health-check both services
+  6. Open ${WEEKEND_DASHBOARD_URL}
 
-Port 5173 is not used.`);
+Ports 5055 and 5173 are not used.`);
 }
 
 function pipeWithPrefix(name, stream) {
@@ -94,7 +91,7 @@ function startResident(name, command, commandArgs, extraEnv = {}) {
 }
 
 function runStep(name, command, commandArgs, extraEnv = {}) {
-  console.log(`[weekend] ${name}…`);
+  console.log(`[app] ${name}…`);
   return new Promise((resolve) => {
     let settled = false;
     const child = spawn(command, commandArgs, {
@@ -112,7 +109,7 @@ function runStep(name, command, commandArgs, extraEnv = {}) {
       finish(code ?? 1);
     });
     child.on("error", (error) => {
-      console.error(`[weekend] ${name} could not start: ${error.message}`);
+      console.error(`[app] ${name} could not start: ${error.message}`);
       finish(1);
     });
   });
@@ -130,7 +127,7 @@ async function waitForUrl(name, url, timeoutMs = 30_000) {
         signal: AbortSignal.timeout(1_000),
       });
       if (response.ok) {
-        console.log(`[weekend] ${name} ready`);
+        console.log(`[app] ${name} ready`);
         return;
       }
     } catch {
@@ -144,16 +141,16 @@ async function waitForUrl(name, url, timeoutMs = 30_000) {
 function openBrowserTabs() {
   if (!shouldOpenBrowser) return;
   if (process.platform !== "darwin") {
-    console.log("[weekend] Open the dashboard and lab URLs shown below.");
+    console.log(`[app] Open the dashboard at ${WEEKEND_DASHBOARD_URL}.`);
     return;
   }
   const opener = spawn(
     "open",
-    [WEEKEND_DASHBOARD_URL, WEEKEND_LAB_URL],
+    [WEEKEND_DASHBOARD_URL],
     { stdio: "ignore", detached: true },
   );
   opener.on("error", () => {
-    console.log("[weekend] Browser could not be opened automatically.");
+    console.log("[app] Browser could not be opened automatically.");
   });
   opener.unref();
 }
@@ -169,7 +166,7 @@ function shutdown(code = 0) {
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
-    console.log("\n[weekend] Stopping dashboard, collector, and lab…");
+    console.log("\n[app] Stopping dashboard and collector…");
     shutdown(0);
   });
 }
@@ -184,12 +181,7 @@ async function main() {
     return;
   }
 
-  console.log("[weekend] Starting UFC weekend mode");
-  startResident(
-    "lab",
-    process.execPath,
-    ["--env-file-if-exists=.env", "server/lab/server.ts"],
-  );
+  console.log("[app] Starting the UFC real app");
 
   const syncCode = await runStep(
     "Priming live upcoming odds",
@@ -200,7 +192,7 @@ async function main() {
   if (shuttingDown) return;
   if (syncCode !== 0) {
     console.warn(
-      "[weekend] Odds prime failed; continuing with the last saved prices.",
+      "[app] Odds prime failed; continuing with the last saved prices.",
     );
   }
 
@@ -235,24 +227,22 @@ async function main() {
   );
 
   await Promise.all([
-    waitForUrl("lab", `${WEEKEND_LAB_URL}/lab/health`),
     waitForUrl("collector", `${WEEKEND_COLLECTOR_URL}/api/health`, 60_000),
     waitForUrl("compiled dashboard", WEEKEND_DASHBOARD_URL),
   ]);
   if (shuttingDown) return;
 
   console.log(`
-[weekend] Ready for fight day
+[app] Real app ready
   Dashboard  ${WEEKEND_DASHBOARD_URL}
-  Lab        ${WEEKEND_LAB_URL}
 
-Keep this terminal open. Press Ctrl-C once to stop everything.`);
+Keep this terminal open. Press Ctrl-C once to stop the app and collector.`);
   openBrowserTabs();
 }
 
 main().catch((error) => {
   console.error(
-    `[weekend] ${error instanceof Error ? error.message : "Launch failed"}`,
+    `[app] ${error instanceof Error ? error.message : "Launch failed"}`,
   );
   shutdown(1);
 });

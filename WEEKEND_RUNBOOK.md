@@ -21,23 +21,30 @@ Every identifier and every latency below was measured against the live APIs on
 ESPN dates the *event* 14:00Z while Cito dates it 17:00Z. Both are right: ESPN
 is stamping the prelims, Cito the main card. Do not "fix" either.
 
-## Start everything
+## Separate launch commands
 
 ```bash
-npm run weekend
+npm run lab
 ```
 
-That is the only launch command for fight day. It starts the independent lab,
-primes live odds, builds the compiled dashboard, starts the live collector,
-serves the compiled app, waits for every service to answer, and opens both
-browser tabs:
+This starts only the latency lab at `http://127.0.0.1:5055`. It does not build
+or start the real app or collector. Use this for the first fights while
+measuring ESPN, Cito, and Kalshi.
 
-- compiled dashboard: `http://127.0.0.1:4173`
-- latency lab: `http://127.0.0.1:5055`
+When the lab findings have been reviewed and the real app is ready, stop the
+lab with `Ctrl-C` and run:
 
-Port `5173` is the development UI and is not used by weekend mode. Keep the
-launcher terminal open; press `Ctrl-C` once to stop the dashboard, collector,
-and lab together.
+```bash
+npm run app
+```
+
+This starts only the compiled dashboard at `http://127.0.0.1:4173` and its
+live collector at `http://127.0.0.1:8600`. It primes live odds, builds the
+dashboard, waits for both services, and opens the app. It does not start the
+lab. Keep its terminal open; press `Ctrl-C` once to stop the dashboard and
+collector.
+
+Port `5173` is the development UI and is not used by either fight-day command.
 
 The lab remains deliberately independent internally: no collector, no event
 bus, no React. If the dashboard or collector is broken, the lab still answers
