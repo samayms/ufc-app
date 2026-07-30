@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lab — Fight-night fallback console</title>
+  <style>
+    :root { color-scheme: dark; --bg:#070a12; --panel:#0e1423; --raised:#151d31; --line:#29344d; --text:#eef2fb; --muted:#a2aec5; --faint:#71809d; --green:#4fd094; --green-dim:#123b30; --amber:#f2b84b; --amber-dim:#463412; --red:#ff7668; --red-dim:#4b211f; --blue:#78acff; --blue-dim:#172e52; --radius:8px; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-width:320px; background:var(--bg); color:var(--text); font:15px/1.42 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    button,input { font:inherit; }
+    button { cursor:pointer; color:inherit; border:1px solid var(--line); border-radius:5px; background:var(--raised); min-height:34px; padding:6px 10px; }
+    button:hover:not(:disabled) { background:#202b44; border-color:#465777; }
+    button:active:not(:disabled) { background:#0b1020; }
+    button:disabled { cursor:not-allowed; color:var(--faint); background:#0a0f1a; }
+    button:focus-visible,input:focus-visible,summary:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+    input { width:100%; min-height:34px; color:var(--text); background:#090e18; border:1px solid var(--line); border-radius:4px; padding:6px 8px; }
+    input::placeholder { color:var(--faint); }
+    .data,.num,pre,table { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums; }
+    .shell { max-width:1800px; margin:0 auto; padding:16px; }
+    .topline { display:flex; gap:12px; align-items:baseline; border-bottom:1px solid var(--line); padding:0 0 12px; margin-bottom:16px; }
+    h1 { margin:0; font-size:1.15rem; letter-spacing:.06em; text-transform:uppercase; }
+    .subtitle { color:var(--muted); font-size:.875rem; }
+    .grid { display:grid; grid-template-columns:minmax(0,1.18fr) minmax(420px,.82fr); gap:16px; align-items:start; }
+    .column { min-width:0; display:grid; gap:16px; }
+    .panel { border:1px solid var(--line); border-radius:var(--radius); background:var(--panel); padding:14px; }
+    .panel-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:12px; }
+    h2 { margin:0; font-size:.75rem; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+    h3 { margin:18px 0 8px; padding-top:14px; border-top:1px solid var(--line); color:var(--text); font-size:.95rem; }
+    .banner { border:1px solid var(--red); background:var(--red-dim); color:#ffd4cf; border-radius:5px; padding:8px 10px; font-size:.875rem; }
+    .banner[hidden] { display:none; }
+    .actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .run-free { background:var(--green-dim); border-color:#2f8061; color:#c6f8e4; font-weight:700; }
+    .run-group { font-size:.8125rem; }
+    .bulk-status { color:var(--muted); font-size:.8125rem; }
+    .probe-row { border-top:1px solid var(--line); padding:12px 0; }
+    .probe-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .probe-title { display:flex; flex-wrap:wrap; align-items:center; gap:7px; font-weight:700; }
+    .description { margin:3px 0 0; color:var(--muted); font-size:.85rem; }
+    .badge,.pill { display:inline-block; border-radius:4px; padding:2px 6px; font:600 .72rem/1.25 ui-monospace,SFMono-Regular,Menlo,monospace; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .cost-free { color:#bff3dd; background:var(--green-dim); border:1px solid #286f54; }
+    .cost-quota { color:#ffdd93; background:var(--amber-dim); border:1px solid #805c1b; }
+    .cost-paid { color:#ffd1cb; background:var(--red-dim); border:1px solid #874138; }
+    .probe-controls { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin-top:10px; }
+    .param { min-width:150px; flex:1 1 160px; }
+    label { display:block; margin:0 0 4px; color:var(--muted); font-size:.75rem; font-weight:650; }
+    .visually-hidden { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    .missing { color:#ffb9b1; font-size:.78rem; max-width:200px; }
+    .result { margin-top:10px; border-left:1px solid var(--line); padding-left:10px; }
+    .running { color:var(--amber); font-size:.8rem; margin-bottom:6px; }
+    .result-line { display:flex; flex-wrap:wrap; gap:6px; align-items:center; color:var(--muted); font-size:.8rem; }
+    .ok { color:#c8f6e2; background:var(--green-dim); border:1px solid #2d8662; }
+    .fail { color:#ffd2cc; background:var(--red-dim); border:1px solid #914238; }
+    .url { color:var(--faint); overflow-wrap:anywhere; margin-top:6px; font-size:.75rem; }
+    .summary-list { margin:9px 0 0; padding-left:18px; color:var(--text); }
+    .summary-list li { margin:3px 0; }
+    .error-text { margin:8px 0 0; color:#ffc1ba; }
+    details { margin-top:8px; border:1px solid var(--line); border-radius:4px; background:#0a101c; }
+    summary { cursor:pointer; padding:6px 8px; color:var(--muted); font-size:.8rem; }
+    .detail-tools { padding:0 8px 8px; }
+    .detail-tools button { float:right; min-height:27px; padding:3px 7px; font-size:.75rem; }
+    pre { clear:both; max-height:260px; overflow:auto; margin:8px 0 0; padding:9px; background:#050912; color:#d8e3f4; white-space:pre-wrap; overflow-wrap:anywhere; font-size:.75rem; line-height:1.35; }
+    .marker-panel { border-color:#7c463d; background:#121522; }
+    .marker-control { display:grid; grid-template-columns:minmax(100px,140px) 1fr auto; gap:8px; align-items:end; }
+    .marker-big { min-height:54px; padding:9px 14px; color:#fff0ed; background:#7a3029; border-color:#e65f50; font-size:1rem; font-weight:800; }
+    .marker-big:hover:not(:disabled) { background:#9a3a30; border-color:#ff8275; }
+    .keyhint { color:#ffd5cf; display:block; font-size:.7rem; font-weight:500; margin-top:2px; }
+    .watch-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .watch-form .full { grid-column:1 / -1; }
+    .watch-actions { display:flex; gap:8px; align-items:end; }
+    .start { background:var(--green-dim); border-color:#2b795b; color:#d0fae8; font-weight:700; }
+    .stop { background:var(--red-dim); border-color:#7e3b34; color:#ffd8d2; }
+    .status-note { margin-top:10px; min-height:1.25em; color:var(--muted); font-size:.82rem; }
+    .poller-wrap { overflow:auto; margin-top:10px; }
+    table { width:100%; border-collapse:collapse; font-size:.75rem; }
+    th { text-align:left; color:var(--faint); font-weight:600; }
+    th,td { padding:6px 5px; border-top:1px solid var(--line); white-space:nowrap; }
+    .poller-bad td { color:#ffb9b1; background:rgba(255,118,104,.07); }
+    .timeline-tools { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+    .timeline-tools input { max-width:260px; }
+    .entries { display:grid; gap:6px; max-height:calc(100vh - 545px); min-height:260px; overflow:auto; }
+    .entry { display:grid; grid-template-columns:72px 76px minmax(62px,auto) 1fr; gap:8px; align-items:start; border:1px solid var(--line); border-radius:5px; padding:8px; background:#0a101c; font-size:.82rem; }
+    .entry .time,.entry .delta { color:var(--muted); }
+    .entry-source { color:#d6e0f1; }
+    .entry-label { min-width:0; overflow-wrap:anywhere; }
+    .entry-meta { grid-column:2 / -1; color:var(--faint); font-size:.73rem; }
+    .kind-marker { border-color:#c75a4e; background:#231514; }
+    .kind-marker .entry-source { color:#ffb3aa; font-weight:800; }
+    .kind-observation { border-color:#316c8b; background:#0d1a27; }
+    .kind-observation .entry-source { color:#a9d8ff; }
+    .kind-probe { border-color:#3f775f; }
+    .kind-probe .entry-source { color:#b7f0d3; }
+    .kind-note { color:var(--muted); opacity:.82; }
+    .empty { color:var(--muted); font-size:.86rem; padding:10px 0; }
+    @media (max-width:980px) { .grid { grid-template-columns:1fr; } .entries { max-height:420px; } }
+    @media (max-width:620px) { .shell { padding:10px; } .marker-control { grid-template-columns:1fr 1fr; } .marker-control .marker-big { grid-column:1 / -1; order:-1; } .watch-form { grid-template-columns:1fr; } .watch-form .full { grid-column:auto; } .entry { grid-template-columns:64px 66px 1fr; } .entry-source { grid-column:3; } .entry-label { grid-column:1 / -1; } .entry-meta { grid-column:1 / -1; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topline"><h1>Lab / fallback console</h1><span class="subtitle">Independent source checks and round-clock evidence.</span></header>
+    <div id="server-banner" class="banner" hidden role="status"></div>
+    <div class="grid">
+      <section class="column" aria-label="Source probes">
+        <section class="panel">
+          <div class="panel-head"><h2>Source probes</h2><span id="probe-load-state" class="data subtitle">loading descriptors…</span></div>
+          <div id="bulk-actions" class="actions"></div>
+          <div id="probe-groups"></div>
+        </section>
+      </section>
+      <aside class="column" aria-label="Timeline instrument">
+        <section class="panel marker-panel">
+          <div class="panel-head"><h2>Broadcast marker</h2><span class="subtitle">Ground truth</span></div>
+          <div class="marker-control">
+            <div><label for="marker-round">Round</label><input id="marker-round" type="number" min="1" step="1" value="1" inputmode="numeric"></div>
+            <div><label for="marker-bout">Bout ID (optional)</label><input id="marker-bout" type="text" autocomplete="off" placeholder="e.g. cito bout id"></div>
+            <button id="fight-started" type="button">Fight started</button>
+            <button id="round-ended" class="marker-big" type="button">Round ended (broadcast)<span class="keyhint">Spacebar when not typing</span></button>
+          </div>
+          <div id="marker-status" class="status-note" aria-live="polite"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Watcher</h2><span id="watch-running" class="data subtitle">not running</span></div>
+          <form id="watch-form" class="watch-form">
+            <div><label for="espn-event-id">ESPN event ID</label><input id="espn-event-id" name="espnEventId" autocomplete="off"></div>
+            <div><label for="cito-event-slug">Cito event slug</label><input id="cito-event-slug" name="citoEventSlug" autocomplete="off"></div>
+            <div class="full"><label for="cito-bout-ids">Cito bout IDs (comma-separated)</label><input id="cito-bout-ids" name="citoBoutIds" autocomplete="off" placeholder="bout-a, bout-b"></div>
+            <div class="full"><label for="sherdog-url">Sherdog URL</label><input id="sherdog-url" name="sherdogUrl" autocomplete="off" placeholder="local source path or page URL"></div>
+            <div><label for="espn-interval">ESPN interval (ms)</label><input id="espn-interval" name="espnIntervalMs" type="number" min="1" inputmode="numeric"></div>
+            <div><label for="cito-interval">Cito interval (ms)</label><input id="cito-interval" name="citoIntervalMs" type="number" min="1" inputmode="numeric"></div>
+            <div><label for="sherdog-interval">Sherdog interval (ms)</label><input id="sherdog-interval" name="sherdogIntervalMs" type="number" min="1" inputmode="numeric"></div>
+            <div class="watch-actions"><button class="start" type="submit">Start watcher</button><button id="watch-stop" class="stop" type="button">Stop</button></div>
+          </form>
+          <div id="watch-note" class="status-note" aria-live="polite"></div>
+          <div class="poller-wrap"><table><thead><tr><th>Poller</th><th>Polls</th><th>Fails</th><th>Last</th><th>Error</th></tr></thead><tbody id="pollers"><tr><td colspan="5" class="empty">No watcher status yet.</td></tr></tbody></table></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Observed timeline</h2><span id="entry-count" class="data subtitle">0 entries</span></div>
+          <div class="timeline-tools"><button id="copy-timeline" type="button">Copy timeline as text</button><label for="timeline-filter" class="visually-hidden">Filter timeline</label><input id="timeline-filter" type="search" placeholder="Filter source or label"></div>
+          <div id="timeline" class="entries" aria-live="polite"><div class="empty">Waiting for observations. Mark the broadcast when the fight starts or a round ends.</div></div>
+        </section>
+      </aside>
+    </div>
+  </main>
+  <script>
+  (() => {
+    "use strict";
+    const state = { probes: [], env: {}, results: new Map(), entries: [], latestSeq: 0, watch: null, pollInFlight: false, watchTargetHydrated: false };
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined && text !== null) node.textContent = String(text); return node; };
+    const safeText = (value, fallback = "") => value === undefined || value === null ? fallback : String(value);
+    const formatBytes = (bytes) => { const n = Number(bytes); if (!Number.isFinite(n)) return ""; if (Math.abs(n) < 1024) return `${n} B`; return `${(n / 1024).toFixed(1)} kB`; };
+    const formatDelta = (value) => { const n = Number(value); if (!Number.isFinite(n)) return ""; const sign = n < 0 ? "-" : "+"; const abs = Math.abs(n); if (abs < 1000) return `${sign}${abs}ms`; if (abs < 60000) return `${sign}${(abs / 1000).toFixed(1)}s`; const minutes = Math.floor(abs / 60000); const seconds = Math.round((abs % 60000) / 1000); return `${sign}${minutes}m${String(seconds).padStart(2, "0")}s`; };
+    const localTime = (iso) => { const date = new Date(iso); return Number.isNaN(date.getTime()) ? "--:--:--" : date.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }); };
+    const setBanner = (message) => { const node = $("server-banner"); node.textContent = message || ""; node.hidden = !message; };
+    const fetchJson = async (path, options) => { const response = await fetch(path, options); let data; try { data = await response.json(); } catch (_) { throw new Error(`Server returned HTTP ${response.status}, not JSON`); } if (!response.ok) throw new Error(`Server returned HTTP ${response.status}`); return data; };
+    const setButtonText = (button, text) => { button.textContent = text; };
+    const getSaved = (probeId, name, fallback) => { try { const value = localStorage.getItem(`lab:probe:${probeId}:${name}`); return value === null ? fallback : value; } catch (_) { return fallback; } };
+    const saveValue = (probeId, name, value) => { try { localStorage.setItem(`lab:probe:${probeId}:${name}`, value); } catch (_) {} };
+    const copyText = async (text, button) => { const original = button.textContent; try { if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error("Clipboard unavailable"); await navigator.clipboard.writeText(text); button.textContent = "Copied"; } catch (_) { button.textContent = "Copy failed"; } window.setTimeout(() => { button.textContent = original; }, 1200); };
+
+    function renderProbeResult(probe, host) {
+      const previous = host.querySelector(".result"); if (previous) previous.remove();
+      const record = state.results.get(probe.id); if (!record) return;
+      const result = record.result || {};
+      const box = el("div", "result");
+      if (record.running) box.append(el("div", "running", "running… previous result remains until this request completes"));
+      if (record.networkError) { const line = el("div", "result-line"); line.append(el("span", "pill fail", "fail")); line.append(el("span", "error-text", `Request failed: ${record.networkError}`)); box.append(line); host.append(box); return; }
+      if (!record.result) { host.append(box); return; }
+      const line = el("div", "result-line");
+      line.append(el("span", `pill ${result.ok ? "ok" : "fail"}`, result.ok ? "ok" : "fail"));
+      if (result.httpStatus !== undefined) line.append(el("span", "num", `HTTP ${safeText(result.httpStatus)}`));
+      if (result.ms !== undefined) line.append(el("span", "num", `${safeText(result.ms)}ms`));
+      if (result.bytes !== undefined) line.append(el("span", "num", formatBytes(result.bytes)));
+      box.append(line);
+      if (result.url) box.append(el("div", "url data", result.url));
+      if (Array.isArray(result.summary) && result.summary.length) { const list = el("ul", "summary-list"); result.summary.forEach((item) => list.append(el("li", "", item))); box.append(list); }
+      if (result.error) box.append(el("p", "error-text", `Error: ${result.error}`));
+      if (result.quota && typeof result.quota === "object") { const quota = el("div", "url data", `quota: ${JSON.stringify(result.quota)}`); box.append(quota); }
+      [["parsed", result.parsed], ["raw", result.raw]].forEach(([name, value]) => { if (value === undefined) return; const details = el("details"); const summary = el("summary", "", name === "raw" && result.rawTruncated ? "raw (truncated)" : name); details.append(summary); const tools = el("div", "detail-tools"); const serialized = (() => { try { return JSON.stringify(value, null, 2); } catch (_) { return String(value); } })(); const copy = el("button", "", "Copy"); copy.type = "button"; copy.addEventListener("click", () => copyText(serialized, copy)); tools.append(copy); tools.append(el("pre", "", serialized)); details.append(tools); box.append(details); });
+      host.append(box);
+    }
+
+    function renderProbes() {
+      const groups = $("probe-groups"); groups.replaceChildren(); const bulk = $("bulk-actions"); bulk.replaceChildren();
+      const grouped = new Map(); state.probes.forEach((probe) => { if (!grouped.has(probe.group)) grouped.set(probe.group, []); grouped.get(probe.group).push(probe); });
+      const freeButton = el("button", "run-free", "Run all free"); freeButton.type = "button"; freeButton.addEventListener("click", () => runBulk(state.probes.filter((probe) => probe.cost === "free"), freeButton)); bulk.append(freeButton);
+      const bulkStatus = el("span", "bulk-status", "Bulk runs are sequential. Paid probes are never included."); bulk.append(bulkStatus);
+      grouped.forEach((probes, group) => {
+        const heading = el("h3", "", group); const groupButton = el("button", "run-group", `Run ${group}`); groupButton.type = "button"; groupButton.addEventListener("click", () => runBulk(probes.filter((probe) => probe.cost !== "paid"), groupButton)); heading.append(document.createTextNode(" ")); heading.append(groupButton); groups.append(heading);
+        probes.forEach((probe) => {
+          const row = el("article", "probe-row"); row.dataset.probeId = probe.id; const head = el("div", "probe-head"); const description = el("div"); const title = el("div", "probe-title", probe.label); title.append(el("span", `badge cost-${probe.cost}`, probe.cost)); description.append(title, el("p", "description", probe.description)); head.append(description); row.append(head);
+          const controls = el("div", "probe-controls"); const params = {};
+          (Array.isArray(probe.params) ? probe.params : []).forEach((param) => { const wrap = el("div", "param"); const inputId = `probe-${probe.id}-${param.name}`.replace(/[^a-zA-Z0-9_-]/g, "-"); const label = el("label", "", param.label); label.htmlFor = inputId; const input = el("input"); input.id = inputId; input.type = "text"; input.placeholder = safeText(param.placeholder); input.value = getSaved(probe.id, param.name, safeText(param.defaultValue)); input.autocomplete = "off"; input.addEventListener("input", () => saveValue(probe.id, param.name, input.value)); params[param.name] = input; wrap.append(label, input); controls.append(wrap); });
+          const unavailable = (Array.isArray(probe.requires) ? probe.requires : []).filter((requirement) => !state.env[requirement]); const run = el("button", "", "Run"); run.type = "button"; run.disabled = unavailable.length > 0; run.addEventListener("click", () => runProbe(probe, row, params, run)); controls.append(run); if (unavailable.length) controls.append(el("span", "missing", `missing ${unavailable.join(", ")}`)); row.append(controls); groups.append(row); renderProbeResult(probe, row);
+        });
+      });
+    }
+
+    async function runProbe(probe, row, params, button) {
+      const old = state.results.get(probe.id); state.results.set(probe.id, { result: old && old.result, running: true }); renderProbeResult(probe, row); button.disabled = true; const oldLabel = button.textContent; setButtonText(button, "Running…");
+      const values = {}; Object.keys(params).forEach((name) => { values[name] = params[name].value; });
+      try { const result = await fetchJson("/lab/probe", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(Object.keys(values).length ? { id:probe.id, params:values } : { id:probe.id }) }); state.results.set(probe.id, { result, running:false }); }
+      catch (error) { state.results.set(probe.id, { result: old && old.result, running:false, networkError: error && error.message ? error.message : "Unable to reach lab server" }); }
+      finally { button.disabled = false; setButtonText(button, oldLabel); renderProbeResult(probe, row); }
+    }
+
+    async function runBulk(probes, button) {
+      const allowed = probes.filter((probe) => { const requirements = Array.isArray(probe.requires) ? probe.requires : []; return probe.cost !== "paid" && !requirements.some((requirement) => !state.env[requirement]); }); const original = button.textContent; button.disabled = true;
+      for (let index = 0; index < allowed.length; index += 1) { const probe = allowed[index]; button.textContent = `${index + 1}/${allowed.length} ${probe.group}`; const row = Array.from(document.querySelectorAll("[data-probe-id]")).find((candidate) => candidate.dataset.probeId === probe.id); const run = row && Array.from(row.querySelectorAll("button")).find((candidate) => candidate.textContent === "Run"); const params = {}; if (row) (Array.isArray(probe.params) ? probe.params : []).forEach((param) => { params[param.name] = $( `probe-${probe.id}-${param.name}`.replace(/[^a-zA-Z0-9_-]/g, "-") ); }); if (row && run) await runProbe(probe, row, params, run); }
+      button.textContent = original; button.disabled = false;
+    }
+
+    function watchPayload() {
+      const string = (id) => $(id).value.trim(); const number = (id) => { const value = string(id); if (!value) return undefined; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : undefined; }; const target = {};
+      if (string("espn-event-id")) target.espnEventId = string("espn-event-id"); if (string("cito-event-slug")) target.citoEventSlug = string("cito-event-slug"); if (string("cito-bout-ids")) target.citoBoutIds = string("cito-bout-ids").split(",").map((value) => value.trim()).filter(Boolean); if (string("sherdog-url")) target.sherdogUrl = string("sherdog-url"); [ ["espnIntervalMs", "espn-interval"], ["citoIntervalMs", "cito-interval"], ["sherdogIntervalMs", "sherdog-interval"] ].forEach(([field,id]) => { const value = number(id); if (value !== undefined) target[field] = value; }); return target;
+    }
+    function fillWatchTarget(target) { if (!target || typeof target !== "object") return; const set = (id,value) => { if (value !== undefined && value !== null) $(id).value = String(value); }; set("espn-event-id",target.espnEventId); set("cito-event-slug",target.citoEventSlug); set("cito-bout-ids",Array.isArray(target.citoBoutIds) ? target.citoBoutIds.join(", ") : undefined); set("sherdog-url",target.sherdogUrl); set("espn-interval",target.espnIntervalMs); set("cito-interval",target.citoIntervalMs); set("sherdog-interval",target.sherdogIntervalMs); }
+    function renderWatch(watch, syncTarget = false) { if (!watch || typeof watch !== "object") return; state.watch = watch; $("watch-running").textContent = watch.running ? "running" : "not running"; if (syncTarget || !state.watchTargetHydrated) { fillWatchTarget(watch.target); state.watchTargetHydrated = true; } const body = $("pollers"); body.replaceChildren(); const pollers = Array.isArray(watch.pollers) ? watch.pollers : []; if (!pollers.length) { body.append(el("tr", "", "")); body.firstChild.append(el("td", "empty", "No pollers configured.")); body.firstChild.firstChild.colSpan = 5; return; } pollers.forEach((poller) => { const row = el("tr", poller.failures > 0 ? "poller-bad" : ""); row.append(el("td", "", poller.name), el("td", "num", poller.polls), el("td", "num", poller.failures), el("td", "num", poller.lastMs === undefined ? "—" : `${poller.lastMs}ms`), el("td", "", poller.lastError || "—")); body.append(row); }); }
+    function renderTimeline() { const host = $("timeline"); host.replaceChildren(); const filter = $("timeline-filter").value.trim().toLowerCase(); const entries = state.entries.filter((entry) => !filter || `${safeText(entry.source)} ${safeText(entry.label)}`.toLowerCase().includes(filter)); $("entry-count").textContent = `${state.entries.length} ${state.entries.length === 1 ? "entry" : "entries"}`; if (!entries.length) { host.append(el("div", "empty", filter ? "No entries match this filter." : "Waiting for observations. Mark the broadcast when the fight starts or a round ends.")); return; } entries.slice().reverse().forEach((entry) => { const kind = ["marker","observation","probe","note"].includes(entry.kind) ? entry.kind : "note"; const row = el("article", `entry kind-${kind}`); row.append(el("span", "time data", localTime(entry.at))); row.append(el("span", "delta data", entry.deltaMs === undefined ? "—" : formatDelta(entry.deltaMs))); row.append(el("span", "entry-source data", entry.source)); row.append(el("span", "entry-label", entry.label)); if (entry.deltaFrom) row.append(el("span", "entry-meta", `from: ${entry.deltaFrom}`)); host.append(row); }); }
+    async function pollTimeline() { if (state.pollInFlight) return; state.pollInFlight = true; try { const response = await fetchJson(`/lab/timeline?since=${encodeURIComponent(state.latestSeq)}`); const incoming = Array.isArray(response.entries) ? response.entries : []; incoming.forEach((entry) => { if (entry && Number(entry.seq) > state.latestSeq) state.entries.push(entry); }); if (Number.isFinite(Number(response.latestSeq))) state.latestSeq = Number(response.latestSeq); else if (incoming.length) state.latestSeq = Number(incoming[incoming.length - 1].seq) || state.latestSeq; renderWatch(response.watch); setBanner(""); renderTimeline(); } catch (_) { setBanner("Lab server unreachable — timeline polling will keep retrying."); } finally { state.pollInFlight = false; } }
+    async function sendMarker(label) { const note = $("marker-status"); const roundValue = $("marker-round").value; const payload = { label }; const round = Number(roundValue); if (Number.isInteger(round) && round > 0) payload.round = round; const boutId = $("marker-bout").value.trim(); if (boutId) payload.boutId = boutId; note.textContent = "Sending marker…"; try { const entry = await fetchJson("/lab/marker", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) }); if (entry && entry.seq !== undefined) { state.entries.push(entry); state.latestSeq = Math.max(state.latestSeq, Number(entry.seq) || 0); renderTimeline(); } note.textContent = "Marker recorded."; } catch (error) { note.textContent = `Marker failed: ${error && error.message ? error.message : "lab server unreachable"}`; setBanner("Lab server unreachable — timeline polling will keep retrying."); } }
+    async function loadProbes() { const note = $("probe-load-state"); try { const response = await fetchJson("/lab/probes"); state.probes = Array.isArray(response.probes) ? response.probes : []; state.env = response.env && typeof response.env === "object" ? response.env : {}; note.textContent = `${state.probes.length} probes`; renderProbes(); } catch (error) { note.textContent = "descriptors unavailable"; const groups = $("probe-groups"); groups.replaceChildren(el("div", "banner", `Could not load probes: ${error && error.message ? error.message : "lab server unreachable"}`)); } }
+    function timelineText() { return state.entries.slice().reverse().map((entry) => [localTime(entry.at), entry.deltaMs === undefined ? "" : formatDelta(entry.deltaMs), safeText(entry.source), safeText(entry.label)].filter(Boolean).join("  ")).join("\n"); }
+    function setup() { $("round-ended").addEventListener("click", () => sendMarker("round ended (broadcast)")); $("fight-started").addEventListener("click", () => sendMarker("fight started")); document.addEventListener("keydown", (event) => { const target = event.target; const typing = target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable); if (event.code === "Space" && !typing) { event.preventDefault(); sendMarker("round ended (broadcast)"); } }); $("timeline-filter").addEventListener("input", renderTimeline); $("copy-timeline").addEventListener("click", (event) => copyText(timelineText(), event.currentTarget)); $("watch-form").addEventListener("input", () => { state.watchTargetHydrated = true; }); $("watch-form").addEventListener("submit", async (event) => { event.preventDefault(); const note = $("watch-note"); note.textContent = "Starting watcher…"; try { const status = await fetchJson("/lab/watch/start", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(watchPayload()) }); renderWatch(status, true); note.textContent = "Watcher started."; } catch (error) { note.textContent = `Could not start watcher: ${error && error.message ? error.message : "lab server unreachable"}`; } }); $("watch-stop").addEventListener("click", async () => { const note = $("watch-note"); note.textContent = "Stopping watcher…"; try { const status = await fetchJson("/lab/watch/stop", { method:"POST" }); renderWatch(status, true); note.textContent = "Watcher stopped."; } catch (error) { note.textContent = `Could not stop watcher: ${error && error.message ? error.message : "lab server unreachable"}`; } }); loadProbes(); pollTimeline(); window.setInterval(pollTimeline, 1000); }
+    try { setup(); } catch (error) { setBanner(`Lab page setup failed: ${error && error.message ? error.message : "unknown error"}`); }
+  })();
+  </script>
+</body>
+</html>

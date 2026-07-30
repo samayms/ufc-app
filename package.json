@@ -16,7 +16,8 @@
     "sync:upcoming": "node --env-file-if-exists=.env server/syncUpcoming.ts",
     "sync:upcoming:live": "DATA_MODE=live node --env-file-if-exists=.env server/syncUpcoming.ts",
     "collector:live": "DATA_MODE=live node --env-file-if-exists=.env server/collector.ts",
-    "dev:live": "DATA_MODE=live node --env-file-if-exists=.env scripts/devLive.mjs"
+    "dev:live": "DATA_MODE=live node --env-file-if-exists=.env scripts/devLive.mjs",
+    "lab": "node --env-file-if-exists=.env server/lab/server.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

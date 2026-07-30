@@ -1,0 +1,534 @@
+/**
+ * The Lab's watcher — the instrument that answers the timing question.
+ *
+ * You press "round ended" at the horn. From that moment three pollers race to
+ * be the first to notice, and each first-noticing is written to the timeline
+ * with its delay from your press:
+ *
+ *   ESPN     — when does the scoreboard's period advance / clock hit zero?
+ *   Cito     — when do that round's per-fighter stats actually exist?
+ *   Sherdog  — when does the round's commentary and scoring appear?
+ *
+ * Design rules, learned from the collector:
+ *   - **First appearance only.** A round's stats appearing is recorded once.
+ *     Re-recording every poll would bury the one timestamp that matters.
+ *   - **Poll only what is pending.** A (bout, round) pair leaves the pending
+ *     set the moment it is found, so quota is spent on unanswered questions.
+ *   - **Quota is finite and shared with the collector.** Every poller reads the
+ *     vendor's own rate-limit header and backs off when it runs low, and says
+ *     so on the timeline rather than dying quietly.
+ *   - **A poller may never throw into the interval.** A failing source
+ *     increments a counter and keeps going; it must not stop the other two.
+ */
+
+import {
+  buildEspnScoreboardUrl,
+  parseEspnScoreboardLifecycle,
+  type EspnLifecycleEntry,
+} from "../../src/sources/espn.ts";
+import { buildCitoRoundStatsUrl } from "../../src/sources/cito.ts";
+import { parseSherdogRoundObservations } from "../../src/sources/sherdog.ts";
+import type { WatchStatus, WatchTarget } from "./contract.ts";
+import { redactSecrets } from "./contract.ts";
+import type { LabTimeline } from "./timeline.ts";
+
+const DEFAULT_ESPN_INTERVAL_MS = 5_000;
+const DEFAULT_CITO_INTERVAL_MS = 5_000;
+const DEFAULT_SHERDOG_INTERVAL_MS = 20_000;
+
+/** Sherdog is a courtesy read of someone else's page. Never poll it harder. */
+const MIN_SHERDOG_INTERVAL_MS = 15_000;
+const MIN_INTERVAL_MS = 1_000;
+
+/** Below this many remaining vendor requests, slow down and say so. */
+const QUOTA_FLOOR = 25;
+const QUOTA_BACKOFF_MS = 30_000;
+
+/**
+ * How many polls to keep chasing one (bout, round) before giving up. At a 5s
+ * cadence this is ten minutes — longer than any plausible publication delay,
+ * short enough that a cancelled round stops costing quota.
+ */
+const MAX_PENDING_POLLS = 120;
+
+const REQUEST_TIMEOUT_MS = 12_000;
+
+interface PollerState {
+  name: string;
+  polls: number;
+  failures: number;
+  lastAt?: string;
+  lastMs?: number;
+  lastError?: string;
+  timer?: ReturnType<typeof setInterval>;
+  intervalMs: number;
+  nextAtMs?: number;
+}
+
+/** One unanswered question: "does this bout's round N exist yet?" */
+interface PendingRound {
+  boutId: string;
+  round: number;
+  polls: number;
+}
+
+export interface LabWatcherOptions {
+  timeline: LabTimeline;
+  env: Record<string, string | undefined>;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+}
+
+export class LabWatcher {
+  private readonly timeline: LabTimeline;
+
+  private readonly env: Record<string, string | undefined>;
+
+  private readonly fetchImpl: typeof fetch;
+
+  private readonly now: () => number;
+
+  private running = false;
+
+  private startedAt?: string;
+
+  private target?: WatchTarget;
+
+  private readonly pollers = new Map<string, PollerState>();
+
+  /** Last lifecycle entry seen per ESPN bout id, for change detection. */
+  private readonly espnSeen = new Map<string, string>();
+
+  /** (bout,round) keys already recorded as found — never recorded twice. */
+  private readonly foundCito = new Set<string>();
+
+  private readonly foundSherdog = new Set<string>();
+
+  private citoPending: PendingRound[] = [];
+
+  private sherdogPending: PendingRound[] = [];
+
+  constructor(options: LabWatcherOptions) {
+    this.timeline = options.timeline;
+    this.env = options.env;
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.now = options.now ?? (() => Date.now());
+  }
+
+  /**
+   * A marker for a finished round is what makes a round *interesting*: from
+   * then on, all three sources are asked whether they have it yet. The server
+   * calls this when the owner presses the button.
+   */
+  markRoundEnded(round: number, boutId?: string): void {
+    if (!Number.isSafeInteger(round) || round < 1) return;
+    const cito = boutId ?? this.target?.citoBoutIds?.[0];
+    if (cito !== undefined && !this.foundCito.has(`${cito}:${round}`)) {
+      this.addPending(this.citoPending, cito, round);
+    }
+    if (
+      this.target?.sherdogUrl !== undefined &&
+      !this.foundSherdog.has(`sherdog:${round}`)
+    ) {
+      this.addPending(this.sherdogPending, "sherdog", round);
+    }
+  }
+
+  private addPending(list: PendingRound[], boutId: string, round: number): void {
+    if (list.some((entry) => entry.boutId === boutId && entry.round === round)) {
+      return;
+    }
+    list.push({ boutId, round, polls: 0 });
+  }
+
+  start(target: WatchTarget): WatchStatus {
+    if (this.running) this.stop();
+
+    this.running = true;
+    this.startedAt = new Date(this.now()).toISOString();
+    this.target = target;
+    this.espnSeen.clear();
+    this.foundCito.clear();
+    this.foundSherdog.clear();
+    this.citoPending = [];
+    this.sherdogPending = [];
+
+    this.timeline.record({
+      kind: "note",
+      source: "lab",
+      label: `watcher started (espn=${target.espnEventId ?? "-"}, cito bouts=${(target.citoBoutIds ?? []).join("|") || "-"}, sherdog=${target.sherdogUrl === undefined ? "off" : "on"})`,
+      detail: { ...target },
+    });
+
+    if ((target.espnEventId ?? "").trim().length > 0) {
+      this.schedule(
+        "espn",
+        Math.max(MIN_INTERVAL_MS, target.espnIntervalMs ?? DEFAULT_ESPN_INTERVAL_MS),
+        () => this.pollEspn(),
+      );
+    }
+    if ((target.citoBoutIds ?? []).length > 0) {
+      this.schedule(
+        "cito",
+        Math.max(MIN_INTERVAL_MS, target.citoIntervalMs ?? DEFAULT_CITO_INTERVAL_MS),
+        () => this.pollCito(),
+      );
+    }
+    if ((target.sherdogUrl ?? "").trim().length > 0) {
+      this.schedule(
+        "sherdog",
+        Math.max(
+          MIN_SHERDOG_INTERVAL_MS,
+          target.sherdogIntervalMs ?? DEFAULT_SHERDOG_INTERVAL_MS,
+        ),
+        () => this.pollSherdog(),
+      );
+    }
+
+    return this.status();
+  }
+
+  stop(): WatchStatus {
+    for (const poller of this.pollers.values()) {
+      if (poller.timer !== undefined) clearInterval(poller.timer);
+      poller.timer = undefined;
+      poller.nextAtMs = undefined;
+    }
+    if (this.running) {
+      this.timeline.record({
+        kind: "note",
+        source: "lab",
+        label: "watcher stopped",
+      });
+    }
+    this.running = false;
+    const status = this.status();
+    this.startedAt = undefined;
+    return status;
+  }
+
+  status(): WatchStatus {
+    const nowMs = this.now();
+    return {
+      running: this.running,
+      ...(this.startedAt === undefined ? {} : { startedAt: this.startedAt }),
+      ...(this.target === undefined ? {} : { target: this.target }),
+      pollers: [...this.pollers.values()].map((poller) => ({
+        name: poller.name,
+        polls: poller.polls,
+        failures: poller.failures,
+        ...(poller.lastAt === undefined ? {} : { lastAt: poller.lastAt }),
+        ...(poller.lastMs === undefined ? {} : { lastMs: poller.lastMs }),
+        ...(poller.lastError === undefined ? {} : { lastError: poller.lastError }),
+        ...(poller.nextAtMs === undefined
+          ? {}
+          : { nextInMs: Math.max(0, poller.nextAtMs - nowMs) }),
+      })),
+    };
+  }
+
+  /**
+   * Runs `body` now and on an interval. `body` is never allowed to reject into
+   * the timer: every failure is counted and written to the timeline instead.
+   */
+  private schedule(
+    name: string,
+    intervalMs: number,
+    body: () => Promise<void>,
+  ): void {
+    const state: PollerState = this.pollers.get(name) ?? {
+      name,
+      polls: 0,
+      failures: 0,
+      intervalMs,
+    };
+    state.intervalMs = intervalMs;
+    this.pollers.set(name, state);
+
+    const tick = (): void => {
+      const startedMs = this.now();
+      state.nextAtMs = startedMs + state.intervalMs;
+      void body()
+        .then(() => {
+          state.polls += 1;
+          state.lastAt = new Date(startedMs).toISOString();
+          state.lastMs = this.now() - startedMs;
+          state.lastError = undefined;
+        })
+        .catch((error: unknown) => {
+          state.polls += 1;
+          state.failures += 1;
+          state.lastAt = new Date(startedMs).toISOString();
+          state.lastMs = this.now() - startedMs;
+          const message =
+            error instanceof Error ? error.message : String(error);
+          state.lastError = redactSecrets(message);
+          this.timeline.record({
+            kind: "note",
+            source: name,
+            label: `poll failed: ${redactSecrets(message)}`,
+          });
+        });
+    };
+
+    tick();
+    const timer = setInterval(tick, intervalMs);
+    // The lab must never keep the process alive on its own account.
+    timer.unref?.();
+    state.timer = timer;
+  }
+
+  private async getJson(
+    url: string,
+    headers: Record<string, string> = {},
+  ): Promise<{ json: unknown; remaining?: number }> {
+    const response = await this.fetchImpl(url, {
+      ...(Object.keys(headers).length === 0 ? {} : { headers }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${text.slice(0, 160)}`);
+    }
+    const remainingHeader =
+      response.headers.get("x-ratelimit-remaining") ??
+      response.headers.get("x-requests-remaining");
+    const remaining =
+      remainingHeader === null ? undefined : Number(remainingHeader);
+    return {
+      json: JSON.parse(text),
+      ...(remaining === undefined || !Number.isFinite(remaining)
+        ? {}
+        : { remaining }),
+    };
+  }
+
+  // -- ESPN -----------------------------------------------------------------
+
+  /**
+   * ESPN is the lifecycle authority, so every observable change is logged:
+   * state, period, completion, and the clock reaching zero. Which of those
+   * actually fires between rounds is the open question this measures.
+   */
+  private async pollEspn(): Promise<void> {
+    const eventId = this.target?.espnEventId?.trim() ?? "";
+    if (eventId.length === 0) return;
+
+    const observedAt = new Date(this.now()).toISOString();
+    const { json } = await this.getJson(buildEspnScoreboardUrl(eventId));
+    const entries = parseEspnScoreboardLifecycle(json);
+
+    for (const entry of entries) {
+      const key = espnFingerprint(entry);
+      const previous = this.espnSeen.get(entry.externalId);
+      if (previous === key) continue;
+      this.espnSeen.set(entry.externalId, key);
+
+      // A bout appearing for the first time as "pre" is not news.
+      if (previous === undefined && entry.state === "pre") continue;
+
+      this.timeline.record({
+        kind: "observation",
+        source: "espn",
+        at: observedAt,
+        boutId: entry.externalId,
+        round: entry.period,
+        label: describeEspnChange(previous, entry),
+        detail: { ...entry },
+      });
+
+      // ESPN advancing the period is our best automatic signal that the
+      // previous round is over, so it opens the chase for that round's stats.
+      if (entry.period > 1) this.markRoundEnded(entry.period - 1);
+      if (entry.completed) this.markRoundEnded(entry.period);
+    }
+  }
+
+  // -- Cito -----------------------------------------------------------------
+
+  /**
+   * Asks only about rounds nobody has answered yet, and records the first
+   * moment a round's stats exist. `availability` is reported as well, because
+   * "HTTP 200 with an empty array" is Cito's way of saying "not yet" and it is
+   * indistinguishable from a parse failure unless you look.
+   */
+  private async pollCito(): Promise<void> {
+    if (this.citoPending.length === 0) return;
+
+    const base = this.env.CITO_API_BASE_URL?.trim() ?? "";
+    const apiKey = this.env.CITO_API_KEY?.trim() ?? "";
+    if (base.length === 0 || apiKey.length === 0) {
+      throw new Error("CITO_API_BASE_URL and CITO_API_KEY must be set");
+    }
+
+    // One pending question per tick keeps the cadence honest: the latency we
+    // report is the latency of a single request, not of a queue.
+    const pending = this.citoPending[0];
+    if (pending === undefined) return;
+    pending.polls += 1;
+
+    const observedAt = new Date(this.now()).toISOString();
+    const { json, remaining } = await this.getJson(
+      buildCitoRoundStatsUrl(base, pending.boutId, pending.round),
+      { "x-api-key": apiKey },
+    );
+
+    const data = (json as { data?: unknown }).data;
+    const rows = Array.isArray((data as { roundStats?: unknown })?.roundStats)
+      ? ((data as { roundStats: unknown[] }).roundStats)
+      : [];
+    const availability = (data as { availability?: unknown })?.availability;
+
+    if (rows.length > 0) {
+      this.foundCito.add(`${pending.boutId}:${pending.round}`);
+      this.citoPending = this.citoPending.filter((entry) => entry !== pending);
+      this.timeline.record({
+        kind: "observation",
+        source: "cito",
+        at: observedAt,
+        boutId: pending.boutId,
+        round: pending.round,
+        label: `round ${pending.round} stats published (${rows.length} rows, ${pending.polls} polls)`,
+        detail: { availability, rows },
+      });
+      return;
+    }
+
+    if (pending.polls >= MAX_PENDING_POLLS) {
+      this.citoPending = this.citoPending.filter((entry) => entry !== pending);
+      this.timeline.record({
+        kind: "note",
+        source: "cito",
+        at: observedAt,
+        boutId: pending.boutId,
+        round: pending.round,
+        label: `gave up on round ${pending.round} after ${pending.polls} polls (availability: ${String(availability)})`,
+      });
+      return;
+    }
+
+    this.applyQuotaBackoff("cito", remaining);
+  }
+
+  // -- Sherdog --------------------------------------------------------------
+
+  /** Records the first poll on which a pending round's commentary exists. */
+  private async pollSherdog(): Promise<void> {
+    if (this.sherdogPending.length === 0) return;
+    const url = this.target?.sherdogUrl?.trim() ?? "";
+    if (url.length === 0) return;
+    if ((this.env.SHERDOG_PERMISSION_SCOPE?.trim() ?? "").length === 0) {
+      throw new Error("SHERDOG_PERMISSION_SCOPE is not set");
+    }
+
+    const observedAt = new Date(this.now()).toISOString();
+    const response = await this.fetchImpl(url, {
+      headers: { "user-agent": "ufc-live-dashboard/0.1 (personal use)" },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    const html = await response.text();
+    if (!response.ok) {
+      // 403 is a stop signal by design, never something to work around.
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const observations = await parseSherdogRoundObservations({
+      boutId: "lab-watch",
+      html,
+      sourceUrl: url,
+      fetchedAt: observedAt,
+    });
+
+    for (const pending of [...this.sherdogPending]) {
+      pending.polls += 1;
+      const match = observations.find(
+        (observation) => observation.round === pending.round,
+      );
+      if (match !== undefined) {
+        this.foundSherdog.add(`sherdog:${pending.round}`);
+        this.sherdogPending = this.sherdogPending.filter(
+          (entry) => entry !== pending,
+        );
+        this.timeline.record({
+          kind: "observation",
+          source: "sherdog",
+          at: observedAt,
+          round: pending.round,
+          label: `round ${pending.round} published (${match.commentary.length} chars, ${match.scorerCards.length} scorer cards, ${pending.polls} polls)`,
+          detail: {
+            commentary: match.commentary.slice(0, 400),
+            scorerCards: match.scorerCards,
+          },
+        });
+        continue;
+      }
+      if (pending.polls >= MAX_PENDING_POLLS) {
+        this.sherdogPending = this.sherdogPending.filter(
+          (entry) => entry !== pending,
+        );
+        this.timeline.record({
+          kind: "note",
+          source: "sherdog",
+          at: observedAt,
+          round: pending.round,
+          label: `gave up on round ${pending.round} after ${pending.polls} polls`,
+        });
+      }
+    }
+  }
+
+  /**
+   * Slows a poller down when the vendor says the allowance is nearly gone.
+   * Announced on the timeline, because a silently slower poller would corrupt
+   * every latency measured after it.
+   */
+  private applyQuotaBackoff(name: string, remaining: number | undefined): void {
+    if (remaining === undefined || remaining > QUOTA_FLOOR) return;
+    const state = this.pollers.get(name);
+    if (state === undefined || state.intervalMs >= QUOTA_BACKOFF_MS) return;
+
+    this.timeline.record({
+      kind: "note",
+      source: name,
+      label: `quota low (${remaining} left) — slowing polls to ${QUOTA_BACKOFF_MS / 1000}s; latencies after this are coarser`,
+    });
+    if (state.timer !== undefined) clearInterval(state.timer);
+    state.timer = undefined;
+    this.schedule(name, QUOTA_BACKOFF_MS, async () => {
+      if (name === "cito") await this.pollCito();
+    });
+  }
+}
+
+function espnFingerprint(entry: EspnLifecycleEntry): string {
+  // The clock is bucketed to whole seconds so a poll that lands mid-second
+  // does not read as a change; zero is kept distinct because "clock reached
+  // 0:00" is one of the transitions being measured.
+  return [
+    entry.state,
+    entry.period,
+    entry.completed,
+    entry.clockSeconds === undefined ? "-" : Math.round(entry.clockSeconds),
+  ].join("/");
+}
+
+function describeEspnChange(
+  previous: string | undefined,
+  entry: EspnLifecycleEntry,
+): string {
+  const clock =
+    entry.clockSeconds === undefined
+      ? "no clock"
+      : `clock ${entry.clockSeconds}s`;
+  const now = `${entry.state} period ${entry.period} ${clock}${entry.completed ? " completed" : ""}`;
+  if (previous === undefined) return `first seen: ${now}`;
+
+  const [state, period, completed] = previous.split("/");
+  if (state !== entry.state) return `state ${state} -> ${entry.state} (${now})`;
+  if (period !== String(entry.period)) {
+    return `period ${period} -> ${entry.period} (${clock})`;
+  }
+  if (completed !== String(entry.completed)) return `completed (${now})`;
+  if (entry.clockSeconds === 0) return `clock reached 0:00 (period ${entry.period})`;
+  return now;
+}
