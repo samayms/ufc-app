@@ -24,6 +24,10 @@ import process from "node:process";
 import citoWeekendBouts from "../../src/fixtures/citoEventBoutsLive.json" with {
   type: "json",
 };
+import espnWeekendScoreboard from "../../src/fixtures/espnScoreboardWeekend.json" with {
+  type: "json",
+};
+import { matchFighterPair } from "../../src/lib/boutMatch.ts";
 import { LabTimeline } from "./timeline.ts";
 import { LabWatcher } from "./watcher.ts";
 import {
@@ -39,6 +43,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PORT = 5055;
 const MAX_BODY_BYTES = 256 * 1024;
 const LAB_CITO_INTERVAL_MS = 5_000;
+const LAB_ESPN_INTERVAL_MS = 1_000;
+const LAB_KALSHI_INTERVAL_MS = 5_000;
 const WEEKEND_EVENT_NAME = "UFC Fight Night: Medić vs. Rodriguez";
 const WEEKEND_EVENT_DATE = "2026-08-01";
 
@@ -47,12 +53,47 @@ function arrayField(source: unknown, name: string): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
+function espnFightOptions(source: unknown): Array<{
+  id: string;
+  firstFighter: string;
+  secondFighter: string;
+}> {
+  const events = arrayField(source, "events");
+  return events.flatMap((event) =>
+    arrayField(event, "competitions").flatMap((competition) => {
+      const id = stringField(competition, "id");
+      const names = arrayField(competition, "competitors").flatMap(
+        (competitor) => {
+          const athlete = (competitor as { athlete?: unknown } | null)?.athlete;
+          const name =
+            stringField(athlete, "displayName") ??
+            stringField(athlete, "fullName");
+          return name === undefined ? [] : [name];
+        },
+      );
+      return id === undefined || names.length !== 2
+        ? []
+        : [
+            {
+              id,
+              firstFighter: names[0] as string,
+              secondFighter: names[1] as string,
+            },
+          ];
+    }),
+  );
+}
+
 /**
  * Reduces the captured weekend card to the only choices the operator needs.
  * Vendor ids stay behind the select control instead of becoming form fields.
  */
-export function buildLabCard(source: unknown): LabCard {
+export function buildLabCard(
+  source: unknown,
+  espnSource: unknown = espnWeekendScoreboard,
+): LabCard {
   const rows = arrayField(source, "data");
+  const espnFights = espnFightOptions(espnSource);
   const fights = rows
     .map((row): (LabFight & { order: number }) | null => {
       const id = stringField(row, "id");
@@ -71,8 +112,23 @@ export function buildLabCard(source: unknown): LabCard {
 
       const redSlug = stringField(red, "fighterSlug");
       const blueSlug = stringField(blue, "fighterSlug");
+      const espnMatch = espnFights
+        .map((fight) => ({
+          fight,
+          match: matchFighterPair(
+            { redFighter: redName, blueFighter: blueName },
+            {
+              redFighter: fight.firstFighter,
+              blueFighter: fight.secondFighter,
+            },
+          ),
+        }))
+        .sort((left, right) => right.match.confidence - left.match.confidence)[0];
       return {
         id,
+        ...(espnMatch !== undefined && espnMatch.match.confidence >= 0.85
+          ? { espnBoutId: espnMatch.fight.id }
+          : {}),
         cardSection: stringField(row, "cardSection") ?? "Card",
         cardPosition: stringField(row, "cardPosition") ?? "",
         weightClass: (stringField(row, "weightClass") ?? "Bout").replace(
@@ -353,10 +409,8 @@ export function createLabServer(options: LabServerOptions = {}) {
       const body = await readBody(request);
       const boutId = stringField(body, "boutId");
       const round = numberField(body, "round");
-      if (
-        boutId === undefined ||
-        !LAB_CARD.fights.some((fight) => fight.id === boutId)
-      ) {
+      const fight = LAB_CARD.fights.find((candidate) => candidate.id === boutId);
+      if (boutId === undefined || fight === undefined) {
         sendJson(response, 400, {
           error: "Select a fight from this weekend's card",
         });
@@ -372,10 +426,7 @@ export function createLabServer(options: LabServerOptions = {}) {
         return;
       }
 
-      watcher.start({
-        citoBoutIds: [boutId],
-        citoIntervalMs: LAB_CITO_INTERVAL_MS,
-      });
+      watcher.stop();
       const entry = timeline.record({
         kind: "marker",
         source: "user",
@@ -383,7 +434,20 @@ export function createLabServer(options: LabServerOptions = {}) {
         boutId,
         round,
       });
-      watcher.markRoundEnded(round, boutId);
+      watcher.start({
+        boutId,
+        round,
+        espnEventId: WEEKEND.espnEventId,
+        ...(fight.espnBoutId === undefined
+          ? {}
+          : { espnBoutId: fight.espnBoutId }),
+        espnIntervalMs: LAB_ESPN_INTERVAL_MS,
+        citoBoutIds: [boutId],
+        citoIntervalMs: LAB_CITO_INTERVAL_MS,
+        redFighter: fight.red.name,
+        blueFighter: fight.blue.name,
+        kalshiIntervalMs: LAB_KALSHI_INTERVAL_MS,
+      });
       sendJson(response, 200, { entry, watch: watcher.status() });
       return;
     }

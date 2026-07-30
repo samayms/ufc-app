@@ -27,6 +27,11 @@ import {
   type EspnLifecycleEntry,
 } from "../../src/sources/espn.ts";
 import { buildCitoRoundStatsUrl } from "../../src/sources/cito.ts";
+import { matchFighterPair } from "../../src/lib/boutMatch.ts";
+import {
+  buildKalshiUpcomingUrl,
+  parseKalshiUpcomingMarkets,
+} from "../../src/sources/upcoming/kalshiUpcoming.ts";
 import { parseSherdogRoundObservations } from "../../src/sources/sherdog.ts";
 import type { WatchStatus, WatchTarget } from "./contract.ts";
 import { redactSecrets } from "./contract.ts";
@@ -34,6 +39,7 @@ import type { LabTimeline } from "./timeline.ts";
 
 const DEFAULT_ESPN_INTERVAL_MS = 5_000;
 const DEFAULT_CITO_INTERVAL_MS = 5_000;
+const DEFAULT_KALSHI_INTERVAL_MS = 5_000;
 const DEFAULT_SHERDOG_INTERVAL_MS = 20_000;
 
 /** Sherdog is a courtesy read of someone else's page. Never poll it harder. */
@@ -72,6 +78,12 @@ interface PendingRound {
   polls: number;
 }
 
+interface PendingEspnRound {
+  labBoutId: string;
+  espnBoutId: string;
+  round: number;
+}
+
 export interface LabWatcherOptions {
   timeline: LabTimeline;
   env: Record<string, string | undefined>;
@@ -99,10 +111,14 @@ export class LabWatcher {
   /** Last lifecycle entry seen per ESPN bout id, for change detection. */
   private readonly espnSeen = new Map<string, string>();
 
+  private espnPending?: PendingEspnRound;
+
   /** (bout,round) keys already recorded as found — never recorded twice. */
   private readonly foundCito = new Set<string>();
 
   private readonly foundSherdog = new Set<string>();
+
+  private kalshiComplete = false;
 
   private citoPending: PendingRound[] = [];
 
@@ -122,9 +138,15 @@ export class LabWatcher {
    */
   markRoundEnded(round: number, boutId?: string): void {
     if (!Number.isSafeInteger(round) || round < 1) return;
-    const cito = boutId ?? this.target?.citoBoutIds?.[0];
+    const labBoutId =
+      boutId ?? this.target?.boutId ?? this.target?.citoBoutIds?.[0];
+    const cito = labBoutId ?? this.target?.citoBoutIds?.[0];
     if (cito !== undefined && !this.foundCito.has(`${cito}:${round}`)) {
       this.addPending(this.citoPending, cito, round);
+    }
+    const espnBoutId = this.target?.espnBoutId;
+    if (labBoutId !== undefined && espnBoutId !== undefined) {
+      this.espnPending = { labBoutId, espnBoutId, round };
     }
     if (
       this.target?.sherdogUrl !== undefined &&
@@ -144,19 +166,25 @@ export class LabWatcher {
   start(target: WatchTarget): WatchStatus {
     if (this.running) this.stop();
 
+    this.pollers.clear();
     this.running = true;
     this.startedAt = new Date(this.now()).toISOString();
     this.target = target;
     this.espnSeen.clear();
+    this.espnPending = undefined;
     this.foundCito.clear();
     this.foundSherdog.clear();
+    this.kalshiComplete = false;
     this.citoPending = [];
     this.sherdogPending = [];
+    if (target.round !== undefined) {
+      this.markRoundEnded(target.round, target.boutId);
+    }
 
     this.timeline.record({
       kind: "note",
       source: "lab",
-      label: `watcher started (espn=${target.espnEventId ?? "-"}, cito bouts=${(target.citoBoutIds ?? []).join("|") || "-"}, sherdog=${target.sherdogUrl === undefined ? "off" : "on"})`,
+      label: `watcher started (espn=${target.espnEventId ?? "-"}, cito=${(target.citoBoutIds ?? []).join("|") || "-"}, kalshi=${target.redFighter !== undefined && target.blueFighter !== undefined ? "on" : "off"})`,
       detail: { ...target },
     });
 
@@ -172,6 +200,19 @@ export class LabWatcher {
         "cito",
         Math.max(MIN_INTERVAL_MS, target.citoIntervalMs ?? DEFAULT_CITO_INTERVAL_MS),
         () => this.pollCito(),
+      );
+    }
+    if (
+      (target.redFighter ?? "").trim().length > 0 &&
+      (target.blueFighter ?? "").trim().length > 0
+    ) {
+      this.schedule(
+        "kalshi",
+        Math.max(
+          MIN_INTERVAL_MS,
+          target.kalshiIntervalMs ?? DEFAULT_KALSHI_INTERVAL_MS,
+        ),
+        () => this.pollKalshi(),
       );
     }
     if ((target.sherdogUrl ?? "").trim().length > 0) {
@@ -271,11 +312,20 @@ export class LabWatcher {
         });
     };
 
-    tick();
     const timer = setInterval(tick, intervalMs);
     // The lab must never keep the process alive on its own account.
     timer.unref?.();
     state.timer = timer;
+    tick();
+  }
+
+  private pausePoller(name: string): void {
+    const state = this.pollers.get(name);
+    if (state?.timer !== undefined) clearInterval(state.timer);
+    if (state !== undefined) {
+      state.timer = undefined;
+      state.nextAtMs = undefined;
+    }
   }
 
   private async getJson(
@@ -311,36 +361,64 @@ export class LabWatcher {
    * actually fires between rounds is the open question this measures.
    */
   private async pollEspn(): Promise<void> {
+    const pending = this.espnPending;
+    if (pending === undefined) return;
     const eventId = this.target?.espnEventId?.trim() ?? "";
     if (eventId.length === 0) return;
 
-    const observedAt = new Date(this.now()).toISOString();
     const { json } = await this.getJson(buildEspnScoreboardUrl(eventId));
     const entries = parseEspnScoreboardLifecycle(json);
+    const observedAt = new Date(this.now()).toISOString();
+    const entry = entries.find(
+      (candidate) => candidate.externalId === pending.espnBoutId,
+    );
+    if (entry === undefined) {
+      if (this.espnSeen.get(pending.espnBoutId) !== "missing") {
+        this.espnSeen.set(pending.espnBoutId, "missing");
+        this.timeline.record({
+          kind: "observation",
+          source: "espn",
+          at: observedAt,
+          boutId: pending.labBoutId,
+          round: pending.round,
+          label: "ESPN response did not include the selected fight",
+          detail: {
+            roundEnded: false,
+            espnBoutId: pending.espnBoutId,
+            fightsInResponse: entries.length,
+          },
+        });
+      }
+      return;
+    }
 
-    for (const entry of entries) {
-      const key = espnFingerprint(entry);
-      const previous = this.espnSeen.get(entry.externalId);
-      if (previous === key) continue;
-      this.espnSeen.set(entry.externalId, key);
+    const key = espnFingerprint(entry);
+    const previous = this.espnSeen.get(entry.externalId);
+    const signal = espnRoundEndSignal(entry, pending.round);
+    if (previous === key && signal === undefined) return;
+    this.espnSeen.set(entry.externalId, key);
 
-      // A bout appearing for the first time as "pre" is not news.
-      if (previous === undefined && entry.state === "pre") continue;
+    const roundEnded = signal !== undefined;
+    this.timeline.record({
+      kind: "observation",
+      source: "espn",
+      at: observedAt,
+      boutId: pending.labBoutId,
+      round: pending.round,
+      label: roundEnded
+        ? `ESPN announced round ${pending.round} done (${describeEspnSignal(signal)})`
+        : `ESPN still shows ${describeEspnState(entry)}`,
+      detail: {
+        roundEnded,
+        ...(signal === undefined ? {} : { signal }),
+        espnBoutId: pending.espnBoutId,
+        lifecycle: { ...entry },
+      },
+    });
 
-      this.timeline.record({
-        kind: "observation",
-        source: "espn",
-        at: observedAt,
-        boutId: entry.externalId,
-        round: entry.period,
-        label: describeEspnChange(previous, entry),
-        detail: { ...entry },
-      });
-
-      // ESPN advancing the period is our best automatic signal that the
-      // previous round is over, so it opens the chase for that round's stats.
-      if (entry.period > 1) this.markRoundEnded(entry.period - 1);
-      if (entry.completed) this.markRoundEnded(entry.period);
+    if (roundEnded) {
+      this.espnPending = undefined;
+      this.pausePoller("espn");
     }
   }
 
@@ -367,11 +445,11 @@ export class LabWatcher {
     if (pending === undefined) return;
     pending.polls += 1;
 
-    const observedAt = new Date(this.now()).toISOString();
     const { json, remaining } = await this.getJson(
       buildCitoRoundStatsUrl(base, pending.boutId, pending.round),
       { "x-api-key": apiKey },
     );
+    const observedAt = new Date(this.now()).toISOString();
 
     const data = (json as { data?: unknown }).data;
     const rows = Array.isArray((data as { roundStats?: unknown })?.roundStats)
@@ -391,6 +469,7 @@ export class LabWatcher {
         label: `round ${pending.round} stats published (${rows.length} rows, ${pending.polls} polls)`,
         detail: { availability, rows },
       });
+      this.pausePoller("cito");
       return;
     }
 
@@ -408,6 +487,87 @@ export class LabWatcher {
     }
 
     this.applyQuotaBackoff("cito", remaining);
+  }
+
+  // -- Kalshi ---------------------------------------------------------------
+
+  /** Captures the selected fight's public win-market prices at the horn. */
+  private async pollKalshi(): Promise<void> {
+    if (this.kalshiComplete) return;
+    const labBoutId = this.target?.boutId;
+    const round = this.target?.round;
+    const redFighter = this.target?.redFighter?.trim();
+    const blueFighter = this.target?.blueFighter?.trim();
+    if (
+      labBoutId === undefined ||
+      round === undefined ||
+      redFighter === undefined ||
+      blueFighter === undefined
+    ) {
+      return;
+    }
+
+    const { json } = await this.getJson(buildKalshiUpcomingUrl(200));
+    const observedAt = new Date(this.now()).toISOString();
+    const markets = parseKalshiUpcomingMarkets(json);
+    const match = markets
+      .map((market) => ({
+        market,
+        pair: matchFighterPair(
+          { redFighter, blueFighter },
+          {
+            redFighter: market.firstFighter,
+            blueFighter: market.secondFighter,
+          },
+        ),
+      }))
+      .sort((left, right) => right.pair.confidence - left.pair.confidence)[0];
+
+    if (match === undefined || match.pair.confidence < 0.85) {
+      this.timeline.record({
+        kind: "observation",
+        source: "kalshi",
+        at: observedAt,
+        boutId: labBoutId,
+        round,
+        label: "No matching Kalshi market is listed for this fight",
+        detail: { listed: false, marketsInResponse: markets.length },
+      });
+    } else {
+      const first = match.market.quotes.find((quote) => quote.side === "first");
+      const second = match.market.quotes.find((quote) => quote.side === "second");
+      const [redQuote, blueQuote] = match.pair.cornersReversed
+        ? [second, first]
+        : [first, second];
+      const red = {
+        fighter: redFighter,
+        yesCents: kalshiYesCents(redQuote?.native),
+        probability: redQuote?.impliedProbability,
+      };
+      const blue = {
+        fighter: blueFighter,
+        yesCents: kalshiYesCents(blueQuote?.native),
+        probability: blueQuote?.impliedProbability,
+      };
+      this.timeline.record({
+        kind: "observation",
+        source: "kalshi",
+        at: observedAt,
+        boutId: labBoutId,
+        round,
+        label: `Kalshi snapshot: ${redFighter} ${displayCents(red.yesCents)}, ${blueFighter} ${displayCents(blue.yesCents)}`,
+        detail: {
+          listed: true,
+          externalId: match.market.externalId,
+          confidence: match.pair.confidence,
+          red,
+          blue,
+        },
+      });
+    }
+
+    this.kalshiComplete = true;
+    this.pausePoller("kalshi");
   }
 
   // -- Sherdog --------------------------------------------------------------
@@ -512,23 +672,47 @@ function espnFingerprint(entry: EspnLifecycleEntry): string {
   ].join("/");
 }
 
-function describeEspnChange(
-  previous: string | undefined,
+type EspnRoundEndSignal = "clock_zero" | "period_advanced" | "bout_completed";
+
+function espnRoundEndSignal(
   entry: EspnLifecycleEntry,
-): string {
+  round: number,
+): EspnRoundEndSignal | undefined {
+  if (entry.completed && entry.period >= round) return "bout_completed";
+  if (entry.period > round) return "period_advanced";
+  if (entry.period === round && entry.clockSeconds === 0) return "clock_zero";
+  return undefined;
+}
+
+function describeEspnState(entry: EspnLifecycleEntry): string {
   const clock =
     entry.clockSeconds === undefined
       ? "no clock"
       : `clock ${entry.clockSeconds}s`;
-  const now = `${entry.state} period ${entry.period} ${clock}${entry.completed ? " completed" : ""}`;
-  if (previous === undefined) return `first seen: ${now}`;
+  return `${entry.state} · round ${entry.period} · ${clock}`;
+}
 
-  const [state, period, completed] = previous.split("/");
-  if (state !== entry.state) return `state ${state} -> ${entry.state} (${now})`;
-  if (period !== String(entry.period)) {
-    return `period ${period} -> ${entry.period} (${clock})`;
+function describeEspnSignal(signal: EspnRoundEndSignal): string {
+  switch (signal) {
+    case "clock_zero":
+      return "clock reached 0:00";
+    case "period_advanced":
+      return "next round appeared";
+    case "bout_completed":
+      return "bout marked complete";
   }
-  if (completed !== String(entry.completed)) return `completed (${now})`;
-  if (entry.clockSeconds === 0) return `clock reached 0:00 (period ${entry.period})`;
-  return now;
+}
+
+function kalshiYesCents(native: unknown): number | undefined {
+  if (typeof native !== "object" || native === null) return undefined;
+  const value = native as { kind?: unknown; yesCents?: unknown };
+  return value.kind === "kalshi-cents" &&
+    typeof value.yesCents === "number" &&
+    Number.isFinite(value.yesCents)
+    ? value.yesCents
+    : undefined;
+}
+
+function displayCents(value: number | undefined): string {
+  return value === undefined ? "unpriced" : `${value.toFixed(1)}¢`;
 }

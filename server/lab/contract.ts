@@ -117,13 +117,20 @@ export interface TimelineEntry {
 }
 
 export interface WatchTarget {
+  /** Stable lab id used to join every vendor observation to the horn marker. */
+  boutId?: string;
+  round?: number;
   espnEventId?: string;
+  espnBoutId?: string;
   citoEventSlug?: string;
   /** Cito bout ids to chase round stats for; empty means "the whole card". */
   citoBoutIds?: string[];
+  redFighter?: string;
+  blueFighter?: string;
   sherdogUrl?: string;
   espnIntervalMs?: number;
   citoIntervalMs?: number;
+  kalshiIntervalMs?: number;
   sherdogIntervalMs?: number;
 }
 
@@ -145,6 +152,7 @@ export interface WatchStatus {
 
 export interface LabFight {
   id: string;
+  espnBoutId?: string;
   cardSection: string;
   cardPosition: string;
   weightClass: string;

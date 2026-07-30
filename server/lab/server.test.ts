@@ -17,6 +17,7 @@ describe("buildLabCard", () => {
     expect(card.fights).toHaveLength(14);
     expect(card.fights[0]).toEqual({
       id: "12879",
+      espnBoutId: "401870843",
       cardSection: "Main Card",
       cardPosition: "Main Card 1",
       weightClass: "Welterweight",
