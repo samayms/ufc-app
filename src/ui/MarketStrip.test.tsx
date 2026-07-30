@@ -71,4 +71,12 @@ describe("MarketStrip odds source", () => {
     expect(html).not.toContain("data-odds-source");
     expect(html.match(/—/g)).toHaveLength(4);
   });
+
+  it("renders the proportional red/blue odds bar in the center", () => {
+    const html = renderMarket("kalshi");
+
+    expect(html).toContain('class="market-strip-odds-bar"');
+    expect(html).toContain('class="market-strip-odds-red"');
+    expect(html).toContain('class="market-strip-odds-blue"');
+  });
 });

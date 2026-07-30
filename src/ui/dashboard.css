@@ -477,11 +477,11 @@
   grid-template-columns: minmax(0, 1fr) minmax(91px, auto) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  margin-top: -9px;
-  padding: 0 0 6px;
-  border: none;
-  border-radius: 0;
-  background: none;
+  margin: -9px 0 0;
+  padding: 8px 11px 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  background: var(--surface-2);
   text-align: center;
 }
 
@@ -493,13 +493,25 @@
   text-align: center;
 }
 
+/* Keep each odds stack centered internally, but move the two stacks toward
+   their respective edges. The percentage and prefight line stay together. */
+.market-strip > .market-strip-side:first-of-type {
+  --market-strip-edge-shift: clamp(16px, 4vw, 34px);
+  transform: translateX(calc(var(--market-strip-edge-shift) * -1));
+}
+
+.market-strip > .market-strip-side:last-of-type {
+  --market-strip-edge-shift: clamp(16px, 4vw, 34px);
+  transform: translateX(var(--market-strip-edge-shift));
+}
+
 /* Kalshi-sourced and no-data strips keep the mint this row has always
    used. It is deliberately softer than --market-color-kalshi, which is
-   tuned for the small provider headings rather than a 1.55rem number. */
+   tuned for the small provider headings rather than a 1.65rem number. */
 .market-strip-side strong {
   color: #4de4b2;
   font-family: var(--font-display);
-  font-size: 1.55rem;
+  font-size: 1.65rem;
   line-height: 1;
 }
 
@@ -520,11 +532,41 @@
   text-transform: uppercase;
 }
 
-.market-strip-divider {
-  justify-self: center;
-  width: 1px;
-  height: 28px;
+.market-strip-odds-bar {
+  width: 140%;
+  height: 7px;
+  display: flex;
+  gap: 2px;
+  justify-self: stretch;
+  margin-inline: -20%;
+}
+
+.market-strip-odds-red,
+.market-strip-odds-blue,
+.market-strip-odds-neutral {
+  min-width: 0;
+}
+
+.market-strip-odds-red {
+  border-radius: 4px 0 0 4px;
+  background: var(--red-corner);
+}
+
+.market-strip-odds-blue {
+  border-radius: 0 4px 4px 0;
+  background: var(--blue-corner);
+}
+
+.market-strip-odds-neutral {
   background: var(--border);
+}
+
+.market-strip-odds-neutral:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.market-strip-odds-neutral:last-child {
+  border-radius: 0 4px 4px 0;
 }
 
 /* Section and round tabs ------------------------------------------------ */
@@ -1961,11 +2003,11 @@
 
   .market-strip {
     margin-top: -6px;
-    padding: 0 0 4px;
+    padding: 7px 10px 6px;
   }
 
   .market-strip-side strong {
-    font-size: 1.25rem;
+    font-size: 1.35rem;
   }
 
   .market-strip-prefight {

@@ -34,6 +34,9 @@ export function MarketStrip({
   const blue = snapshot
     ? averageImpliedProbability(snapshot, "blue")
     : null;
+  const hasData = red != null && blue != null;
+  const total = (red ?? 0) + (blue ?? 0);
+  const redShare = hasData && total > 0 ? ((red as number) / total) * 100 : 50;
 
   const preFightSnapshot = firstUsable(preFightOdds);
   const preFightRed = preFightSnapshot
@@ -58,7 +61,16 @@ export function MarketStrip({
           Prefight odds: <span className="num">{preFightRed == null ? "—" : fmtPct(preFightRed)}</span>
         </span>
       </span>
-      <span className="market-strip-divider" aria-hidden="true" />
+      <span className="market-strip-odds-bar" aria-hidden="true">
+        <span
+          className={hasData ? "market-strip-odds-red" : "market-strip-odds-neutral"}
+          style={{ width: `calc(${redShare}% - 1px)` }}
+        />
+        <span
+          className={hasData ? "market-strip-odds-blue" : "market-strip-odds-neutral"}
+          style={{ width: `calc(${100 - redShare}% - 1px)` }}
+        />
+      </span>
       <span className="market-strip-side">
         <strong className="num" data-odds-source={snapshot?.market}>
           {blue == null ? "—" : fmtPct(blue)}
