@@ -1337,7 +1337,12 @@ const collectorBootstrap = collectorProbe(
   "/api/bootstrap",
   (json) => {
     const state = field(json, "state");
-    const boutViews = asArray(field(state, "boutViews"));
+    // `boutViews` is a Record keyed by bout id, not an array.
+    const boutViewsRaw = field(state, "boutViews");
+    const boutViews =
+      typeof boutViewsRaw === "object" && boutViewsRaw !== null
+        ? Object.values(boutViewsRaw as Record<string, unknown>)
+        : [];
     const event = field(state, "event");
     const mappings = asArray(field(json, "boutMappings"));
     // Which vendors each bout can actually be looked up by. A bout with only
@@ -1359,12 +1364,20 @@ const collectorBootstrap = collectorProbe(
       refCounts.get("cito") === undefined
         ? "no bout carries a cito ref — round stats cannot be fetched"
         : `cito refs on ${refCounts.get("cito")}/${mappings.length} bouts`,
-      ...boutViews
-        .slice(0, 6)
-        .map(
-          (bout) =>
-            `  ${String(field(bout, "id") ?? field(field(bout, "bout"), "id"))}: ${String(field(bout, "status") ?? field(field(bout, "bout"), "status"))}, ${asArray(field(bout, "rounds")).length} rounds`,
-        ),
+      ...boutViews.slice(0, 14).map((view) => {
+        const bout = field(view, "bout");
+        const roundsBySource = field(view, "rounds");
+        const sources =
+          typeof roundsBySource === "object" && roundsBySource !== null
+            ? Object.keys(roundsBySource as object)
+            : [];
+        const markets =
+          typeof field(view, "latestOdds") === "object" &&
+          field(view, "latestOdds") !== null
+            ? Object.keys(field(view, "latestOdds") as object)
+            : [];
+        return `  ${String(field(bout, "id"))} ${String(field(bout, "status") ?? "?")}: rounds from [${sources.join(",") || "none"}], odds from [${markets.join(",") || "none"}]`;
+      }),
     ];
   },
 );
