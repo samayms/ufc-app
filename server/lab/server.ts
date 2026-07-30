@@ -568,6 +568,19 @@ export function createLabServer(options: LabServerOptions = {}) {
       return;
     }
 
+    if (method === "POST" && url.pathname === "/lab/watch/stop-source") {
+      const body = await readBody(request);
+      const source = stringField(body, "source");
+      if (source !== "espn" && source !== "cito") {
+        sendJson(response, 400, {
+          error: "source must be espn or cito",
+        });
+        return;
+      }
+      sendJson(response, 200, watcher.stopSource(source));
+      return;
+    }
+
     sendJson(response, 404, { error: `no route for ${method} ${url.pathname}` });
   }
 

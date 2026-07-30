@@ -146,6 +146,8 @@ export interface WatchStatus {
   /** Per-poller: how many polls, how many failed, when it last completed. */
   pollers: Array<{
     name: string;
+    /** False once this source has been stopped or completed. */
+    active: boolean;
     polls: number;
     failures: number;
     lastAt?: string;

@@ -427,6 +427,24 @@
       font-variant-numeric: tabular-nums;
     }
 
+    .source-stop {
+      width: 100%;
+      min-height: 38px;
+      margin-top: 11px;
+      padding: 7px 10px;
+      color: var(--red);
+      background: transparent;
+      border-color: rgba(255, 118, 104, 0.35);
+      font-size: 0.75rem;
+      font-weight: 650;
+    }
+
+    .source-stop:hover:not(:disabled) {
+      color: var(--text);
+      background: var(--red-dim);
+      border-color: var(--red);
+    }
+
     .stop {
       width: 100%;
       margin-top: 16px;
@@ -841,6 +859,7 @@
               <span id="espn-stats-checks">0 checks</span>
               <span id="espn-stats-latency">—</span>
             </div>
+            <button id="stop-espn" class="source-stop" type="button" disabled>Stop ESPN polling</button>
           </article>
           <article class="source-item" data-source="cito">
             <div class="source-head">
@@ -852,6 +871,7 @@
               <span id="cito-checks">0 checks</span>
               <span id="cito-latency">—</span>
             </div>
+            <button id="stop-cito" class="source-stop" type="button" disabled>Stop CITO polling</button>
           </article>
           <article class="source-item" data-source="kalshi">
             <div class="source-head">
@@ -865,7 +885,7 @@
             </div>
           </article>
         </div>
-        <button id="stop-polling" class="stop" type="button" disabled>Stop polling</button>
+        <button id="stop-polling" class="stop" type="button" disabled>Stop all polling</button>
       </aside>
     </div>
 
@@ -938,6 +958,7 @@
       watch: null,
       pollInFlight: false,
       stopping: false,
+      stoppingSource: null,
       starting: false,
       rawJson: "",
     };
@@ -1068,6 +1089,22 @@
       $("fight-started").disabled = !ready || watching || state.starting;
       $("round-ended").disabled = !ready || measuring || state.starting;
       $("stop-polling").disabled = !watching || state.stopping;
+      const espnActive =
+        Boolean(pollerFor("espn") && pollerFor("espn").active) ||
+        Boolean(pollerFor("espn-stats") && pollerFor("espn-stats").active);
+      const citoActive = Boolean(
+        pollerFor("cito") && pollerFor("cito").active,
+      );
+      $("stop-espn").disabled =
+        !watching ||
+        !espnActive ||
+        state.stopping ||
+        state.stoppingSource !== null;
+      $("stop-cito").disabled =
+        !watching ||
+        !citoActive ||
+        state.stopping ||
+        state.stoppingSource !== null;
       document.querySelectorAll(".round").forEach((button) => {
         const round = Number(button.dataset.round);
         button.disabled = measuring || state.starting;
@@ -1080,6 +1117,11 @@
         ? state.watch.pollers
         : [];
       return pollers.find((poller) => poller.name === name);
+    }
+
+    function pollerActive(name) {
+      const poller = pollerFor(name);
+      return Boolean(poller && poller.active);
     }
 
     function sourceEntry(name) {
@@ -1201,6 +1243,30 @@
         return;
       }
 
+      if (
+        poller &&
+        poller.active === false &&
+        name === "espn-stats"
+      ) {
+        const sample = Number(entry && entry.detail && entry.detail.sampleNumber) || 0;
+        status.textContent = "Stopped";
+        detail.textContent = sample
+          ? `ESPN granular polling stopped after sample ${sample}. Captured data remains below.`
+          : "ESPN granular polling stopped before the first sample arrived.";
+        return;
+      }
+      if (
+        poller &&
+        poller.active === false &&
+        name === "espn" &&
+        !(entry && entry.detail && entry.detail.lifecycle && entry.detail.lifecycle.completed)
+      ) {
+        status.textContent = "Stopped";
+        detail.textContent = entry
+          ? `ESPN clock polling stopped. Last report: ${entry.label.replace(/^ESPN reports /, "")}.`
+          : "ESPN clock polling stopped before the first sample arrived.";
+        return;
+      }
       if (name === "espn-stats" && entry) {
         const changed = Number(entry.detail && entry.detail.changedCount) || 0;
         const sample = Number(entry.detail && entry.detail.sampleNumber) || 0;
@@ -1260,6 +1326,11 @@
         detail.textContent = `${rows} fighter stat rows received from CITO.`;
         return;
       }
+      if (poller && poller.active === false && name === "cito") {
+        status.textContent = "Stopped";
+        detail.textContent = "CITO retries stopped before round stats were received.";
+        return;
+      }
       if (name === "kalshi" && entry) {
         status.textContent = entry.detail && entry.detail.listed === true
           ? "Snapshot received"
@@ -1307,19 +1378,40 @@
           const poller = pollerFor(name);
           return poller && poller.lastError && !sourceEntry(name);
         });
+        const anyActive = Boolean(
+          state.watch &&
+          Array.isArray(state.watch.pollers) &&
+          state.watch.pollers.some((poller) => poller.active),
+        );
+        const espnActive =
+          pollerActive("espn") || pollerActive("espn-stats");
 
         if (allCaptured()) {
           monitor.classList.add("is-complete");
-          title = `Round ${state.session.round} captured · ESPN still tracking`;
-          copy = "Select the next round when its horn sounds. The five-second ESPN monitor remains active.";
+          title = espnActive
+            ? `Round ${state.session.round} captured · ESPN still tracking`
+            : `Round ${state.session.round} captured · ESPN stopped`;
+          copy = espnActive
+            ? "Select the next round when its horn sounds. The five-second ESPN monitor remains active."
+            : "Captured round data remains visible. A new round-ended action will start a fresh measurement.";
         } else if (state.session.mode === "fight" && state.session.polling) {
-          monitor.classList.add(hasError ? "is-error" : "is-polling");
-          title = hasError ? "ESPN needs attention" : "Tracking ESPN live";
-          copy = "ESPN is sampled every 5 seconds. CITO and Kalshi remain off until a round ends.";
+          monitor.classList.add(
+            hasError ? "is-error" : anyActive ? "is-polling" : "is-stopped",
+          );
+          title = hasError
+            ? "ESPN needs attention"
+            : espnActive
+              ? "Tracking ESPN live"
+              : "ESPN polling stopped";
+          copy = espnActive
+            ? "ESPN is sampled every 5 seconds. CITO and Kalshi remain off until a round ends."
+            : "No more ESPN requests will run. Captured clock and granular stats remain below.";
         } else if (state.session.polling) {
-          monitor.classList.add(hasError ? "is-error" : "is-polling");
+          monitor.classList.add(
+            hasError ? "is-error" : anyActive ? "is-polling" : "is-stopped",
+          );
           title = hasError ? "One source needs attention" : "Measuring source latency";
-          copy = "ESPN continues every 5 seconds. CITO retries every 5 seconds. Kalshi captures one horn snapshot.";
+          copy = "Each source can be stopped separately. Captured results remain visible.";
         } else {
           monitor.classList.add("is-stopped");
           title = "Measurement stopped";
@@ -1621,6 +1713,32 @@
       }
     }
 
+    async function stopSource(source) {
+      if (
+        !state.session ||
+        !state.session.polling ||
+        state.stopping ||
+        state.stoppingSource !== null
+      ) {
+        return;
+      }
+      state.stoppingSource = source;
+      syncControls();
+      try {
+        state.watch = await fetchJson("/lab/watch/stop-source", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source }),
+        });
+        setError("");
+      } catch (error) {
+        setError(`Could not stop ${source === "espn" ? "ESPN" : "CITO"} polling: ${error.message}`);
+      } finally {
+        state.stoppingSource = null;
+        renderMonitor();
+      }
+    }
+
     function consumeEntry(entry) {
       if (
         !state.session ||
@@ -1878,6 +1996,8 @@
       });
       $("fight-started").addEventListener("click", startFightWatch);
       $("round-ended").addEventListener("click", startRoundWatch);
+      $("stop-espn").addEventListener("click", () => stopSource("espn"));
+      $("stop-cito").addEventListener("click", () => stopSource("cito"));
       $("stop-polling").addEventListener("click", () => stopPolling(false));
       $("copy-json").addEventListener("click", copyJson);
       document.addEventListener("keydown", (event) => {

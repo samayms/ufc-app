@@ -215,10 +215,24 @@ describe("LabWatcher CITO round polling", () => {
       citoIntervalMs: 5_000,
     });
     await vi.advanceTimersByTimeAsync(0);
-    watcher.stop();
+    const status = watcher.stopSource("cito");
     await vi.advanceTimersByTimeAsync(10_000);
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(status).toMatchObject({
+      running: true,
+      pollers: [
+        expect.objectContaining({ name: "cito", active: false, polls: 1 }),
+      ],
+    });
+    expect(timeline.since(0)).toContainEqual(
+      expect.objectContaining({
+        kind: "note",
+        source: "cito",
+        label: "CITO polling stopped by user",
+      }),
+    );
+    watcher.stop();
   });
 });
 
@@ -504,10 +518,24 @@ describe("LabWatcher continuous ESPN fight polling", () => {
     expect(watcher.status()).toMatchObject({
       running: true,
       pollers: expect.arrayContaining([
-        expect.objectContaining({ name: "espn", polls: 2 }),
-        expect.objectContaining({ name: "espn-stats", polls: 2 }),
+        expect.objectContaining({ name: "espn", active: true, polls: 2 }),
+        expect.objectContaining({
+          name: "espn-stats",
+          active: true,
+          polls: 2,
+        }),
       ]),
     });
+    const callsAtStop = fetchImpl.mock.calls.length;
+    const stopped = watcher.stopSource("espn");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(callsAtStop);
+    expect(stopped.pollers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "espn", active: false }),
+        expect.objectContaining({ name: "espn-stats", active: false }),
+      ]),
+    );
     watcher.stop();
   });
 });

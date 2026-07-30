@@ -295,6 +295,25 @@ export class LabWatcher {
     return status;
   }
 
+  stopSource(source: "espn" | "cito"): WatchStatus {
+    const names = source === "espn" ? ["espn", "espn-stats"] : ["cito"];
+    const active = names.some(
+      (name) => this.pollers.get(name)?.timer !== undefined,
+    );
+    for (const name of names) this.pausePoller(name);
+    if (active) {
+      this.timeline.record({
+        kind: "note",
+        source,
+        label:
+          source === "espn"
+            ? "ESPN lifecycle and core-stat polling stopped by user"
+            : "CITO polling stopped by user",
+      });
+    }
+    return this.status();
+  }
+
   status(): WatchStatus {
     const nowMs = this.now();
     return {
@@ -303,6 +322,7 @@ export class LabWatcher {
       ...(this.target === undefined ? {} : { target: this.target }),
       pollers: [...this.pollers.values()].map((poller) => ({
         name: poller.name,
+        active: poller.timer !== undefined,
         polls: poller.polls,
         failures: poller.failures,
         ...(poller.lastAt === undefined ? {} : { lastAt: poller.lastAt }),
