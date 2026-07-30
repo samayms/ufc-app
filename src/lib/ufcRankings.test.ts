@@ -14,6 +14,10 @@ describe("official UFC ranking overlay", () => {
     expect(officialUfcRanking("Ian Machado Garry")).toBe("#1 Welterweight");
   });
 
+  it("matches ESPN's ASCII spelling of Jan Blachowicz to UFC's #4 ranking", () => {
+    expect(officialUfcRanking("Jan Blachowicz")).toBe("#4 Light Heavyweight");
+  });
+
   it("resolves an aliased spelling to the same fighter", () => {
     expect(officialUfcRanking("Ian Garry")).toBe(
       officialUfcRanking("Ian Machado Garry"),

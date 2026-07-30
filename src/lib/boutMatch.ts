@@ -124,6 +124,9 @@ export function fighterNameTokens(name: string): string[] {
   return name
     .normalize("NFKD")
     .replace(/\p{M}/gu, "")
+    // Polish ł/Ł does not decompose under NFKD. ESPN publishes
+    // "Blachowicz" while UFC uses "Błachowicz", so normalize it explicitly.
+    .replace(/[łŁ]/gu, "l")
     .toLocaleLowerCase("en-US")
     .replace(/['’]/gu, "")
     .replace(/[^a-z0-9]+/gu, " ")

@@ -36,6 +36,8 @@ describe("normalizeFighterName", () => {
     expect(normalizeFighterName("José  Aldo, Jr.")).toBe("aldo jose");
     expect(normalizeFighterName("Aldo Jose")).toBe("aldo jose");
     expect(normalizeFighterName("Jiří Procházka")).toBe("jiri prochazka");
+    expect(normalizeFighterName("Jan Błachowicz")).toBe("blachowicz jan");
+    expect(normalizeFighterName("Jan Blachowicz")).toBe("blachowicz jan");
     expect(normalizeFighterName("Kevin Holland III")).toBe("holland kevin");
   });
 });
