@@ -256,7 +256,12 @@ export function createLabServer(options: LabServerOptions = {}) {
     }
 
     if (method === "GET" && url.pathname === "/lab/card") {
-      sendJson(response, 200, LAB_CARD);
+      sendJson(response, 200, {
+        ...LAB_CARD,
+        citoReady:
+          (env.CITO_API_KEY?.trim() ?? "").length > 0 &&
+          (env.CITO_API_BASE_URL?.trim() ?? "").length > 0,
+      });
       return;
     }
 
@@ -341,6 +346,45 @@ export function createLabServer(options: LabServerOptions = {}) {
         watcher.markRoundEnded(round, boutId);
       }
       sendJson(response, 200, entry);
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/lab/round/end") {
+      const body = await readBody(request);
+      const boutId = stringField(body, "boutId");
+      const round = numberField(body, "round");
+      if (
+        boutId === undefined ||
+        !LAB_CARD.fights.some((fight) => fight.id === boutId)
+      ) {
+        sendJson(response, 400, {
+          error: "Select a fight from this weekend's card",
+        });
+        return;
+      }
+      if (
+        round === undefined ||
+        !Number.isSafeInteger(round) ||
+        round < 1 ||
+        round > 5
+      ) {
+        sendJson(response, 400, { error: "Round must be between 1 and 5" });
+        return;
+      }
+
+      watcher.start({
+        citoBoutIds: [boutId],
+        citoIntervalMs: LAB_CITO_INTERVAL_MS,
+      });
+      const entry = timeline.record({
+        kind: "marker",
+        source: "user",
+        label: "round ended (broadcast)",
+        boutId,
+        round,
+      });
+      watcher.markRoundEnded(round, boutId);
+      sendJson(response, 200, { entry, watch: watcher.status() });
       return;
     }
 
