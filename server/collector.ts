@@ -1020,14 +1020,13 @@ export async function createCollector(
       };
     }
   }
-  // Summaries need a key and are pointless against fixture prose, so both the
-  // switch and the key gate it. Without either, rounds keep their raw commentary.
+  // Gated on the switch and the key, not on live mode: the fixture simulator
+  // runs real captured commentary, so summarizing it there is how the box gets
+  // reviewed before a card. Without a key, rounds keep their raw commentary.
   const geminiKey = config.credentials.GEMINI_API_KEY;
   const summarizer =
     options.sherdog?.summarizer ??
-    (config.roundSummary.enabled &&
-    config.dataMode === "live" &&
-    geminiKey !== undefined
+    (config.roundSummary.enabled && geminiKey !== undefined
       ? createLiveGeminiSummarizer({
           apiKey: geminiKey,
           model: config.roundSummary.model,

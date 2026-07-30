@@ -146,6 +146,21 @@ describe("buildRoundSummaryPrompt", () => {
     expect(buildRoundSummaryPrompt(input).toLowerCase()).toContain("em dash");
   });
 
+  it("tells the model to ignore post-fight material", () => {
+    // A real page runs the scorecard reading, the interview, and the writer's
+    // sign-off inside the final round's section.
+    const prompt = buildRoundSummaryPrompt(input).toLowerCase();
+
+    expect(prompt).toContain("post-fight interview");
+    expect(prompt).toContain("between the horns");
+  });
+
+  it("tells the model that a first round opens with scene setting", () => {
+    expect(buildRoundSummaryPrompt(input).toLowerCase()).toContain(
+      "that is context, not action",
+    );
+  });
+
   it("passes the scorers' read of the round as grounding", () => {
     expect(buildRoundSummaryPrompt(input)).toContain("Jay Pettry");
   });

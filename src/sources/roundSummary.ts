@@ -110,6 +110,8 @@ export function buildRoundSummaryPrompt(input: RoundSummaryInput): string {
     `6. Present tense, neutral reporting voice. No hype, no second-person address, no speculation about later rounds.`,
     `7. Lead with what decided the round: knockdowns, takedowns, control, damage, or the clearest sustained advantage. Close with who got the better of the round when the play-by-play supports it.`,
     `8. Do not restate the judges' numeric scores.`,
+    `9. Summarize only what happens between the horns. The play-by-play often runs past the end of the fight into the scorecards being read, the post-fight interview, callouts, title talk, and the writer signing off. Ignore all of it.`,
+    `10. A first round often opens with scene setting: records, rankings, the referee's name, how the fighters got here. That is context, not action. Do not spend the summary on it.`,
     ...(scorers.length === 0
       ? []
       : [
