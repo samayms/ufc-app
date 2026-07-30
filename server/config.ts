@@ -63,6 +63,8 @@ export interface CollectorConfig {
   lifecycleEspnFailureThreshold: number;
   /** Base URL for Cito's (unverified) live-state endpoint; required to construct a live Cito lifecycle provider. */
   citoApiBaseUrl?: string;
+  /** Optional hand-pinned Cito event slug for a card whose automatic lookup is inconclusive. */
+  citoEventSlug?: string;
   oddsApiIoBookmakers: readonly string[];
   xSpendCapUsd: number;
   xRequestCostUsd: number;
@@ -436,6 +438,9 @@ export function loadConfig(
     ),
     ...(env.CITO_API_BASE_URL?.trim()
       ? { citoApiBaseUrl: env.CITO_API_BASE_URL.trim() }
+      : {}),
+    ...(env.CITO_EVENT_SLUG?.trim()
+      ? { citoEventSlug: env.CITO_EVENT_SLUG.trim() }
       : {}),
     oddsApiIoBookmakers: parseBookmakers(env),
     xSpendCapUsd: parseNonNegativeNumber(env, "X_SPEND_CAP_USD", 0),

@@ -151,10 +151,12 @@ describe("loadConfig", () => {
     const config = loadConfig({
       LIFECYCLE_ESPN_FAILURE_THRESHOLD: "5",
       CITO_API_BASE_URL: "https://cito.example.invalid",
+      CITO_EVENT_SLUG: " ufc-fight-night-august-01-2026 ",
     });
 
     expect(config.lifecycleEspnFailureThreshold).toBe(5);
     expect(config.citoApiBaseUrl).toBe("https://cito.example.invalid");
+    expect(config.citoEventSlug).toBe("ufc-fight-night-august-01-2026");
   });
 
   it("fails closed when live data credentials are absent", () => {

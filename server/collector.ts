@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import type {
   BoutView,
   DashboardState,
+  ExternalRef,
   OddsSnapshot,
   ScorecardAccount,
   SourceId,
@@ -45,6 +46,11 @@ import {
   type XApiFetcher,
   type XScoreSource,
 } from "../src/sources/x.ts";
+import {
+  createLiveCitoDiscoveryTransport,
+  discoverCitoBouts,
+  type CitoDiscoveryTransport,
+} from "./citoDiscovery.ts";
 import { marketMovesForBout } from "../src/lib/oddsMath.ts";
 import { loadFixtureEvent } from "../src/store/fixtureEvent.ts";
 import {
@@ -166,6 +172,46 @@ export interface CollectorRoundStatsOptions {
   quotaPolicy?: QuotaPolicy;
 }
 
+export interface CollectorCitoOptions {
+  /** Test seam for captured discovery payloads; production defaults to Cito HTTP. */
+  discoveryTransport?: CitoDiscoveryTransport;
+}
+
+/** Keeps vendor ids at the source boundary; round jobs continue to use canonical ids. */
+export function createCitoRoundStatsRefTranslator(
+  fetcher: CitoRoundStatsFetcher,
+  getExternalRefs: (internalBoutId: string) => readonly ExternalRef[],
+  onMissingRef: (internalBoutId: string) => void,
+): CitoRoundStatsFetcher {
+  const reportedMissing = new Set<string>();
+  const resolve = (internalBoutId: string): string | undefined => {
+    const ref = getExternalRefs(internalBoutId).find(
+      (candidate) => candidate.source === "cito",
+    );
+    if (ref !== undefined) return ref.id;
+    if (!reportedMissing.has(internalBoutId)) {
+      reportedMissing.add(internalBoutId);
+      onMissingRef(internalBoutId);
+    }
+    return undefined;
+  };
+
+  return {
+    async fetchRound(internalBoutId, round) {
+      const citoBoutId = resolve(internalBoutId);
+      return citoBoutId === undefined
+        ? null
+        : fetcher.fetchRound(citoBoutId, round);
+    },
+    async fetchAllRounds(internalBoutId) {
+      const citoBoutId = resolve(internalBoutId);
+      return citoBoutId === undefined
+        ? []
+        : fetcher.fetchAllRounds(citoBoutId);
+    },
+  };
+}
+
 export interface CollectorMarketOptions {
   clock?: TickStoreClock;
   staleAfterMs?: number;
@@ -231,6 +277,7 @@ export interface CreateCollectorOptions {
     "bufferSize" | "heartbeatMs" | "now"
   >;
   roundStats?: CollectorRoundStatsOptions;
+  cito?: CollectorCitoOptions;
   market?: CollectorMarketOptions;
   sportsbook?: CollectorSportsbookOptions;
   sherdog?: CollectorSherdogOptions;
@@ -753,17 +800,33 @@ export async function createCollector(
     roundStatsOptions?.clock ?? options.sportsbook?.clock;
   const roundJobTimer =
     roundStatsOptions?.timer ?? options.sportsbook?.timer;
+  const reportMissingCitoRef = (internalBoutId: string): void => {
+    healthRegistry.increment("source_errors_total", "cito");
+    console.warn(
+      `cito: missing bout ref for round stats (${internalBoutId}); returning no stats`,
+    );
+  };
+  const underlyingCitoRoundStatsFetcher =
+    roundStatsOptions?.fetcher ??
+    (config.dataMode === "fixture"
+      ? createFixtureCitoRoundStatsFetcher()
+      : createLiveCitoRoundStatsFetcher({
+          baseUrl: config.citoApiBaseUrl ?? "",
+          apiKey: config.credentials.CITO_API_KEY ?? "",
+        }));
+  const initializedCitoRoundStatsFetcher =
+    config.dataMode === "fixture"
+      ? underlyingCitoRoundStatsFetcher
+      : createCitoRoundStatsRefTranslator(
+          underlyingCitoRoundStatsFetcher,
+          (internalBoutId) =>
+            boutMappings?.getExternalRefs(internalBoutId) ?? [],
+          reportMissingCitoRef,
+        );
   const initializedRoundStats = await RoundStatsPipeline.create({
     eventBus,
     storage,
-    fetcher:
-      roundStatsOptions?.fetcher ??
-      (config.dataMode === "fixture"
-        ? createFixtureCitoRoundStatsFetcher()
-        : createLiveCitoRoundStatsFetcher({
-            baseUrl: config.citoApiBaseUrl ?? "",
-            apiKey: config.credentials.CITO_API_KEY ?? "",
-          })),
+    fetcher: initializedCitoRoundStatsFetcher,
     publish: async (record) => {
       await push.publish("update", {
         kind: "round",
@@ -827,6 +890,37 @@ export async function createCollector(
     credentials: { ...config.credentials },
   };
 
+  if (config.dataMode === "live" && config.citoApiBaseUrl !== undefined) {
+    try {
+      const summary = await discoverCitoBouts({
+        event: loaded.event,
+        registry: initializedBoutMappings,
+        transport:
+          options.cito?.discoveryTransport ??
+          createLiveCitoDiscoveryTransport({
+            baseUrl: config.citoApiBaseUrl,
+            apiKey: config.credentials.CITO_API_KEY ?? "",
+          }),
+        ...(config.citoEventSlug === undefined
+          ? {}
+          : { configuredEventSlug: config.citoEventSlug }),
+      });
+      const total = summary.matched + summary.unmatched.length;
+      console.log(`cito: ${summary.matched}/${total} bouts mapped`);
+      if (loaded.event.externalRefs.some((ref) => ref.source === "cito")) {
+        await storage.append(COLLECTOR_STATE_STREAM, {
+          version: 1,
+          state: loaded,
+        } satisfies PersistedCollectorState);
+      }
+    } catch (error: unknown) {
+      console.warn(
+        "cito: card discovery failed; round stats may be unavailable",
+        error instanceof Error ? error.message : "unknown error",
+      );
+    }
+  }
+
   const lifecycleGetBouts = () => loaded.event.bouts;
   const requiredEventExternalId = (source: "espn" | "cito"): string => {
     const id = loaded.event.externalRefs.find(
@@ -852,10 +946,9 @@ export async function createCollector(
           lifecycleGetBouts,
           { clock: options.lifecycle?.clock },
         ));
-  // Cito is the lifecycle *fallback*; ESPN drives it. Cito uses its own event
-  // ids, so an ESPN-derived event legitimately has no "cito" ref — and when it
-  // does not, the collector runs ESPN-only rather than refusing to start.
-  // Requiring the ref here made live mode unbootable for every real card.
+  // Cito is the lifecycle fallback; discovery above adds its event ref before
+  // this provider is built, while a failed discovery still leaves ESPN able
+  // to drive the card.
   const citoEventExternalId = loaded.event.externalRefs.find(
     (ref) => ref.source === "cito",
   )?.id;

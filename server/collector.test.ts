@@ -863,6 +863,13 @@ describe("fixture collector loading", () => {
       },
       storage: new MemoryStorage(),
       stateLoader,
+      cito: {
+        discoveryTransport: {
+          async get() {
+            return { data: [] };
+          },
+        },
+      },
       market: { transports: [] },
       sherdog: { fetchImpl: blockedFetch },
     });
@@ -897,6 +904,13 @@ describe("fixture collector loading", () => {
       },
       storage: new MemoryStorage(),
       stateLoader,
+      cito: {
+        discoveryTransport: {
+          async get() {
+            return { data: [] };
+          },
+        },
+      },
       market: { transports: [] },
       roundStats: { clock: liveTime, timer: liveTime },
       sherdog: {

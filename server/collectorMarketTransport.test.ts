@@ -85,6 +85,13 @@ describe("collector market transport wiring", () => {
         PRE_EVENT_POLL_ENABLED: "false",
       },
       storage: new MemoryStorage(),
+      cito: {
+        discoveryTransport: {
+          async get() {
+            return { data: [] };
+          },
+        },
+      },
       market: { transports: [] },
       sportsbook: { fetchImpl },
       stateLoader: async () => {
