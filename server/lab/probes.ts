@@ -65,7 +65,13 @@ export const WEEKEND = {
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_RAW_BYTES = 200_000;
-const COLLECTOR_ORIGIN = "http://localhost:8600";
+const DEFAULT_COLLECTOR_PORT = 8600;
+
+/** Follows `COLLECTOR_PORT`, so probing a second collector needs no code change. */
+function collectorOrigin(context: ProbeContext): string {
+  const port = Number(context.env.COLLECTOR_PORT?.trim() ?? "");
+  return `http://localhost:${Number.isInteger(port) && port > 0 ? port : DEFAULT_COLLECTOR_PORT}`;
+}
 
 /** Vendor quota headers worth surfacing verbatim, whatever the vendor calls it. */
 const QUOTA_HEADERS = [
@@ -1236,11 +1242,36 @@ function collectorProbe(
   path: string,
   summarize: (json: unknown) => string[],
 ): ProbeDefinition {
-  return jsonProbe({
+  const probe = jsonProbe({
     descriptor: { id, group: "collector", label, description, cost: "free" },
-    url: () => `${COLLECTOR_ORIGIN}${path}`,
+    url: (_params, context) => `${collectorOrigin(context)}${path}`,
     summarize: ({ json }) => ({ summary: summarize(json), parsed: json }),
   });
+
+  return {
+    descriptor: probe.descriptor,
+    async run(params, context) {
+      try {
+        return await probe.run(params, context);
+      } catch (error) {
+        // A refused connection means the collector is not running, which is a
+        // different fact from a collector that answers badly — and it is the
+        // first thing to establish when the dashboard is blank.
+        const message = error instanceof Error ? error.message : String(error);
+        if (/fetch failed|ECONNREFUSED/iu.test(message)) {
+          return {
+            ok: false,
+            url: `${collectorOrigin(context)}${path}`,
+            summary: [
+              `no collector answering on ${collectorOrigin(context)} — start it with \`npm run collector:live\``,
+            ],
+            error: message,
+          };
+        }
+        throw error;
+      }
+    },
+  };
 }
 
 const collectorHealth = collectorProbe(
@@ -1282,10 +1313,19 @@ const collectorMetrics = collectorProbe(
         : [];
     return [
       `generated ${String(field(json, "generatedAt") ?? "?")}`,
-      ...rows.map(
-        ([name, value]) =>
-          `  ${name}: ${String(field(value, "requests") ?? "?")} requests, ${String(field(value, "failures") ?? field(value, "errors") ?? "?")} failures`,
-      ),
+      ...rows.map(([name, value]) => {
+        // Each source reports a free-form `values` bag — payload age, mapping
+        // confidence, request and error counters — so print whatever is there
+        // rather than guessing at names that change per source.
+        const values = field(value, "values");
+        const pairs =
+          typeof values === "object" && values !== null
+            ? Object.entries(values as Record<string, unknown>)
+                .map(([metric, reading]) => `${metric}=${String(reading)}`)
+                .join(" ")
+            : "no values";
+        return `  ${name}: ${pairs} (local ${String(field(value, "localTimestamp") ?? "?")})`;
+      }),
     ];
   },
 );
