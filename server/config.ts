@@ -1,3 +1,4 @@
+import { DEFAULT_GEMINI_MODEL } from "./geminiSummarizer.ts";
 import { DEFAULT_DATA_DIRECTORY } from "./storage.ts";
 import type {
   XConfiguredScore,
@@ -11,6 +12,7 @@ export const CREDENTIAL_ENV_NAMES = [
   "KALSHI_API_KEY_ID",
   "KALSHI_PRIVATE_KEY_PATH",
   "X_BEARER_TOKEN",
+  "GEMINI_API_KEY",
 ] as const;
 
 export type CredentialEnvName = (typeof CREDENTIAL_ENV_NAMES)[number];
@@ -76,6 +78,11 @@ export interface CollectorConfig {
      * still wins where one exists.
      */
     liveBlogUrl?: string;
+  };
+  /** Model-written condensations of each Sherdog round, for the summary box. */
+  roundSummary: {
+    enabled: boolean;
+    model: string;
   };
   credentials: Readonly<Partial<Record<CredentialEnvName, string>>>;
 }
@@ -455,6 +462,10 @@ export function loadConfig(
       ...(env.SHERDOG_LIVE_BLOG_URL?.trim()
         ? { liveBlogUrl: env.SHERDOG_LIVE_BLOG_URL.trim() }
         : {}),
+    },
+    roundSummary: {
+      enabled: parseOptionalBoolean(env, "ROUND_SUMMARY_ENABLED") ?? true,
+      model: env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
     },
     credentials,
   };

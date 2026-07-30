@@ -4,6 +4,7 @@ import {
   credentialValues,
   loadConfig,
 } from "./config.ts";
+import { DEFAULT_GEMINI_MODEL } from "./geminiSummarizer.ts";
 
 describe("loadConfig", () => {
   it("uses network-free fixture defaults", () => {
@@ -26,6 +27,10 @@ describe("loadConfig", () => {
         permissionScope: "none",
         requestIntervalMs: 300_000,
         baseUrl: "https://www.sherdog.com",
+      },
+      roundSummary: {
+        enabled: true,
+        model: DEFAULT_GEMINI_MODEL,
       },
       credentials: {},
     });
@@ -53,6 +58,8 @@ describe("loadConfig", () => {
       SHERDOG_REQUEST_INTERVAL_MS: "600000",
       SHERDOG_BASE_URL: "https://sherdog.example.invalid",
       SHERDOG_LIVE_BLOG_URL: "/news/news/live-card-1234",
+      ROUND_SUMMARY_ENABLED: "false",
+      GEMINI_MODEL: "gemini-test-model",
       STALE_LIFECYCLE_MS: "1000",
       POLL_ESPN_MS: "2000",
       PRE_EVENT_POLL_NON_EVENT_DAY_MS: "200",
@@ -82,6 +89,10 @@ describe("loadConfig", () => {
       requestIntervalMs: 600_000,
       baseUrl: "https://sherdog.example.invalid",
       liveBlogUrl: "/news/news/live-card-1234",
+    });
+    expect(config.roundSummary).toEqual({
+      enabled: false,
+      model: "gemini-test-model",
     });
     expect(config.staleAfterMs.lifecycle).toBe(1000);
     expect(config.pollingMs.espn).toBe(2000);
@@ -176,6 +187,9 @@ describe("loadConfig", () => {
       DATA_MODE: "live",
       X_MODE: "embed",
     });
-    expect(credentialValues(config)).toHaveLength(5);
+    // Every credential in `base`, which is the full list minus X_BEARER_TOKEN.
+    expect(credentialValues(config)).toHaveLength(
+      CREDENTIAL_ENV_NAMES.length - 1,
+    );
   });
 });

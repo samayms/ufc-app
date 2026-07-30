@@ -12,6 +12,10 @@ import type {
   CollectorEventBus,
 } from "./eventBus.ts";
 import { computeExpertConsensus } from "./expertConsensus.ts";
+import {
+  createDisabledSummarizer,
+  type RoundSummarizer,
+} from "./geminiSummarizer.ts";
 import { RequestIntervalGuard } from "./quota.ts";
 import type { RoundStatsPipeline } from "./roundStats.ts";
 import {
@@ -87,6 +91,7 @@ export interface SherdogRoundJobsOptions {
   dataMode: "fixture" | "live";
   permissionScope: string;
   requestIntervalMs: number;
+  summarizer?: RoundSummarizer;
   clock?: RoundJobClock;
   requestTimeoutMs?: number;
   quota?: RequestIntervalGuard;
@@ -347,6 +352,8 @@ export class SherdogRoundJobs {
 
   private readonly permissionScope: string;
 
+  private readonly summarizer: RoundSummarizer;
+
   private readonly clock: RoundJobClock;
 
   private readonly requestTimeoutMs: number;
@@ -391,6 +398,7 @@ export class SherdogRoundJobs {
     this.getBout = options.getBout;
     this.dataMode = options.dataMode;
     this.permissionScope = options.permissionScope;
+    this.summarizer = options.summarizer ?? createDisabledSummarizer();
     this.clock = options.clock ?? { now: () => Date.now() };
     this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
     this.publishHealth = options.publishHealth;
@@ -676,11 +684,50 @@ export class SherdogRoundJobs {
     }
   }
 
-  private async observe(
+  /**
+   * Adds the model's condensation of the round, reusing the previous one when
+   * the payload is unchanged so the three-attempt ladder does not pay for the
+   * same page three times. Summaries are decorative: any failure leaves the
+   * observation and its raw commentary exactly as parsed.
+   */
+  private async summarize(
     observation: SherdogRoundObservation,
+    previous: SherdogObservationRevision | undefined,
+  ): Promise<SherdogRoundObservation> {
+    if (
+      previous !== undefined &&
+      previous.observation.payloadHash === observation.payloadHash
+    ) {
+      return previous.observation.aiSummary === undefined
+        ? observation
+        : { ...observation, aiSummary: previous.observation.aiSummary };
+    }
+
+    const bout = this.getBout(observation.boutId);
+    if (bout === undefined) return observation;
+
+    try {
+      const aiSummary = await this.summarizer.summarize({
+        round: observation.round,
+        redName: bout.fighters.red.name,
+        blueName: bout.fighters.blue.name,
+        commentary: observation.commentary,
+        scorerCards: observation.scorerCards,
+      });
+      return aiSummary.length === 0
+        ? observation
+        : { ...observation, aiSummary };
+    } catch {
+      return observation;
+    }
+  }
+
+  private async observe(
+    rawObservation: SherdogRoundObservation,
   ): Promise<void> {
-    const key = `${observation.boutId}:${observation.round}`;
+    const key = `${rawObservation.boutId}:${rawObservation.round}`;
     const previous = this.current.get(key);
+    const observation = await this.summarize(rawObservation, previous);
     const next: SherdogObservationRevision = {
       observation: copyObservation(observation),
       revision:

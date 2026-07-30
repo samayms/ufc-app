@@ -60,7 +60,11 @@ function bootstrapResponse(payload: unknown): Response {
   });
 }
 
-function roundRecord(provisional: boolean, revision: number) {
+function roundRecord(
+  provisional: boolean,
+  revision: number,
+  aiSummary?: string,
+) {
   return {
     boutId: "bout-main",
     round: 2,
@@ -97,6 +101,7 @@ function roundRecord(provisional: boolean, revision: number) {
       boutId: "bout-main",
       round: 2,
       commentary: "Collector-delivered commentary.",
+      ...(aiSummary === undefined ? {} : { aiSummary }),
       scorerCards: [
         {
           scorer: "Sherdog",
@@ -326,6 +331,62 @@ describe("collector browser client", () => {
     ).toBe(42);
     client.close();
     expect(events?.closed).toBe(true);
+  });
+
+  it("renders the model's summary in place of the raw play-by-play", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test/",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [
+            roundRecord(false, 1, "Volkov takes the round behind the jab."),
+          ],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+      now: () => "2026-07-28T01:00:00Z",
+    });
+
+    await client.start();
+    MockEventSource.latest?.open();
+
+    expect(
+      client
+        .getSnapshot()
+        .dashboard?.boutViews["bout-main"]?.rounds.sherdog?.find(
+          (update) => update.round === 2,
+        )?.summary,
+    ).toBe("Volkov takes the round behind the jab.");
+  });
+
+  it("falls back to the raw play-by-play when no summary was produced", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test/",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [roundRecord(false, 1)],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+      now: () => "2026-07-28T01:00:00Z",
+    });
+
+    await client.start();
+    MockEventSource.latest?.open();
+
+    expect(
+      client
+        .getSnapshot()
+        .dashboard?.boutViews["bout-main"]?.rounds.sherdog?.find(
+          (update) => update.round === 2,
+        )?.summary,
+    ).toBe("Collector-delivered commentary.");
   });
 
   it("hydrates latestOdds from bootstrap latestMarkets, replacing fixture odds", async () => {

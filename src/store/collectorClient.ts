@@ -504,6 +504,9 @@ function parseSherdogObservation(
     (value.round as number) < 1 ||
     typeof value.commentary !== "string" ||
     /<[^>]*>/.test(value.commentary) ||
+    (value.aiSummary !== undefined &&
+      (typeof value.aiSummary !== "string" ||
+        /<[^>]*>/.test(value.aiSummary))) ||
     !Array.isArray(value.scorerCards) ||
     typeof value.sourceUrl !== "string" ||
     (value.publishedAt !== undefined &&
@@ -545,6 +548,9 @@ function parseSherdogObservation(
     boutId: value.boutId,
     round: value.round as number,
     commentary: value.commentary,
+    ...(value.aiSummary === undefined
+      ? {}
+      : { aiSummary: value.aiSummary as string }),
     scorerCards,
     sourceUrl: value.sourceUrl,
     ...(value.publishedAt === undefined
@@ -1104,12 +1110,14 @@ function applyCollectorRound(
         : (matchCorner(scoreCard.winner, view.bout) ?? undefined);
     const high = Number(scoreMatch?.[1]);
     const low = Number(scoreMatch?.[2]);
+    const summaryText =
+      observation.aiSummary?.trim() ?? observation.commentary;
     const update: RoundUpdate = {
       boutId: record.boutId,
       round: record.round,
-      ...(observation.commentary.length === 0
-        ? {}
-        : { summary: observation.commentary }),
+      // The condensed summary is what the five-line box is sized for; the raw
+      // commentary is the fallback when summarizing is off or failed.
+      ...(summaryText.length === 0 ? {} : { summary: summaryText }),
       ...(winner === undefined ||
       !Number.isFinite(high) ||
       !Number.isFinite(low)

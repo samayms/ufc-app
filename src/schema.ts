@@ -219,6 +219,12 @@ export interface SherdogRoundObservation {
   round: number;
   commentary: string;
   scorerCards: SherdogScorerCard[];
+  /**
+   * A model-written condensation of `commentary`, sized for the dashboard's
+   * five-line summary box. Absent when summarizing is off or failed; the raw
+   * commentary is always kept and is what the UI falls back to.
+   */
+  aiSummary?: string;
   sourceUrl: string;
   publishedAt?: string;
   fetchedAt: string;

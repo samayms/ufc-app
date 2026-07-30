@@ -36,6 +36,11 @@ import {
 import { createPolymarketSource } from "../src/sources/polymarket.ts";
 import { createSherdogSource } from "../src/sources/sherdog.ts";
 import {
+  createDisabledSummarizer,
+  createLiveGeminiSummarizer,
+  type RoundSummarizer,
+} from "./geminiSummarizer.ts";
+import {
   createXSource,
   type XApiFetcher,
   type XScoreSource,
@@ -182,6 +187,7 @@ export interface CollectorSportsbookOptions {
 
 export interface CollectorSherdogOptions {
   fetcher?: SherdogFetcher;
+  summarizer?: RoundSummarizer;
   requestTimeoutMs?: number;
   fetchImpl?: typeof fetch;
   baseUrl?: string;
@@ -1014,7 +1020,21 @@ export async function createCollector(
       };
     }
   }
+  // Summaries need a key and are pointless against fixture prose, so both the
+  // switch and the key gate it. Without either, rounds keep their raw commentary.
+  const geminiKey = config.credentials.GEMINI_API_KEY;
+  const summarizer =
+    options.sherdog?.summarizer ??
+    (config.roundSummary.enabled &&
+    config.dataMode === "live" &&
+    geminiKey !== undefined
+      ? createLiveGeminiSummarizer({
+          apiKey: geminiKey,
+          model: config.roundSummary.model,
+        })
+      : createDisabledSummarizer());
   const initializedSherdogJobs = await SherdogRoundJobs.create({
+    summarizer,
     eventBus,
     scheduler: initializedRoundStats.scheduler,
     storage,
