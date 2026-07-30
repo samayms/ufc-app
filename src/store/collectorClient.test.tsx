@@ -333,6 +333,80 @@ describe("collector browser client", () => {
     expect(events?.closed).toBe(true);
   });
 
+  it("hydrates and refreshes ESPN clock synchronization points", async () => {
+    const fixture = await assembleDashboard();
+    let nowCall = 0;
+    const receivedTimes = [
+      "2026-07-28T01:00:01Z",
+      "2026-07-28T01:00:06Z",
+    ];
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [],
+          lifecycleObservations: [
+            {
+              boutId: "bout-main",
+              source: "espn",
+              state: "in",
+              period: 2,
+              completed: false,
+              clockSeconds: 197,
+              receivedAt: "2026-07-28T01:00:00Z",
+            },
+          ],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+      now: () => receivedTimes[nowCall++] ?? receivedTimes.at(-1)!,
+    });
+
+    await client.start();
+    expect(client.getSnapshot().clocks["bout-main"]).toEqual({
+      boutId: "bout-main",
+      source: "espn",
+      state: "in",
+      period: 2,
+      completed: false,
+      clockSeconds: 197,
+      sourceReceivedAt: "2026-07-28T01:00:00Z",
+      receivedAt: "2026-07-28T01:00:01Z",
+    });
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-main"]?.bout,
+    ).toMatchObject({
+      status: "in-round",
+      currentRound: 2,
+    });
+
+    MockEventSource.latest?.emit("update", {
+      kind: "lifecycle-observations",
+      observations: [
+        {
+          boutId: "bout-main",
+          source: "espn",
+          state: "in",
+          period: 2,
+          completed: false,
+          clockSeconds: 192,
+          receivedAt: "2026-07-28T01:00:05Z",
+        },
+      ],
+    });
+
+    expect(client.getSnapshot().clocks["bout-main"]).toMatchObject({
+      source: "espn",
+      period: 2,
+      clockSeconds: 192,
+      sourceReceivedAt: "2026-07-28T01:00:05Z",
+      receivedAt: "2026-07-28T01:00:06Z",
+    });
+    client.close();
+  });
+
   it("renders the model's summary in place of the raw play-by-play", async () => {
     const fixture = await assembleDashboard();
     const client = createCollectorClient({

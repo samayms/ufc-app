@@ -229,6 +229,14 @@ export interface LifecycleDriverOptions {
   clock?: LifecycleDriverClock;
   timer?: LifecycleDriverTimer;
   metrics?: Metrics;
+  /**
+   * Receives one normalized batch after every successful source poll. This is
+   * deliberately separate from transition events: an unchanged ESPN clock is
+   * still a fresh synchronization point for the browser's local countdown.
+   */
+  onObservations?: (
+    observations: readonly FightLifecycleObservation[],
+  ) => void | Promise<void>;
 }
 
 /**
@@ -257,6 +265,10 @@ export class LifecycleDriver {
   private readonly timer: LifecycleDriverTimer;
 
   private readonly metrics: Metrics;
+
+  private readonly onObservations:
+    | LifecycleDriverOptions["onObservations"]
+    | undefined;
 
   private activeSource: LifecycleSource = "espn";
 
@@ -304,6 +316,7 @@ export class LifecycleDriver {
     this.clock = options.clock ?? defaultDriverClock();
     this.timer = options.timer ?? defaultDriverTimer();
     this.metrics = options.metrics ?? NOOP_METRICS;
+    this.onObservations = options.onObservations;
   }
 
   getActiveSource(): LifecycleSource {
@@ -385,9 +398,14 @@ export class LifecycleDriver {
     }
 
     if (observations !== undefined && usedSource !== undefined) {
+      const taggedObservations = observations.map((input) => ({
+        ...input,
+        source: usedSource,
+      }));
       for (const input of observations) {
         await this.machine.observe({ ...input, source: usedSource });
       }
+      await this.onObservations?.(taggedObservations);
     }
 
     this.scheduleNext();

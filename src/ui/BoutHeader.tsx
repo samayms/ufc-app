@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { BoutResult, BoutStatus, Corner, Fighter } from "../schema.ts";
+import type { CollectorClockSync } from "../store/collectorClient.ts";
 import { fmtMethod, fmtRecord } from "./format.ts";
 
 /**
@@ -81,13 +82,43 @@ function CenterStatus({
   scheduledRounds,
   result,
   fighters,
+  clockSync,
 }: {
   status: BoutStatus;
   currentRound?: number;
   scheduledRounds: number;
   result?: BoutResult;
   fighters: Record<Corner, Fighter>;
+  clockSync?: CollectorClockSync;
 }) {
+  const clockMatchesBoutState =
+    clockSync !== undefined &&
+    clockSync.state === "in" &&
+    clockSync.period === currentRound &&
+    clockSync.clockSeconds !== undefined;
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    setNow(Date.now());
+    if (
+      status !== "in-round" ||
+      !clockMatchesBoutState ||
+      clockSync.clockSeconds === 0
+    ) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      setNow(Date.now());
+    }, 250);
+    return () => window.clearInterval(interval);
+  }, [
+    clockMatchesBoutState,
+    clockSync?.clockSeconds,
+    clockSync?.receivedAt,
+    status,
+  ]);
+
   if (status === "canceled" || status === "postponed") {
     return (
       <>
@@ -118,6 +149,12 @@ function CenterStatus({
     );
   }
   if (status === "between-rounds" || status === "in-round") {
+    const clockSeconds = clockMatchesBoutState
+      ? interpolateClockSeconds(clockSync, now)
+      : undefined;
+    const clockText = formatFightClock(clockSeconds);
+    const sourceLabel =
+      clockSync?.source === "cito" ? "Cito fallback" : "ESPN sync";
     return (
       <>
         <span
@@ -126,10 +163,22 @@ function CenterStatus({
           <span className="live-dot" aria-hidden="true" />
           {status === "in-round" ? "Live" : "Between rds"}
         </span>
-        <span className="tot-round-label num">
-          {status === "in-round" ? `R${currentRound}` : `End R${currentRound}`}
+        <span
+          className="tot-fight-clock"
+          role="timer"
+          aria-label={
+            clockSeconds === undefined
+              ? `Round ${currentRound ?? ""} clock waiting for ESPN`
+              : `${Math.floor(clockSeconds / 60)} minutes ${clockSeconds % 60} seconds remaining in round ${currentRound ?? ""}`
+          }
+        >
+          {clockText}
         </span>
-        <span className="tot-substate">of {scheduledRounds}</span>
+        <span className="tot-substate">
+          {status === "in-round" ? `R${currentRound}` : `End R${currentRound}`}
+          {" · "}
+          {clockSeconds === undefined ? "waiting for ESPN" : sourceLabel}
+        </span>
       </>
     );
   }
@@ -140,6 +189,26 @@ function CenterStatus({
       <span className="tot-substate">not started</span>
     </>
   );
+}
+
+export function interpolateClockSeconds(
+  sync: Pick<CollectorClockSync, "clockSeconds" | "receivedAt">,
+  now: number,
+): number | undefined {
+  if (sync.clockSeconds === undefined) return undefined;
+  const receivedAt = Date.parse(sync.receivedAt);
+  const elapsedSeconds = Number.isFinite(receivedAt)
+    ? Math.max(0, Math.floor((now - receivedAt) / 1_000))
+    : 0;
+  return Math.max(0, Math.floor(sync.clockSeconds) - elapsedSeconds);
+}
+
+export function formatFightClock(seconds: number | undefined): string {
+  if (seconds === undefined) return "--:--";
+  const wholeSeconds = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(wholeSeconds / 60)}:${String(
+    wholeSeconds % 60,
+  ).padStart(2, "0")}`;
 }
 
 /**
@@ -160,6 +229,7 @@ export function BoutHeader({
   currentRound,
   result,
   photosByCorner,
+  clockSync,
 }: {
   weightClassLabel: string;
   titleFight: boolean;
@@ -168,6 +238,8 @@ export function BoutHeader({
   status: BoutStatus;
   currentRound?: number;
   result?: BoutResult;
+  /** Latest collector clock sync; the browser interpolates between source polls. */
+  clockSync?: CollectorClockSync;
   /** Optional real photo per corner — falls back to initials when absent, same as CardRail's RailPhoto. */
   photosByCorner?: Partial<Record<Corner, string>>;
 }) {
@@ -190,6 +262,7 @@ export function BoutHeader({
             scheduledRounds={scheduledRounds}
             result={result}
             fighters={fighters}
+            clockSync={clockSync}
           />
         </div>
         <FighterBlock

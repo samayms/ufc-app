@@ -263,6 +263,58 @@ describe("LifecycleDriver", () => {
     await driver.close();
   });
 
+  it("publishes every successful observation batch as a fresh clock synchronization", async () => {
+    const { machine } = await createMachine();
+    const time = new ManualDriverTime();
+    const batches: unknown[] = [];
+    const espnProvider: LifecycleObservationProvider = {
+      fetchObservations: async () => [
+        observationInput(time, {
+          clockSeconds: 197,
+          receivedAt: new Date(time.now()).toISOString(),
+        }),
+      ],
+    };
+    const driver = new LifecycleDriver({
+      machine,
+      espnProvider,
+      espnPollingMs: 5_000,
+      citoPollingMs: 15_000,
+      clock: time,
+      timer: time,
+      onObservations: (observations) => {
+        batches.push(observations);
+      },
+    });
+
+    await driver.start();
+    time.advance(5_000);
+    await driver.idle();
+
+    expect(batches).toEqual([
+      [
+        expect.objectContaining({
+          boutId: BOUT_ID,
+          source: "espn",
+          period: 1,
+          clockSeconds: 197,
+          receivedAt: at(0),
+        }),
+      ],
+      [
+        expect.objectContaining({
+          boutId: BOUT_ID,
+          source: "espn",
+          period: 1,
+          clockSeconds: 197,
+          receivedAt: at(5),
+        }),
+      ],
+    ]);
+
+    await driver.close();
+  });
+
   it("switches to the Cito fallback after consecutive ESPN failures and switches back on recovery", async () => {
     const { machine } = await createMachine();
     const time = new ManualDriverTime();

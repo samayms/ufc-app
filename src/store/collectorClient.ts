@@ -116,6 +116,19 @@ export interface CollectorLifecycleDelivery {
   provisional: boolean;
 }
 
+export interface CollectorClockSync {
+  boutId: string;
+  source: "espn" | "cito";
+  state: "pre" | "in" | "post";
+  period: number;
+  completed: boolean;
+  clockSeconds?: number;
+  /** When the collector received the source response. */
+  sourceReceivedAt: string;
+  /** When this browser received the synchronization point. */
+  receivedAt: string;
+}
+
 export interface CollectorValueDelivery {
   source: string;
   sourceUpdatedAt?: string;
@@ -131,6 +144,7 @@ export interface CollectorSnapshot {
   health: Readonly<Record<string, CollectorSourceHealth>>;
   unifiedRounds: readonly CollectorUnifiedRound[];
   lifecycle: Readonly<Record<string, CollectorLifecycleDelivery>>;
+  clocks: Readonly<Record<string, CollectorClockSync>>;
   /** Keyed by `${boutId}:${market}`; freshness for the latest odds shown per market. */
   marketDeliveries: Readonly<Record<string, CollectorValueDelivery>>;
   lastReceivedAt?: string;
@@ -146,8 +160,19 @@ export interface CollectorClient {
 interface CollectorBootstrap {
   state: DashboardState | null;
   health: Record<string, CollectorSourceHealth>;
+  lifecycleObservations: ParsedLifecycleObservation[];
   unifiedRounds: CollectorUnifiedRound[];
   latestMarkets: MarketTick[];
+}
+
+interface ParsedLifecycleObservation {
+  boutId: string;
+  source: "espn" | "cito";
+  state: "pre" | "in" | "post";
+  period: number;
+  completed: boolean;
+  clockSeconds?: number;
+  receivedAt: string;
 }
 
 interface EventSourceLike {
@@ -707,6 +732,8 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
     !isRecord(value) ||
     (value.state !== null && !isDashboardState(value.state)) ||
     !Array.isArray(value.unifiedRounds) ||
+    (value.lifecycleObservations !== undefined &&
+      !Array.isArray(value.lifecycleObservations)) ||
     (value.latestMarkets !== undefined && !Array.isArray(value.latestMarkets))
   ) {
     return null;
@@ -715,6 +742,16 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
   return {
     state: value.state,
     health: parseHealthMap(value.health),
+    lifecycleObservations: Array.isArray(value.lifecycleObservations)
+      ? value.lifecycleObservations
+          .map(parseLifecycleObservation)
+          .filter(
+            (
+              observation,
+            ): observation is ParsedLifecycleObservation =>
+              observation !== null,
+          )
+      : [],
     unifiedRounds: value.unifiedRounds
       .map(parseUnifiedRound)
       .filter(
@@ -726,6 +763,64 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
           .filter((tick): tick is MarketTick => tick !== null)
       : [],
   };
+}
+
+function parseLifecycleObservation(
+  value: unknown,
+): ParsedLifecycleObservation | null {
+  if (
+    !isRecord(value) ||
+    typeof value.boutId !== "string" ||
+    (value.source !== "espn" && value.source !== "cito") ||
+    (value.state !== "pre" &&
+      value.state !== "in" &&
+      value.state !== "post") ||
+    !Number.isSafeInteger(value.period) ||
+    (value.period as number) < 0 ||
+    typeof value.completed !== "boolean" ||
+    (value.clockSeconds !== undefined &&
+      (typeof value.clockSeconds !== "number" ||
+        !Number.isFinite(value.clockSeconds) ||
+        value.clockSeconds < 0)) ||
+    !isTimestamp(value.receivedAt)
+  ) {
+    return null;
+  }
+
+  return {
+    boutId: value.boutId,
+    source: value.source,
+    state: value.state,
+    period: value.period as number,
+    completed: value.completed,
+    ...(value.clockSeconds === undefined
+      ? {}
+      : { clockSeconds: value.clockSeconds }),
+    receivedAt: value.receivedAt,
+  };
+}
+
+function clockSyncs(
+  observations: readonly ParsedLifecycleObservation[],
+  receivedAt: string,
+  current: Readonly<Record<string, CollectorClockSync>> = {},
+): Record<string, CollectorClockSync> {
+  const next = { ...current };
+  for (const observation of observations) {
+    next[observation.boutId] = {
+      boutId: observation.boutId,
+      source: observation.source,
+      state: observation.state,
+      period: observation.period,
+      completed: observation.completed,
+      ...(observation.clockSeconds === undefined
+        ? {}
+        : { clockSeconds: observation.clockSeconds }),
+      sourceReceivedAt: observation.receivedAt,
+      receivedAt,
+    };
+  }
+  return next;
 }
 
 function parseLifecycleEvent(
@@ -1039,6 +1134,38 @@ export function applyCollectorLifecycle(
   });
 }
 
+function applyCollectorObservations(
+  dashboard: DashboardState,
+  observations: readonly ParsedLifecycleObservation[],
+): DashboardState {
+  return observations.reduce((current, observation) => {
+    return replaceBout(current, observation.boutId, (bout) => {
+      if (observation.state === "pre") {
+        return { ...bout, status: "upcoming" };
+      }
+      if (observation.state === "post" || observation.completed) {
+        return {
+          ...bout,
+          status: "final",
+          ...(observation.period > 0
+            ? { currentRound: observation.period }
+            : {}),
+        };
+      }
+      return {
+        ...bout,
+        status:
+          observation.clockSeconds === 0
+            ? "between-rounds"
+            : "in-round",
+        ...(observation.period > 0
+          ? { currentRound: observation.period }
+          : {}),
+      };
+    });
+  }, dashboard);
+}
+
 function applyCollectorRound(
   dashboard: DashboardState,
   record: CollectorUnifiedRound,
@@ -1281,6 +1408,7 @@ export function createCollectorClient(
     health: {},
     unifiedRounds: [],
     lifecycle: {},
+    clocks: {},
     marketDeliveries: {},
   };
 
@@ -1297,8 +1425,15 @@ export function createCollectorClient(
       bootstrap.state,
       bootstrap.unifiedRounds,
     );
+    const dashboardWithLifecycle =
+      dashboardWithRounds === null
+        ? null
+        : applyCollectorObservations(
+            dashboardWithRounds,
+            bootstrap.lifecycleObservations,
+          );
     const { dashboard, deliveries } = applyMarketUpdates(
-      dashboardWithRounds,
+      dashboardWithLifecycle,
       bootstrap.latestMarkets,
       "seed",
     );
@@ -1307,6 +1442,7 @@ export function createCollectorClient(
       connection: "connected",
       dashboard,
       health: bootstrap.health,
+      clocks: clockSyncs(bootstrap.lifecycleObservations, receivedAt),
       unifiedRounds: bootstrap.unifiedRounds,
       marketDeliveries: deliveries,
       lastReceivedAt: receivedAt,
@@ -1353,6 +1489,39 @@ export function createCollectorClient(
               event.type === "PROVISIONAL_ROUND_ENDED",
           },
         },
+        lastReceivedAt: receivedAt,
+      });
+      return;
+    }
+
+    if (
+      value.kind === "lifecycle-observations" &&
+      Array.isArray(value.observations)
+    ) {
+      const observations = value.observations
+        .map(parseLifecycleObservation)
+        .filter(
+          (
+            observation,
+          ): observation is ParsedLifecycleObservation =>
+            observation !== null,
+        );
+      if (observations.length === 0) return;
+      publish({
+        ...snapshot,
+        connection: "connected",
+        dashboard:
+          snapshot.dashboard === null
+            ? null
+            : applyCollectorObservations(
+                snapshot.dashboard,
+                observations,
+              ),
+        clocks: clockSyncs(
+          observations,
+          receivedAt,
+          snapshot.clocks,
+        ),
         lastReceivedAt: receivedAt,
       });
       return;

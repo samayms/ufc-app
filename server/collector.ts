@@ -70,7 +70,10 @@ import {
   type MetricsSnapshot,
   type SourceHealth,
 } from "./health.ts";
-import { FightLifecycleMachine } from "./lifecycle.ts";
+import {
+  FightLifecycleMachine,
+  type FightLifecycleObservation,
+} from "./lifecycle.ts";
 import {
   createFixtureLifecycleProvider,
   createLiveCitoLifecycleProvider,
@@ -156,6 +159,8 @@ export interface CollectorBootstrap {
   state: DashboardState | null;
   boutMappings: BoutMapping[];
   health: Readonly<Record<string, SourceHealth>>;
+  /** Latest source clock/state observation per bout, used to seed local clocks. */
+  lifecycleObservations: readonly FightLifecycleObservation[];
   unifiedRounds: readonly UnifiedRoundRecord[];
   marketSnapshots: readonly MarketSnapshot[];
   latestMarkets: readonly LocalOrderBookState[];
@@ -694,6 +699,10 @@ export async function createCollector(
   let roundStats: RoundStatsPipeline | undefined;
   let tickStore: MarketTickStore | undefined;
   let marketTransports: MarketTransport[] = [];
+  const latestLifecycleObservations = new Map<
+    string,
+    FightLifecycleObservation
+  >();
 
   const defaultStaleAfterMs: Readonly<Record<string, number>> = {
     espn: config.staleAfterMs.lifecycle,
@@ -730,6 +739,7 @@ export async function createCollector(
     state,
     boutMappings: boutMappings?.getAll() ?? [],
     health: healthRegistry.getHealth(),
+    lifecycleObservations: [...latestLifecycleObservations.values()],
     unifiedRounds: roundStats?.getUnifiedRounds() ?? [],
     marketSnapshots: tickStore?.getSnapshots() ?? [],
     latestMarkets: tickStore?.getLatest() ?? [],
@@ -979,6 +989,18 @@ export async function createCollector(
     ...(options.lifecycle?.timer === undefined
       ? {}
       : { timer: options.lifecycle.timer }),
+    onObservations: async (observations) => {
+      for (const observation of observations) {
+        latestLifecycleObservations.set(
+          observation.boutId,
+          observation,
+        );
+      }
+      await push.publish("update", {
+        kind: "lifecycle-observations",
+        observations,
+      });
+    },
     metrics: healthRegistry,
   });
 

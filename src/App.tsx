@@ -381,6 +381,7 @@ export default function App() {
                   status={view.bout.status}
                   currentRound={view.bout.currentRound}
                   result={view.bout.result}
+                  clockSync={dashboard.collector?.clocks[view.bout.id]}
                 />
                 {lifecycleDelivery && (
                   <div className="delivery-notice" role="status">
