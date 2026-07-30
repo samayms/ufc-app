@@ -21,17 +21,27 @@ Every identifier and every latency below was measured against the live APIs on
 ESPN dates the *event* 14:00Z while Cito dates it 17:00Z. Both are right: ESPN
 is stamping the prelims, Cito the main card. Do not "fix" either.
 
-## Start-up order
+## Start everything
 
 ```bash
-npm run lab          # port 5055 — always start this first, it needs nothing else
-npm run collector:live   # port 8600
-npm run dev              # port 5173, the dashboard
+npm run weekend
 ```
 
-The lab is deliberately independent: no collector, no event bus, no React. If
-the dashboard or the collector is broken, the lab still answers "is ESPN live
-yet, and what did it actually say?".
+That is the only launch command for fight day. It starts the independent lab,
+primes live odds, builds the compiled dashboard, starts the live collector,
+serves the compiled app, waits for every service to answer, and opens both
+browser tabs:
+
+- compiled dashboard: `http://127.0.0.1:4173`
+- latency lab: `http://127.0.0.1:5055`
+
+Port `5173` is the development UI and is not used by weekend mode. Keep the
+launcher terminal open; press `Ctrl-C` once to stop the dashboard, collector,
+and lab together.
+
+The lab remains deliberately independent internally: no collector, no event
+bus, no React. If the dashboard or collector is broken, the lab still answers
+"is ESPN live yet, and what did it actually say?".
 
 `?collector=off` on the dashboard URL ignores a running collector and shows the
 fixture card instead — useful when the collector is mid-restart.
