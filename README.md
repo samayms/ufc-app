@@ -192,12 +192,14 @@ List existing sessions with `tmux ls`.
 npm run lab        # http://localhost:5055
 ```
 
-A synchronized round-end timing instrument. Choose a fight and round, then
-press **Round ended — fire all sources** at the horn (spacebar also works).
-That one press immediately requests CITO, ESPN, and Kalshi against the same
-timestamp. ESPN checks every second until it reports `0:00`, advances the
-period, or completes the bout; pending CITO stats retry every five seconds;
-Kalshi captures one matching fight-market snapshot.
+A synchronized fight and round-end timing instrument. Choose a fight and press
+**Fight started — track ESPN** at the opening bell. ESPN is then sampled every
+five seconds for its period, reported clock, state, and completion flag while a
+local clock counts down between samples. Choose the round and press **Round
+ended — fire all sources** at the horn (spacebar also works). That one press
+immediately requests CITO, ESPN, and Kalshi against the same timestamp while
+the five-second ESPN monitor continues. Pending CITO stats retry every five
+seconds; Kalshi captures one matching fight-market snapshot.
 
 The page shows every source's response count, result, and horn-relative
 latency. CITO stats appear in a red-corner/blue-corner table, ESPN names the

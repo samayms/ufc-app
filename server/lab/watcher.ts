@@ -1,11 +1,11 @@
 /**
  * The Lab's watcher — the instrument that answers the timing question.
  *
- * You press "round ended" at the horn. From that moment three pollers race to
- * be the first to notice, and each first-noticing is written to the timeline
- * with its delay from your press:
+ * You press "fight started" at the opening bell and ESPN is sampled throughout
+ * the fight. At a horn, the round marker arms the latency measurement and the
+ * other sources race to be the first to answer:
  *
- *   ESPN     — when does the scoreboard's period advance / clock hit zero?
+ *   ESPN     — every reported clock/period, plus the round-end transition
  *   Cito     — when do that round's per-fighter stats actually exist?
  *   Sherdog  — when does the round's commentary and scoring appear?
  *
@@ -84,6 +84,11 @@ interface PendingEspnRound {
   round: number;
 }
 
+interface EspnSample {
+  atMs: number;
+  entry: EspnLifecycleEntry;
+}
+
 export interface LabWatcherOptions {
   timeline: LabTimeline;
   env: Record<string, string | undefined>;
@@ -110,6 +115,8 @@ export class LabWatcher {
 
   /** Last lifecycle entry seen per ESPN bout id, for change detection. */
   private readonly espnSeen = new Map<string, string>();
+
+  private espnLastSample?: EspnSample;
 
   private espnPending?: PendingEspnRound;
 
@@ -171,6 +178,7 @@ export class LabWatcher {
     this.startedAt = new Date(this.now()).toISOString();
     this.target = target;
     this.espnSeen.clear();
+    this.espnLastSample = undefined;
     this.espnPending = undefined;
     this.foundCito.clear();
     this.foundSherdog.clear();
@@ -356,35 +364,44 @@ export class LabWatcher {
   // -- ESPN -----------------------------------------------------------------
 
   /**
-   * ESPN is the lifecycle authority, so every observable change is logged:
-   * state, period, completion, and the clock reaching zero. Which of those
-   * actually fires between rounds is the open question this measures.
+   * ESPN is free and is the lifecycle authority, so every five-second sample
+   * is logged while a fight watch is active. That preserves the raw reported
+   * clock, period and state alongside the locally projected clock correction.
+   * A round marker additionally arms the explicit round-end signal detector.
    */
   private async pollEspn(): Promise<void> {
     const pending = this.espnPending;
-    if (pending === undefined) return;
     const eventId = this.target?.espnEventId?.trim() ?? "";
-    if (eventId.length === 0) return;
+    const labBoutId = pending?.labBoutId ?? this.target?.boutId;
+    const espnBoutId = pending?.espnBoutId ?? this.target?.espnBoutId;
+    if (
+      eventId.length === 0 ||
+      labBoutId === undefined ||
+      espnBoutId === undefined
+    ) {
+      return;
+    }
 
     const { json } = await this.getJson(buildEspnScoreboardUrl(eventId));
     const entries = parseEspnScoreboardLifecycle(json);
-    const observedAt = new Date(this.now()).toISOString();
+    const observedAtMs = this.now();
+    const observedAt = new Date(observedAtMs).toISOString();
     const entry = entries.find(
-      (candidate) => candidate.externalId === pending.espnBoutId,
+      (candidate) => candidate.externalId === espnBoutId,
     );
     if (entry === undefined) {
-      if (this.espnSeen.get(pending.espnBoutId) !== "missing") {
-        this.espnSeen.set(pending.espnBoutId, "missing");
+      if (this.espnSeen.get(espnBoutId) !== "missing") {
+        this.espnSeen.set(espnBoutId, "missing");
         this.timeline.record({
           kind: "observation",
           source: "espn",
           at: observedAt,
-          boutId: pending.labBoutId,
-          round: pending.round,
+          boutId: labBoutId,
+          ...(pending === undefined ? {} : { round: pending.round }),
           label: "ESPN response did not include the selected fight",
           detail: {
             roundEnded: false,
-            espnBoutId: pending.espnBoutId,
+            espnBoutId,
             fightsInResponse: entries.length,
           },
         });
@@ -394,31 +411,49 @@ export class LabWatcher {
 
     const key = espnFingerprint(entry);
     const previous = this.espnSeen.get(entry.externalId);
-    const signal = espnRoundEndSignal(entry, pending.round);
-    if (previous === key && signal === undefined) return;
+    const signal =
+      pending === undefined
+        ? undefined
+        : espnRoundEndSignal(entry, pending.round);
+    const clockCorrectionSeconds = espnClockCorrectionSeconds(
+      this.espnLastSample,
+      entry,
+      observedAtMs,
+    );
+    const transition = espnTransition(this.espnLastSample?.entry, entry);
     this.espnSeen.set(entry.externalId, key);
+    this.espnLastSample = { atMs: observedAtMs, entry };
 
     const roundEnded = signal !== undefined;
     this.timeline.record({
       kind: "observation",
       source: "espn",
       at: observedAt,
-      boutId: pending.labBoutId,
-      round: pending.round,
+      boutId: labBoutId,
+      round: pending?.round ?? entry.period,
       label: roundEnded
-        ? `ESPN announced round ${pending.round} done (${describeEspnSignal(signal)})`
-        : `ESPN still shows ${describeEspnState(entry)}`,
+        ? `ESPN announced round ${pending?.round ?? entry.period} done (${describeEspnSignal(signal)})`
+        : transition === undefined
+          ? `ESPN reports ${describeEspnState(entry)}`
+          : `ESPN changed ${describeEspnTransition(transition, entry)}`,
       detail: {
         roundEnded,
         ...(signal === undefined ? {} : { signal }),
-        espnBoutId: pending.espnBoutId,
+        changed: previous !== key,
+        ...(transition === undefined ? {} : { transition }),
+        ...(clockCorrectionSeconds === undefined
+          ? {}
+          : { clockCorrectionSeconds }),
+        espnBoutId,
         lifecycle: { ...entry },
       },
     });
 
     if (roundEnded) {
       this.espnPending = undefined;
-      this.pausePoller("espn");
+      if (this.target?.continuousEspn !== true) {
+        this.pausePoller("espn");
+      }
     }
   }
 
@@ -670,6 +705,81 @@ function espnFingerprint(entry: EspnLifecycleEntry): string {
     entry.completed,
     entry.clockSeconds === undefined ? "-" : Math.round(entry.clockSeconds),
   ].join("/");
+}
+
+function espnClockCorrectionSeconds(
+  previous: EspnSample | undefined,
+  current: EspnLifecycleEntry,
+  currentAtMs: number,
+): number | undefined {
+  if (
+    previous?.entry.clockSeconds === undefined ||
+    current.clockSeconds === undefined ||
+    previous.entry.period !== current.period ||
+    previous.entry.state !== "in" ||
+    current.state !== "in"
+  ) {
+    return undefined;
+  }
+  const elapsedSeconds = Math.max(0, (currentAtMs - previous.atMs) / 1_000);
+  const projectedClock = Math.max(
+    0,
+    previous.entry.clockSeconds - elapsedSeconds,
+  );
+  return Number((current.clockSeconds - projectedClock).toFixed(3));
+}
+
+interface EspnTransition {
+  previousPeriod: number;
+  period: number;
+  previousState: EspnLifecycleEntry["state"];
+  state: EspnLifecycleEntry["state"];
+  previousCompleted: boolean;
+  completed: boolean;
+}
+
+function espnTransition(
+  previous: EspnLifecycleEntry | undefined,
+  current: EspnLifecycleEntry,
+): EspnTransition | undefined {
+  if (
+    previous === undefined ||
+    (previous.period === current.period &&
+      previous.state === current.state &&
+      previous.completed === current.completed)
+  ) {
+    return undefined;
+  }
+  return {
+    previousPeriod: previous.period,
+    period: current.period,
+    previousState: previous.state,
+    state: current.state,
+    previousCompleted: previous.completed,
+    completed: current.completed,
+  };
+}
+
+function describeEspnTransition(
+  transition: EspnTransition,
+  current: EspnLifecycleEntry,
+): string {
+  const clock =
+    current.clockSeconds === undefined
+      ? "no clock"
+      : formatEspnClock(current.clockSeconds);
+  if (transition.previousPeriod !== transition.period) {
+    return `round ${transition.previousPeriod} → ${transition.period} · ${clock} · ${current.state}`;
+  }
+  if (transition.previousState !== transition.state) {
+    return `state ${transition.previousState} → ${transition.state} · round ${current.period} · ${clock}`;
+  }
+  return `completion ${transition.previousCompleted} → ${transition.completed} · round ${current.period} · ${clock}`;
+}
+
+function formatEspnClock(clockSeconds: number): string {
+  const seconds = Math.max(0, Math.round(clockSeconds));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 type EspnRoundEndSignal = "clock_zero" | "period_advanced" | "bout_completed";

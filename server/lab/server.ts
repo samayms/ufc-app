@@ -43,7 +43,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PORT = 5055;
 const MAX_BODY_BYTES = 256 * 1024;
 const LAB_CITO_INTERVAL_MS = 5_000;
-const LAB_ESPN_INTERVAL_MS = 1_000;
+const LAB_ESPN_INTERVAL_MS = 5_000;
 const LAB_KALSHI_INTERVAL_MS = 5_000;
 const WEEKEND_EVENT_NAME = "UFC Fight Night: Medić vs. Rodriguez";
 const WEEKEND_EVENT_DATE = "2026-08-01";
@@ -233,6 +233,9 @@ function watchTargetField(source: unknown): WatchTarget {
     ...(stringField(source, "sherdogUrl") === undefined
       ? {}
       : { sherdogUrl: stringField(source, "sherdogUrl") as string }),
+    ...((source as { continuousEspn?: unknown } | null)?.continuousEspn === true
+      ? { continuousEspn: true }
+      : {}),
     ...(numberField(source, "espnIntervalMs") === undefined
       ? {}
       : { espnIntervalMs: numberField(source, "espnIntervalMs") as number }),
@@ -441,12 +444,48 @@ export function createLabServer(options: LabServerOptions = {}) {
         ...(fight.espnBoutId === undefined
           ? {}
           : { espnBoutId: fight.espnBoutId }),
+        continuousEspn: true,
         espnIntervalMs: LAB_ESPN_INTERVAL_MS,
         citoBoutIds: [boutId],
         citoIntervalMs: LAB_CITO_INTERVAL_MS,
         redFighter: fight.red.name,
         blueFighter: fight.blue.name,
         kalshiIntervalMs: LAB_KALSHI_INTERVAL_MS,
+      });
+      sendJson(response, 200, { entry, watch: watcher.status() });
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/lab/fight/start") {
+      const body = await readBody(request);
+      const boutId = stringField(body, "boutId");
+      const fight = LAB_CARD.fights.find((candidate) => candidate.id === boutId);
+      if (boutId === undefined || fight === undefined) {
+        sendJson(response, 400, {
+          error: "Select a fight from this weekend's card",
+        });
+        return;
+      }
+      if (fight.espnBoutId === undefined) {
+        sendJson(response, 400, {
+          error: "The selected fight has no matching ESPN bout id",
+        });
+        return;
+      }
+
+      watcher.stop();
+      const entry = timeline.record({
+        kind: "marker",
+        source: "user",
+        label: "fight started (broadcast)",
+        boutId,
+      });
+      watcher.start({
+        boutId,
+        espnEventId: WEEKEND.espnEventId,
+        espnBoutId: fight.espnBoutId,
+        continuousEspn: true,
+        espnIntervalMs: LAB_ESPN_INTERVAL_MS,
       });
       sendJson(response, 200, { entry, watch: watcher.status() });
       return;

@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Round Stats Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Asap+Condensed:wght@600;700;800&family=Barlow+Condensed:wght@500;600;700&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
       color-scheme: dark;
@@ -175,6 +178,24 @@
 
     .round-field { margin-top: 22px; }
 
+    .fight-start {
+      width: 100%;
+      min-height: 58px;
+      margin-top: 22px;
+      color: var(--green);
+      background: var(--green-dim);
+      border-color: var(--green);
+      font-family: "Asap Condensed", "Arial Narrow", sans-serif;
+      font-size: 1.125rem;
+      font-weight: 750;
+    }
+
+    .fight-start:hover:not(:disabled) {
+      color: var(--text);
+      background: color-mix(in srgb, var(--green) 21%, var(--surface));
+      border-color: var(--green);
+    }
+
     .rounds {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -271,6 +292,68 @@
       margin: 10px 0 0;
       color: var(--muted);
       font-size: 0.8125rem;
+    }
+
+    .espn-readout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      overflow: hidden;
+      margin-top: 18px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .clock-cell {
+      min-width: 0;
+      padding: 12px 12px 10px;
+      text-align: center;
+      background: var(--surface-raised);
+    }
+
+    .clock-cell span {
+      display: block;
+      color: var(--faint);
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    .clock-cell strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--text);
+      font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+      font-size: clamp(2.75rem, 6vw, 3.75rem);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.025em;
+      line-height: 0.95;
+    }
+
+    .clock-cell:first-child strong { color: var(--green); }
+
+    .espn-clock-meta {
+      grid-column: 1 / -1;
+      margin: 0;
+      padding: 8px 12px;
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 0.6875rem;
+      text-align: center;
+    }
+
+    .espn-last-change {
+      grid-column: 1 / -1;
+      margin: 0;
+      padding: 8px 12px;
+      color: var(--green);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      font-size: 0.6875rem;
+      text-align: center;
     }
 
     .elapsed-line {
@@ -530,7 +613,7 @@
     <header class="topline">
       <div>
         <h1>Round Stats Lab</h1>
-        <p class="intro">Choose the fight and round. At the horn, measure CITO, ESPN, and Kalshi from the same instant.</p>
+        <p class="intro">Start ESPN tracking when the fight begins. At each horn, measure CITO, ESPN, and Kalshi from the same instant.</p>
       </div>
       <div class="event-stamp">
         <strong id="event-name">This weekend’s card</strong>
@@ -548,6 +631,11 @@
         <select id="fight-select" disabled>
           <option>Loading this weekend’s fights…</option>
         </select>
+
+        <button id="fight-started" class="fight-start" type="button" disabled>
+          Fight started — track ESPN
+          <span class="keyhint">Free polling every 5 seconds</span>
+        </button>
 
         <div class="round-field">
           <label id="round-label">Round</label>
@@ -570,9 +658,21 @@
       <aside id="monitor" class="monitor" aria-live="polite">
         <div class="monitor-state">
           <span class="state-dot" aria-hidden="true"></span>
-          <h2 id="monitor-title" class="monitor-title">Ready for the horn</h2>
+          <h2 id="monitor-title" class="monitor-title">Ready to track the fight</h2>
         </div>
-        <p id="monitor-copy" class="monitor-copy">All three sources fire immediately when you press the button.</p>
+        <p id="monitor-copy" class="monitor-copy">Start the ESPN monitor at the opening bell, then mark each horn below.</p>
+        <div class="espn-readout" aria-label="ESPN and locally projected fight clocks">
+          <div class="clock-cell">
+            <span>ESPN reported</span>
+            <strong id="espn-reported-clock">-:--</strong>
+          </div>
+          <div class="clock-cell">
+            <span>Local countdown</span>
+            <strong id="espn-local-clock">-:--</strong>
+          </div>
+          <p id="espn-clock-meta" class="espn-clock-meta">Waiting for the first ESPN sample.</p>
+          <p id="espn-last-change" class="espn-last-change">No ESPN round or state change observed yet.</p>
+        </div>
         <div class="elapsed-line">
           <span>Elapsed</span>
           <strong id="elapsed">—</strong>
@@ -644,6 +744,7 @@
       watch: null,
       pollInFlight: false,
       stopping: false,
+      starting: false,
       rawJson: "",
     };
 
@@ -742,18 +843,24 @@
     }
 
     function syncControls() {
-      const active = Boolean(state.session && state.session.polling);
+      const watching = Boolean(state.session && state.session.polling);
+      const measuring = Boolean(
+        watching &&
+        state.session.mode === "round" &&
+        !state.session.measurementComplete,
+      );
       const ready = Boolean(
         state.card &&
         Array.isArray(state.card.fights) &&
         state.card.fights.length,
       );
-      $("fight-select").disabled = !ready || active;
-      $("round-ended").disabled = !ready || active;
-      $("stop-polling").disabled = !active || state.stopping;
+      $("fight-select").disabled = !ready || watching || state.starting;
+      $("fight-started").disabled = !ready || watching || state.starting;
+      $("round-ended").disabled = !ready || measuring || state.starting;
+      $("stop-polling").disabled = !watching || state.stopping;
       document.querySelectorAll(".round").forEach((button) => {
         const round = Number(button.dataset.round);
-        button.disabled = active;
+        button.disabled = measuring || state.starting;
         button.setAttribute("aria-pressed", String(round === state.round));
       });
     }
@@ -766,6 +873,9 @@
     }
 
     function sourceEntry(name) {
+      if (name === "espn" && state.session && state.session.espnLatest) {
+        return state.session.espnLatest;
+      }
       return state.session && state.session.sources
         ? state.session.sources[name]
         : null;
@@ -776,12 +886,64 @@
       const espn = sourceEntry("espn");
       const kalshi = sourceEntry("kalshi");
       return Boolean(
+        state.session &&
+        state.session.mode === "round" &&
         cito &&
-        espn &&
-        espn.detail &&
-        espn.detail.roundEnded === true &&
+        state.session.sources.espn &&
         kalshi,
       );
+    }
+
+    function formatFightClock(value) {
+      if (!Number.isFinite(Number(value))) return "-:--";
+      const seconds = Math.max(0, Math.ceil(Number(value)));
+      return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    }
+
+    function renderEspnClock() {
+      const entry = state.session && state.session.espnLatest;
+      const lifecycle = entry && entry.detail && entry.detail.lifecycle;
+      const reported = Number(lifecycle && lifecycle.clockSeconds);
+      const sampledAtMs = entry ? Date.parse(entry.at) : NaN;
+      const isRunning = lifecycle && lifecycle.state === "in" && lifecycle.completed !== true;
+      const elapsedSinceSample = Number.isFinite(sampledAtMs)
+        ? Math.max(0, (Date.now() - sampledAtMs) / 1000)
+        : 0;
+      const local = Number.isFinite(reported)
+        ? Math.max(0, reported - (isRunning ? elapsedSinceSample : 0))
+        : NaN;
+
+      $("espn-reported-clock").textContent = formatFightClock(reported);
+      $("espn-local-clock").textContent = formatFightClock(local);
+
+      if (!lifecycle) {
+        $("espn-clock-meta").textContent = state.session && state.session.polling
+          ? "First ESPN request is in flight."
+          : "Waiting for the first ESPN sample.";
+        $("espn-last-change").textContent = "No ESPN round or state change observed yet.";
+        return;
+      }
+
+      const round = Number(lifecycle.period) > 0 ? `Round ${lifecycle.period}` : "No round";
+      const stateLabel = lifecycle.completed
+        ? "bout complete"
+        : lifecycle.state === "in"
+          ? "in progress"
+          : lifecycle.state === "pre"
+            ? "not started"
+            : "post-fight";
+      const correction = Number(entry.detail.clockCorrectionSeconds);
+      const correctionText = Number.isFinite(correction)
+        ? correction === 0
+          ? "matched local projection"
+          : `ESPN ${Math.abs(correction).toFixed(1)}s ${correction > 0 ? "ahead of" : "behind"} local`
+        : "local projection anchored";
+      $("espn-clock-meta").textContent =
+        `${round} · ${stateLabel} · ${correctionText} · sampled ${new Date(entry.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
+      const lastChange = state.session && state.session.espnLastChange;
+      $("espn-last-change").textContent = lastChange
+        ? `Last ESPN change: ${lastChange.label.replace(/^ESPN changed /, "")} · ${new Date(lastChange.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
+        : "No ESPN round or state change observed yet.";
     }
 
     function kalshiLine(entry) {
@@ -816,15 +978,32 @@
 
       if (!state.session) {
         status.textContent = "Ready";
-        detail.textContent = "Waiting for the horn.";
+        detail.textContent = name === "espn"
+          ? "Waiting for the fight-start button."
+          : "Waiting for the horn.";
         return;
       }
 
       if (name === "espn" && entry) {
-        const done = entry.detail && entry.detail.roundEnded === true;
-        status.textContent = done ? "Round done" : "Waiting";
+        const lifecycle = entry.detail && entry.detail.lifecycle;
+        const done = lifecycle && lifecycle.completed === true;
+        status.textContent = done
+          ? "Bout complete"
+          : lifecycle && lifecycle.state === "in"
+            ? `Live · R${lifecycle.period}`
+            : "Tracking";
         status.classList.toggle("is-complete", done);
         detail.textContent = entry.label;
+        return;
+      }
+      if (
+        state.session.mode === "fight" &&
+        (name === "cito" || name === "kalshi")
+      ) {
+        status.textContent = "Standby";
+        detail.textContent = "Starts only when you press the round-ended button.";
+        checks.textContent = "0 checks";
+        latency.textContent = "—";
         return;
       }
       if (name === "cito" && entry) {
@@ -858,7 +1037,7 @@
 
       status.textContent = "Checking";
       if (name === "espn") {
-        detail.textContent = "Polling every second for clock 0:00, the next round, or bout completion.";
+        detail.textContent = "Polling every 5 seconds for ESPN’s clock, round, state, and completion flag.";
       } else if (name === "cito") {
         detail.textContent = "The first check fired at the horn; pending stats retry every 5 seconds.";
       } else {
@@ -870,7 +1049,7 @@
       const monitor = $("monitor");
       monitor.className = "monitor";
       let title = "Ready for the horn";
-      let copy = "All three sources fire immediately when you press the button.";
+      let copy = "Start the ESPN monitor at the opening bell, then mark each horn.";
       let elapsed = "—";
 
       if (state.session) {
@@ -884,12 +1063,16 @@
 
         if (allCaptured()) {
           monitor.classList.add("is-complete");
-          title = "All measurements captured";
-          copy = `ESPN, CITO, and Kalshi are tied to the same round ${state.session.round} horn marker.`;
+          title = `Round ${state.session.round} captured · ESPN still tracking`;
+          copy = "Select the next round when its horn sounds. The five-second ESPN monitor remains active.";
+        } else if (state.session.mode === "fight" && state.session.polling) {
+          monitor.classList.add(hasError ? "is-error" : "is-polling");
+          title = hasError ? "ESPN needs attention" : "Tracking ESPN live";
+          copy = "ESPN is sampled every 5 seconds. CITO and Kalshi remain off until a round ends.";
         } else if (state.session.polling) {
           monitor.classList.add(hasError ? "is-error" : "is-polling");
           title = hasError ? "One source needs attention" : "Measuring source latency";
-          copy = "ESPN checks every second. CITO retries every 5 seconds. Kalshi captures one horn snapshot.";
+          copy = "ESPN continues every 5 seconds. CITO retries every 5 seconds. Kalshi captures one horn snapshot.";
         } else {
           monitor.classList.add("is-stopped");
           title = "Measurement stopped";
@@ -900,6 +1083,7 @@
       $("monitor-title").textContent = title;
       $("monitor-copy").textContent = copy;
       $("elapsed").textContent = elapsed;
+      renderEspnClock();
       renderSource("espn");
       renderSource("cito");
       renderSource("kalshi");
@@ -986,6 +1170,7 @@
         round: state.session.round,
         hornAt: new Date(state.session.startedAtMs).toISOString(),
         sources,
+        espnSamples: state.session.espnHistory,
       }, null, 2);
       $("raw-json").textContent = state.rawJson;
       $("source-json").hidden = Object.keys(sources).length === 0;
@@ -1014,13 +1199,32 @@
         entry.kind !== "observation" ||
         !["espn", "cito", "kalshi"].includes(entry.source) ||
         entry.boutId !== state.session.boutId ||
-        Number(entry.round) !== state.session.round ||
         Number(entry.seq) <= state.session.markerSeq
       ) {
         return;
       }
 
-      if (entry.source === "cito") {
+      if (entry.source === "espn") {
+        state.session.espnLatest = entry;
+        state.session.espnHistory.push(entry);
+        if (entry.detail && entry.detail.transition) {
+          state.session.espnLastChange = entry;
+        }
+        if (
+          state.session.mode === "round" &&
+          Number(entry.round) === state.session.round &&
+          entry.detail &&
+          entry.detail.roundEnded === true &&
+          !state.session.sources.espn
+        ) {
+          state.session.sources.espn = entry;
+        }
+      } else if (
+        state.session.mode !== "round" ||
+        Number(entry.round) !== state.session.round
+      ) {
+        return;
+      } else if (entry.source === "cito") {
         if (
           !entry.detail ||
           !Array.isArray(entry.detail.rows) ||
@@ -1030,15 +1234,13 @@
         }
         state.session.sources.cito = entry;
         renderResult(entry);
-      } else if (entry.source === "espn") {
-        state.session.sources.espn = entry;
       } else {
         state.session.sources.kalshi = entry;
       }
 
       renderRawJson();
       renderMonitor();
-      if (allCaptured()) {
+      if (allCaptured() && !state.session.measurementComplete) {
         const timestamps = Object.values(state.session.sources)
           .filter(Boolean)
           .map((source) => Date.parse(source.at))
@@ -1046,7 +1248,8 @@
         state.session.completedAtMs = timestamps.length
           ? Math.max(...timestamps)
           : Date.now();
-        void stopPolling(true);
+        state.session.measurementComplete = true;
+        renderMonitor();
       }
     }
 
@@ -1086,10 +1289,19 @@
       const fight = selectedFight();
       if (!fight || !state.card) return;
 
+      const espnHistory =
+        state.session && state.session.boutId === fight.id
+          ? state.session.espnHistory
+          : [];
+      const espnLastChange =
+        state.session && state.session.boutId === fight.id
+          ? state.session.espnLastChange
+          : null;
       $("results").hidden = true;
       $("source-json").hidden = true;
       state.rawJson = "";
       state.session = {
+        mode: "round",
         boutId: fight.id,
         fight,
         round: state.round,
@@ -1097,6 +1309,12 @@
         startedAtMs: Date.now(),
         completedAtMs: null,
         polling: true,
+        measurementComplete: false,
+        espnLatest: espnHistory.length
+          ? espnHistory[espnHistory.length - 1]
+          : null,
+        espnHistory,
+        espnLastChange,
         sources: {
           espn: null,
           cito: null,
@@ -1104,6 +1322,7 @@
         },
       };
       state.watch = null;
+      state.starting = true;
       setError("");
       renderMonitor();
 
@@ -1117,11 +1336,65 @@
         state.session.markerSeq = Number(response.entry.seq);
         state.session.startedAtMs = Date.parse(response.entry.at) || Date.now();
         state.latestSeq = Math.max(state.latestSeq, state.session.markerSeq);
+        state.starting = false;
         renderMonitor();
       } catch (error) {
         state.session.polling = false;
         state.session.completedAtMs = Date.now();
+        state.starting = false;
         setError(`Could not start source polling: ${error.message}`);
+        renderMonitor();
+      }
+    }
+
+    async function startFightWatch() {
+      const fight = selectedFight();
+      if (!fight || !state.card) return;
+
+      $("results").hidden = true;
+      $("source-json").hidden = true;
+      state.rawJson = "";
+      state.session = {
+        mode: "fight",
+        boutId: fight.id,
+        fight,
+        round: null,
+        markerSeq: state.latestSeq,
+        startedAtMs: Date.now(),
+        completedAtMs: null,
+        polling: true,
+        measurementComplete: false,
+        espnLatest: null,
+        espnHistory: [],
+        espnLastChange: null,
+        sources: {
+          espn: null,
+          cito: null,
+          kalshi: null,
+        },
+      };
+      state.watch = null;
+      state.starting = true;
+      setError("");
+      renderMonitor();
+
+      try {
+        const response = await fetchJson("/lab/fight/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ boutId: fight.id }),
+        });
+        state.watch = response.watch;
+        state.session.markerSeq = Number(response.entry.seq);
+        state.session.startedAtMs = Date.parse(response.entry.at) || Date.now();
+        state.latestSeq = Math.max(state.latestSeq, state.session.markerSeq);
+        state.starting = false;
+        renderMonitor();
+      } catch (error) {
+        state.session.polling = false;
+        state.session.completedAtMs = Date.now();
+        state.starting = false;
+        setError(`Could not start ESPN tracking: ${error.message}`);
         renderMonitor();
       }
     }
@@ -1145,6 +1418,7 @@
           syncControls();
         });
       });
+      $("fight-started").addEventListener("click", startFightWatch);
       $("round-ended").addEventListener("click", startRoundWatch);
       $("stop-polling").addEventListener("click", () => stopPolling(false));
       $("copy-json").addEventListener("click", copyJson);

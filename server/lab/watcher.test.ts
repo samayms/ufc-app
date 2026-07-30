@@ -284,3 +284,95 @@ describe("LabWatcher synchronized horn checks", () => {
     watcher.stop();
   });
 });
+
+describe("LabWatcher continuous ESPN fight polling", () => {
+  it("samples immediately and every five seconds without stopping at a round change", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TIME);
+    let espnCalls = 0;
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      espnCalls += 1;
+      if (espnCalls === 1) return espnResponse("4:55");
+      if (espnCalls === 2) return espnResponse("4:50");
+      return new Response(
+        JSON.stringify({
+          events: [
+            {
+              competitions: [
+                {
+                  id: "401870843",
+                  status: {
+                    period: 3,
+                    displayClock: "5:00",
+                    type: { state: "in", completed: false },
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    const timeline = new LabTimeline({ now: () => Date.now() });
+    const watcher = new LabWatcher({
+      timeline,
+      fetchImpl,
+      now: () => Date.now(),
+      env: {},
+    });
+
+    watcher.start({
+      boutId: "12879",
+      espnEventId: "600059339",
+      espnBoutId: "401870843",
+      continuousEspn: true,
+      espnIntervalMs: 5_000,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    const espnEntries = timeline
+      .since(0)
+      .filter((entry) => entry.source === "espn");
+    expect(espnEntries).toHaveLength(3);
+    expect(espnEntries[1]).toMatchObject({
+      boutId: "12879",
+      round: 2,
+      detail: {
+        changed: true,
+        clockCorrectionSeconds: 0,
+        lifecycle: {
+          period: 2,
+          clockSeconds: 290,
+        },
+      },
+    });
+    expect(espnEntries[2]).toMatchObject({
+      boutId: "12879",
+      round: 3,
+      label: "ESPN changed round 2 → 3 · 5:00 · in",
+      detail: {
+        changed: true,
+        transition: {
+          previousPeriod: 2,
+          period: 3,
+          previousState: "in",
+          state: "in",
+          previousCompleted: false,
+          completed: false,
+        },
+        lifecycle: {
+          period: 3,
+          clockSeconds: 300,
+        },
+      },
+    });
+    expect(watcher.status()).toMatchObject({
+      running: true,
+      pollers: [expect.objectContaining({ name: "espn", polls: 3 })],
+    });
+    watcher.stop();
+  });
+});

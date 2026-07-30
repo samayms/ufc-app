@@ -88,23 +88,28 @@ the round, and what did Kalshi show at that instant?*
 
 1. Choose the fight from the lab's **Fight** list. Its ESPN and CITO ids are
    attached to the choice; do not enter or copy either id.
-2. Choose the round number.
-3. When the horn sounds, press **Round ended — fire all sources**. Spacebar
+2. At the opening bell, press **Fight started — track ESPN**. The lab samples
+   ESPN every five seconds and shows its reported round and clock beside a
+   locally generated countdown. Each new ESPN sample reports whether ESPN is
+   ahead of or behind the local projection.
+3. Choose the round number.
+4. When the horn sounds, press **Round ended — fire all sources**. Spacebar
    works when no form control has focus. The marker is written before any
    vendor request starts, so all displayed deltas share this reference.
-4. CITO, ESPN, and Kalshi fire immediately. ESPN then checks every second for
-   clock `0:00`, a period advance, or bout completion. CITO retries pending
-   stats every five seconds. Kalshi takes one matching fight-market snapshot.
-5. Read each source row:
+5. CITO, ESPN, and Kalshi fire immediately. ESPN continues checking every five
+   seconds for its clock, period, state, and bout completion. CITO retries
+   pending stats every five seconds. Kalshi takes one matching fight-market
+   snapshot.
+6. Read each source row:
    - **ESPN** says exactly which transition announced the round was done and
      shows its latency from the horn.
    - **CITO** shows publication latency and opens the full corner-by-corner
      table as soon as stats exist.
    - **Kalshi** shows both fighter prices and the snapshot latency.
-6. Press **Stop polling** at any point to cancel. Otherwise each source stops
-   requesting once its result is captured, and the overall measurement stops
-   when all three are complete.
-7. Record the displayed latencies in `LIVE_CARD_VALIDATION.md`. Use **View raw
+7. Press **Stop polling** at any point to cancel. CITO and Kalshi stop when
+   their result is captured; ESPN keeps sampling until you stop the fight
+   monitor so its full clock and round history remains available.
+8. Record the displayed latencies in `LIVE_CARD_VALIDATION.md`. Use **View raw
    source JSON** only when a surfaced value looks surprising. Every observation
    is also appended to `data/lab-timeline.jsonl`.
 

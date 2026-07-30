@@ -128,6 +128,8 @@ export interface WatchTarget {
   redFighter?: string;
   blueFighter?: string;
   sherdogUrl?: string;
+  /** Keep ESPN running after it observes a round-end signal. */
+  continuousEspn?: boolean;
   espnIntervalMs?: number;
   citoIntervalMs?: number;
   kalshiIntervalMs?: number;
