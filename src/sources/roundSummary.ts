@@ -16,6 +16,15 @@ export const ROUND_SUMMARY_MAX_CHARS = 380;
 /** Floor that keeps a summary from shrinking to a single thin line. */
 export const ROUND_SUMMARY_MIN_CHARS = 300;
 
+/**
+ * The length the prompt actually asks for. Models count words far better than
+ * they count characters, and asking in characters produced summaries a third
+ * shorter than the box: 246 and 253 against a stated 300 floor. At roughly
+ * 5.8 characters a word these bracket the character budget above.
+ */
+export const ROUND_SUMMARY_MIN_WORDS = 52;
+export const ROUND_SUMMARY_MAX_WORDS = 62;
+
 export interface RoundSummaryInput {
   round: number;
   redName: string;
@@ -102,7 +111,7 @@ export function buildRoundSummaryPrompt(input: RoundSummaryInput): string {
     `Below is the round's live play-by-play, written by a reporter watching the fight. Condense it into a single paragraph a viewer can read at a glance.`,
     ``,
     `Rules:`,
-    `1. Length: between ${ROUND_SUMMARY_MIN_CHARS} and ${ROUND_SUMMARY_MAX_CHARS} characters. Never exceed ${ROUND_SUMMARY_MAX_CHARS}; the dashboard cuts off anything longer. Aim for the top of that range.`,
+    `1. Length: four or five sentences, ${ROUND_SUMMARY_MIN_WORDS} to ${ROUND_SUMMARY_MAX_WORDS} words. Use the space; a two or three sentence answer leaves the box half empty. The hard ceiling is ${ROUND_SUMMARY_MAX_CHARS} characters, and the dashboard cuts off anything past it, so do not run beyond ${ROUND_SUMMARY_MAX_WORDS} words.`,
     `2. Never use an em dash or an en dash. Use commas, semicolons, or separate sentences instead. This is a hard requirement.`,
     `3. Write plain prose in one paragraph. No markdown, no bullet points, no headings, no quotation marks around the whole answer, no preamble like "Here is the summary".`,
     `4. Use only what the play-by-play states. Never invent strikes, takedowns, knockdowns, damage, or scores. If the round was short or the detail is thin, write a shorter summary rather than padding it.`,

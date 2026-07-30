@@ -113,17 +113,67 @@ console.log(
 console.log("\n" + wrap(summary, ROUND_SUMMARY_LINE_CHARS));
 
 if (flag("write")) {
+  const target = value("into", "bout-main");
+  const targetRound = Number(value("into-round", "2"));
   const fixture = JSON.parse(readFileSync(SHERDOG_FIXTURE, "utf8"));
-  fixture.boutEntries["bout-main"] = {
-    html: `<article class="fight-card live-blog">\n  <section class="round">\n    <h3>Round 2</h3>\n    <p>${escapeHtml(
-      summary,
-    )}</p>\n  </section>\n</article>\n`,
-  };
+  const entry = fixture.boutEntries[target];
+  if (entry === undefined) {
+    console.error(
+      `\nNo fixture bout "${target}". Available: ${Object.keys(
+        fixture.boutEntries,
+      ).join(", ")}`,
+    );
+    process.exit(1);
+  }
+
+  // Swap only the prose of the target round. The round's score line and every
+  // other round stay exactly as they were: they are load-bearing for the
+  // fixture tests, and replacing the whole entry silently broke four of them.
+  const replaced = replaceRoundProse(entry.html, targetRound, summary);
+  if (replaced === undefined) {
+    console.error(
+      `\nFixture bout "${target}" has no round ${targetRound} to write into.`,
+    );
+    process.exit(1);
+  }
+  entry.html = replaced;
   writeFileSync(SHERDOG_FIXTURE, `${JSON.stringify(fixture, null, 2)}\n`);
   console.log(
-    "\nWritten into src/fixtures/sherdog.json as bout-main round 2. " +
-      "Run `npm run dev` and open the live bout to see it in the box.",
+    `\nWritten into src/fixtures/sherdog.json at ${target} round ${targetRound}, ` +
+      "leaving the score line and the other rounds untouched.\n" +
+      "Run `npm run dev`, open the live bout, and select that round.",
   );
+}
+
+/**
+ * Replaces a round's prose with the summary. The dashboard joins every
+ * non-score paragraph into the box, so the rest of the prose is dropped rather
+ * than left to trail the summary and overflow the clamp. The score line and
+ * every other round are untouched.
+ */
+function replaceRoundProse(html, round, text) {
+  const heading = new RegExp(
+    `<h[1-6][^>]*>\\s*Round\\s+${round}\\s*</h[1-6]>`,
+    "i",
+  ).exec(html);
+  if (heading === null) return undefined;
+
+  const start = heading.index + heading[0].length;
+  const nextHeading = /<h[1-6][^>]*>\s*Round\s+\d+\s*<\/h[1-6]>/i.exec(
+    html.slice(start),
+  );
+  const end = nextHeading === null ? html.length : start + nextHeading.index;
+
+  let done = false;
+  const block = html
+    .slice(start, end)
+    .replace(/<p\b[^>]*>([\s\S]*?)<\/p>/gi, (match, inner) => {
+      if (/scores the round/i.test(inner)) return match;
+      if (done) return "";
+      done = true;
+      return `<p>${escapeHtml(text)}</p>`;
+    });
+  return done ? html.slice(0, start) + block + html.slice(end) : undefined;
 }
 
 /** Mirrors how the clamp breaks lines, so the printed shape matches the box. */

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ROUND_SUMMARY_MAX_CHARS,
+  ROUND_SUMMARY_MAX_WORDS,
   ROUND_SUMMARY_MIN_CHARS,
+  ROUND_SUMMARY_MIN_WORDS,
   buildRoundSummaryPrompt,
   enforceRoundSummary,
 } from "./roundSummary.ts";
@@ -135,11 +137,14 @@ describe("buildRoundSummaryPrompt", () => {
     expect(prompt).toContain(input.commentary);
   });
 
-  it("states the character budget the dashboard enforces", () => {
+  it("asks for a length in words and states the hard character ceiling", () => {
     const prompt = buildRoundSummaryPrompt(input);
 
+    // Asking in characters produced summaries a third under the box; models
+    // hold a word count far better than a character count.
+    expect(prompt).toContain(String(ROUND_SUMMARY_MIN_WORDS));
+    expect(prompt).toContain(String(ROUND_SUMMARY_MAX_WORDS));
     expect(prompt).toContain(String(ROUND_SUMMARY_MAX_CHARS));
-    expect(prompt).toContain(String(ROUND_SUMMARY_MIN_CHARS));
   });
 
   it("forbids em dashes explicitly", () => {
