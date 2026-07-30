@@ -133,6 +133,15 @@ export async function assembleDashboard(): Promise<DashboardState> {
   return { event, boutViews, scorecardAccounts: SCORECARD_ACCOUNTS };
 }
 
+/**
+ * Whether `?collector=off` asked the page to ignore a running collector. A
+ * collector serving a real card shadows the fixture entirely, which hides the
+ * fixture's live bout; this shows the fixture without having to stop it.
+ */
+export function collectorDisabled(search: string): boolean {
+  return new URLSearchParams(search).get("collector") === "off";
+}
+
 export function dashboardDemoState(search: string): DashboardDemoState {
   const requested = new URLSearchParams(search).get("demo");
   return requested === "loading" ||
@@ -238,6 +247,7 @@ export function useDashboard(): DashboardLoadState {
         });
 
         if (demo !== "default") return;
+        if (collectorDisabled(window.location.search)) return;
 
         const collector = createCollectorClient();
         const unsubscribe = collector.subscribe((snapshot) => {

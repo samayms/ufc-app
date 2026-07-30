@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { BoutView } from "../schema.ts";
 import {
   assembleDashboard,
+  collectorDisabled,
   dashboardDemoState,
 } from "../store/useDashboard.ts";
 import { FightSummary } from "./FightSummary.tsx";
@@ -41,6 +42,14 @@ describe("dashboard state surfaces", () => {
     expect(dashboardDemoState("?demo=error")).toBe("error");
     expect(dashboardDemoState("?demo=live")).toBe("live");
     expect(dashboardDemoState("?demo=unknown")).toBe("default");
+  });
+
+  it("lets a link ignore a running collector so the fixture bout shows", () => {
+    // A collector serving a real card shadows the fixture entirely, which
+    // hides the fixture's only live bout.
+    expect(collectorDisabled("?collector=off")).toBe(true);
+    expect(collectorDisabled("")).toBe(false);
+    expect(collectorDisabled("?collector=on")).toBe(false);
   });
 
   it("keeps the fight navigation focused on the remaining views", () => {
