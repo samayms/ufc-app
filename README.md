@@ -71,6 +71,7 @@ Configuration is supplied through server environment variables:
 | `SHERDOG_PERMISSION_SCOPE` | `none` |
 | `SHERDOG_REQUEST_INTERVAL_MS` | `300000` |
 | `SHERDOG_BASE_URL` | `https://www.sherdog.com` |
+| `SHERDOG_LIVE_BLOG_URL` | unset |
 
 Staleness settings use `STALE_LIFECYCLE_MS`, `STALE_STATS_MS`,
 `STALE_MARKETS_MS`, and `STALE_COMMENTARY_MS`. Polling settings use
@@ -92,6 +93,19 @@ Live credentials are server-only: `CITO_API_KEY`, `ODDS_API_IO_KEY`,
 Sherdog live reads require both a permitting `SHERDOG_PERMISSION_SCOPE`
 (`live-blog-read`, `sherdog-read`, or `all`) and actual permission from
 Sherdog. The transport remains fail-closed without both.
+
+A card's play-by-play lives at one page per event, of the form
+`/news/news/<slug>-playbyplay-results-round-scoring-<id>`, with every bout on
+it. Point `SHERDOG_LIVE_BLOG_URL` at that page for the event being watched;
+the parser picks each bout's rounds out of it by fighter name, so no per-bout
+mapping is needed. A bout that does carry its own `sherdog` external ref uses
+that instead.
+
+`SHERDOG_REQUEST_INTERVAL_MS` is a floor on the gap between requests to
+Sherdog, applied across the source rather than per bout. It must be shorter
+than the round-job ladder (T+15s/30s/60s) or later attempts are dropped
+without being sent; the 5-minute default is a fixture-mode value, not a live
+one.
 
 Every source behavior that only a real card can confirm is tracked in
 [`LIVE_CARD_VALIDATION.md`](LIVE_CARD_VALIDATION.md). A green test suite proves

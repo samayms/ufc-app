@@ -986,10 +986,13 @@ export async function createCollector(
     try {
       defaultSherdogFetcher = createLiveSherdogFetcher({
         permissionScope: config.sherdog.permissionScope,
+        // One play-by-play page carries the whole card, so the event-level URL
+        // serves every bout; a bout's own ref still wins where one exists.
         resolveBoutUrl: (boutId) =>
           initializedBoutMappings
             .getExternalRefs(boutId)
-            .find((ref) => ref.source === "sherdog")?.id,
+            .find((ref) => ref.source === "sherdog")?.id ??
+          config.sherdog.liveBlogUrl,
         baseUrl: options.sherdog?.baseUrl ?? config.sherdog.baseUrl,
         ...(options.sherdog?.fetchImpl === undefined
           ? {}

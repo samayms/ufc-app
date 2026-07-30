@@ -114,20 +114,33 @@ Every item below should end with an observation written into this file
 
 ## Commentary and scores
 
-- [ ] **Sherdog live transport permission.** The permission-gated transport is
-      built but remains inert until permission is obtained from Sherdog and
-      `SHERDOG_PERMISSION_SCOPE` is set to a permitting value. The URL pattern
-      and live page shape are both unverified; no live request has been made.
-- [ ] **Sherdog access from this runtime.** Confirm the requests are permitted
-      from the actual machine and IP. On HTTP 403 the collector stops by
-      design — it must not be "fixed" by rotating proxies, identities, or user
-      agents.
+- [x] **Sherdog live transport permission.** Permission was granted 2026-07-29
+      and `SHERDOG_PERMISSION_SCOPE=sherdog-read` is set locally. The URL
+      pattern is confirmed: one page per card, at
+      `/news/news/<slug>-playbyplay-results-round-scoring-<id>`. Point
+      `SHERDOG_LIVE_BLOG_URL` at the page for the event being watched.
+- [x] **Sherdog access from this runtime.** Verified 2026-07-29 against
+      `UFC-Oklahoma-City-Du-Plessis-vs-Usman-...-201960`: HTTP 200, 144,776
+      bytes, no block. `robots.txt` allows all agents. On HTTP 403 the
+      collector still stops by design — it must not be "fixed" by rotating
+      proxies, identities, or user agents.
+- [x] **Sherdog parser stability.** Confirmed against a real page, which
+      differed from the hand-written fixture in three ways (whole card on one
+      page, commentary as bare text rather than `<p>`, named writers scoring
+      with a colon). The page is captured as `src/fixtures/sherdogLivePage.html`
+      and pinned by `src/sources/sherdogLivePage.test.ts`.
+- [ ] **Sherdog behavior during a live card.** The verified page was a
+      completed event, so it was read in its final form. What is still
+      unconfirmed is the page *mid-event*: whether a round's section appears
+      only once complete, whether scorer lines land with the prose or after it,
+      and whether earlier rounds are ever revised. Watch one live card before
+      trusting round-completion timing.
 - [ ] **Sherdog publication delay.** The three attempts at T+15s/T+30s/T+60s
       are a guess at when a round's commentary and scorer cards appear.
       Measure the real delay and adjust the ladder if all three land too early.
-- [ ] **Sherdog parser stability.** The parser is versioned and hashes its
-      payloads precisely because the HTML will change. Confirm it survives a
-      real page, and capture that page as a fixture.
+      Note the interval floor interacts with this: `SHERDOG_REQUEST_INTERVAL_MS`
+      is now `15000` locally so all three attempts can be sent, since the
+      300000 default silently dropped the second and third.
 - [ ] **X post discovery in embed mode.** Confirm known scorer post IDs render,
       and that a missing post degrades quietly. X never participates in
       lifecycle or round completion.

@@ -70,6 +70,12 @@ export interface CollectorConfig {
     permissionScope: string;
     requestIntervalMs: number;
     baseUrl: string;
+    /**
+     * The card's play-by-play page. One page carries every bout, so this is
+     * set per event rather than per bout; a bout's own Sherdog external ref
+     * still wins where one exists.
+     */
+    liveBlogUrl?: string;
   };
   credentials: Readonly<Partial<Record<CredentialEnvName, string>>>;
 }
@@ -446,6 +452,9 @@ export function loadConfig(
       ),
       baseUrl:
         env.SHERDOG_BASE_URL?.trim() || "https://www.sherdog.com",
+      ...(env.SHERDOG_LIVE_BLOG_URL?.trim()
+        ? { liveBlogUrl: env.SHERDOG_LIVE_BLOG_URL.trim() }
+        : {}),
     },
     credentials,
   };
