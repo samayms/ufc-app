@@ -66,7 +66,7 @@ Configuration is supplied through server environment variables:
 | `PRE_EVENT_POLL_NON_EVENT_DAY_MS` | `43200000` (12 hours) |
 | `PRE_EVENT_POLL_EVENT_DAY_MS` | `3600000` (1 hour) |
 | `PRE_EVENT_POLL_RETRY_MS` | `900000` (15 minutes) |
-| `ODDS_API_IO_BOOKMAKERS` | `draftkings,fanduel` |
+| `ODDS_API_IO_BOOKMAKERS` | `Bet365,DraftKings` |
 | `X_SPEND_CAP_USD` | `0` |
 | `SHERDOG_PERMISSION_SCOPE` | `none` |
 | `SHERDOG_REQUEST_INTERVAL_MS` | `300000` |

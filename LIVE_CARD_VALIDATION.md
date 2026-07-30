@@ -93,7 +93,11 @@ Every item below should end with an observation written into this file
       configured `draftkings,fanduel` default is unproven against a real
       response — multi-book filtering is tested against an augmented copy of
       that payload, which proves the filter works but not that those two books
-      exist for UFC.
+      exist for UFC. Note the configured default is actually
+      `Bet365,DraftKings`, not the `DraftKings,FanDuel` the spec names as the
+      initial pair — the casing matters to the vendor, and Bet365 is the only
+      book the captured response contains. Confirm which books UFC really
+      offers, then decide whether to move to the spec's pair.
 - [ ] **Odds-API.io event grouping.** The vendor's events endpoint returns one
       event per fight, with no card-level id, so live discovery groups bouts
       under an id derived from the league name. Confirm against a real card that
