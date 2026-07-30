@@ -66,24 +66,30 @@ Run these in the lab, in this order. Each one has a known-good answer.
 
 ## Measuring the timing — what the lab is for
 
-The question is: *how long after a round ends does CITO publish its stats?*
+The question is: *how long after the broadcast horn do ESPN and CITO report
+the round, and what did Kalshi show at that instant?*
 
-1. Choose the fight from the lab's **Fight** list. The CITO bout id is attached
-   to the choice; do not enter or copy an id.
+1. Choose the fight from the lab's **Fight** list. Its ESPN and CITO ids are
+   attached to the choice; do not enter or copy either id.
 2. Choose the round number.
-3. When the horn sounds, press **Round ended — start polling**. Spacebar works
-   when no form control has focus. This press is the latency reference.
-4. The lab checks CITO every five seconds. It shows elapsed time, completed
-   checks, and the countdown to the next check. Press **Stop polling** at any
-   point to cancel.
-5. When CITO publishes the round, the red-corner/blue-corner stat table appears
-   with the measured latency. Use **View raw CITO JSON** only when the table
-   looks surprising.
-6. Record the displayed latency in `LIVE_CARD_VALIDATION.md`. The underlying
-   observation is also appended to `data/lab-timeline.jsonl`.
-
-The watcher stops requesting the round as soon as it receives non-empty stats,
-so quota is only spent on unanswered questions.
+3. When the horn sounds, press **Round ended — fire all sources**. Spacebar
+   works when no form control has focus. The marker is written before any
+   vendor request starts, so all displayed deltas share this reference.
+4. CITO, ESPN, and Kalshi fire immediately. ESPN then checks every second for
+   clock `0:00`, a period advance, or bout completion. CITO retries pending
+   stats every five seconds. Kalshi takes one matching fight-market snapshot.
+5. Read each source row:
+   - **ESPN** says exactly which transition announced the round was done and
+     shows its latency from the horn.
+   - **CITO** shows publication latency and opens the full corner-by-corner
+     table as soon as stats exist.
+   - **Kalshi** shows both fighter prices and the snapshot latency.
+6. Press **Stop polling** at any point to cancel. Otherwise each source stops
+   requesting once its result is captured, and the overall measurement stops
+   when all three are complete.
+7. Record the displayed latencies in `LIVE_CARD_VALIDATION.md`. Use **View raw
+   source JSON** only when a surfaced value looks surprising. Every observation
+   is also appended to `data/lab-timeline.jsonl`.
 
 ## The open questions this card can settle
 

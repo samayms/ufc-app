@@ -192,14 +192,18 @@ List existing sessions with `tmux ls`.
 npm run lab        # http://localhost:5055
 ```
 
-A focused CITO round-stats instrument. Choose a fight from the weekend card,
-choose the round, then press **Round ended — start polling** at the horn
-(spacebar also works). The lab checks CITO every five seconds, shows the
-elapsed time and request count, and stops requesting as soon as the round stats
-arrive. **Stop polling** cancels the watch at any time.
+A synchronized round-end timing instrument. Choose a fight and round, then
+press **Round ended — fire all sources** at the horn (spacebar also works).
+That one press immediately requests CITO, ESPN, and Kalshi against the same
+timestamp. ESPN checks every second until it reports `0:00`, advances the
+period, or completes the bout; pending CITO stats retry every five seconds;
+Kalshi captures one matching fight-market snapshot.
 
-Returned stats appear in a red-corner/blue-corner table; the untouched CITO
-JSON remains available below it for debugging. The lab shares nothing with the
+The page shows every source's response count, result, and horn-relative
+latency. CITO stats appear in a red-corner/blue-corner table, ESPN names the
+exact round-end signal it observed, and Kalshi shows both fighter prices.
+**Stop polling** cancels the measurement at any time, and the combined raw
+source JSON remains available for debugging. The lab shares nothing with the
 app — no collector, event bus, or React — so it stays usable if the dashboard
 is not. `WEEKEND_RUNBOOK.md` is the fight-night procedure.
 
