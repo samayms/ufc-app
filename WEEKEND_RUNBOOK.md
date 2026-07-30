@@ -66,24 +66,24 @@ Run these in the lab, in this order. Each one has a known-good answer.
 
 ## Measuring the timing — what the lab is for
 
-The question is: *how long after a round ends does each source know?*
+The question is: *how long after a round ends does CITO publish its stats?*
 
-1. In the lab's **Watcher** panel, set the ESPN event id (`600059339`) and the
-   Cito bout id of the fight you are watching, then **Start watcher**.
-2. When the horn sounds, press **Round ended (broadcast)** — spacebar works.
-   Set the round number first. This press is the only observation in the whole
-   system not mediated by a vendor, so it is the reference for everything else.
-3. Every later first-appearance is stamped with its delay from that press:
-   ESPN's period advancing or its clock reaching zero, Cito publishing that
-   round's stats, Sherdog publishing the commentary and scorer cards.
-4. Afterwards, **Copy timeline as text** and paste it into
-   `LIVE_CARD_VALIDATION.md`. The full log is also appended to
-   `data/lab-timeline.jsonl`.
+1. Choose the fight from the lab's **Fight** list. The CITO bout id is attached
+   to the choice; do not enter or copy an id.
+2. Choose the round number.
+3. When the horn sounds, press **Round ended — start polling**. Spacebar works
+   when no form control has focus. This press is the latency reference.
+4. The lab checks CITO every five seconds. It shows elapsed time, completed
+   checks, and the countdown to the next check. Press **Stop polling** at any
+   point to cancel.
+5. When CITO publishes the round, the red-corner/blue-corner stat table appears
+   with the measured latency. Use **View raw CITO JSON** only when the table
+   looks surprising.
+6. Record the displayed latency in `LIVE_CARD_VALIDATION.md`. The underlying
+   observation is also appended to `data/lab-timeline.jsonl`.
 
-The watcher stops chasing a round the moment it is answered, so quota is only
-spent on unanswered questions. If a vendor's remaining-request header runs low
-it slows down and says so on the timeline — latencies recorded after that note
-are coarser than the ones before it.
+The watcher stops requesting the round as soon as it receives non-empty stats,
+so quota is only spent on unanswered questions.
 
 ## The open questions this card can settle
 

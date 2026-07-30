@@ -192,16 +192,16 @@ List existing sessions with `tmux ls`.
 npm run lab        # http://localhost:5055
 ```
 
-A single page with one button per API call, and a timeline that measures how
-late each source is. It shares nothing with the app — no collector, no event
-bus, no React — so it keeps working when the dashboard does not, which is when
-you need to know whether ESPN is late, whether Cito has published a round yet,
-or whether the collector is the problem.
+A focused CITO round-stats instrument. Choose a fight from the weekend card,
+choose the round, then press **Round ended — start polling** at the horn
+(spacebar also works). The lab checks CITO every five seconds, shows the
+elapsed time and request count, and stops requesting as soon as the round stats
+arrive. **Stop polling** cancels the watch at any time.
 
-Each result shows status, latency, bytes, the vendor's quota headers, and what
-the shipped parser made of the payload. Press **Round ended (broadcast)** at the
-horn and every source's first appearance afterwards is stamped with its delay
-from that press. `WEEKEND_RUNBOOK.md` is the fight-night procedure.
+Returned stats appear in a red-corner/blue-corner table; the untouched CITO
+JSON remains available below it for debugging. The lab shares nothing with the
+app — no collector, event bus, or React — so it stays usable if the dashboard
+is not. `WEEKEND_RUNBOOK.md` is the fight-night procedure.
 
 ## Useful commands
 
