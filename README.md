@@ -72,6 +72,8 @@ Configuration is supplied through server environment variables:
 | `SHERDOG_REQUEST_INTERVAL_MS` | `300000` |
 | `SHERDOG_BASE_URL` | `https://www.sherdog.com` |
 | `SHERDOG_LIVE_BLOG_URL` | unset |
+| `ROUND_SUMMARY_ENABLED` | `true` |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` |
 
 Staleness settings use `STALE_LIFECYCLE_MS`, `STALE_STATS_MS`,
 `STALE_MARKETS_MS`, and `STALE_COMMENTARY_MS`. Polling settings use
@@ -100,6 +102,19 @@ it. Point `SHERDOG_LIVE_BLOG_URL` at that page for the event being watched;
 the parser picks each bout's rounds out of it by fighter name, so no per-bout
 mapping is needed. A bout that does carry its own `sherdog` external ref uses
 that instead.
+
+Each Sherdog round is condensed by Gemini into the summary the dashboard
+shows. The raw play-by-play runs two to three thousand characters and the
+summary box clamps at five lines, so the condensation is capped at 380
+characters: roughly four to five lines at the phone width, with slack so word
+wrap cannot spill into a sixth. Em dashes are forbidden in the prompt and
+stripped from the response regardless.
+
+This needs `GEMINI_API_KEY`, which is optional; live startup does not require
+it. With no key, `ROUND_SUMMARY_ENABLED=false`, or in fixture mode, rounds
+keep their raw commentary. Summaries never gate a Sherdog round job: every
+transport failure yields no summary rather than an error, and an unchanged
+page reuses the previous summary instead of paying for it again.
 
 `SHERDOG_REQUEST_INTERVAL_MS` is a floor on the gap between requests to
 Sherdog, applied across the source rather than per bout. It must be shorter

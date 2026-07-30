@@ -18,7 +18,7 @@ export interface LiveGeminiSummarizerOptions {
   fetchImpl?: typeof fetch;
 }
 
-export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
 /**
