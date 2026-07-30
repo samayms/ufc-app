@@ -21,14 +21,90 @@ import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
+import citoWeekendBouts from "../../src/fixtures/citoEventBoutsLive.json" with {
+  type: "json",
+};
 import { LabTimeline } from "./timeline.ts";
 import { LabWatcher } from "./watcher.ts";
-import { findProbe, PROBES, requiredEnvNames, runProbe } from "./probes.ts";
-import type { WatchTarget } from "./contract.ts";
+import {
+  findProbe,
+  PROBES,
+  requiredEnvNames,
+  runProbe,
+  WEEKEND,
+} from "./probes.ts";
+import type { LabCard, LabFight, WatchTarget } from "./contract.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PORT = 5055;
 const MAX_BODY_BYTES = 256 * 1024;
+const LAB_CITO_INTERVAL_MS = 5_000;
+const WEEKEND_EVENT_NAME = "UFC Fight Night: Medić vs. Rodriguez";
+const WEEKEND_EVENT_DATE = "2026-08-01";
+
+function arrayField(source: unknown, name: string): unknown[] {
+  const value = (source as Record<string, unknown> | null)?.[name];
+  return Array.isArray(value) ? value : [];
+}
+
+/**
+ * Reduces the captured weekend card to the only choices the operator needs.
+ * Vendor ids stay behind the select control instead of becoming form fields.
+ */
+export function buildLabCard(source: unknown): LabCard {
+  const rows = arrayField(source, "data");
+  const fights = rows
+    .map((row): (LabFight & { order: number }) | null => {
+      const id = stringField(row, "id");
+      if (id === undefined) return null;
+
+      const fighters = arrayField(row, "fighters");
+      const red = fighters.find(
+        (fighter) => stringField(fighter, "corner") === "red",
+      );
+      const blue = fighters.find(
+        (fighter) => stringField(fighter, "corner") === "blue",
+      );
+      const redName = stringField(red, "fighterName");
+      const blueName = stringField(blue, "fighterName");
+      if (redName === undefined || blueName === undefined) return null;
+
+      const redSlug = stringField(red, "fighterSlug");
+      const blueSlug = stringField(blue, "fighterSlug");
+      return {
+        id,
+        cardSection: stringField(row, "cardSection") ?? "Card",
+        cardPosition: stringField(row, "cardPosition") ?? "",
+        weightClass: (stringField(row, "weightClass") ?? "Bout").replace(
+          /\s+Bout$/u,
+          "",
+        ),
+        red: {
+          name: redName,
+          ...(redSlug === undefined ? {} : { slug: redSlug }),
+        },
+        blue: {
+          name: blueName,
+          ...(blueSlug === undefined ? {} : { slug: blueSlug }),
+        },
+        order: numberField(row, "boutOrder") ?? Number.MAX_SAFE_INTEGER,
+      };
+    })
+    .filter((fight): fight is LabFight & { order: number } => fight !== null)
+    .sort((left, right) => left.order - right.order)
+    .map(({ order: _order, ...fight }) => fight);
+
+  const firstBout = rows[0];
+  return {
+    eventName: WEEKEND_EVENT_NAME,
+    eventDate: WEEKEND_EVENT_DATE,
+    eventSlug: stringField(firstBout, "eventSlug") ?? WEEKEND.citoEventSlug,
+    pollIntervalMs: LAB_CITO_INTERVAL_MS,
+    fights,
+  };
+}
+
+const LAB_CARD = buildLabCard(citoWeekendBouts);
 
 /** The page is read from disk per request so an edit needs no restart. */
 function readPage(): string {
@@ -176,6 +252,11 @@ export function createLabServer(options: LabServerOptions = {}) {
         entries: timeline.size,
         ...(timelineFile === null ? {} : { timelineFile }),
       });
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/lab/card") {
+      sendJson(response, 200, LAB_CARD);
       return;
     }
 

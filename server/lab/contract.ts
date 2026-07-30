@@ -143,6 +143,29 @@ export interface WatchStatus {
   }>;
 }
 
+export interface LabFight {
+  id: string;
+  cardSection: string;
+  cardPosition: string;
+  weightClass: string;
+  red: {
+    name: string;
+    slug?: string;
+  };
+  blue: {
+    name: string;
+    slug?: string;
+  };
+}
+
+export interface LabCard {
+  eventName: string;
+  eventDate: string;
+  eventSlug: string;
+  pollIntervalMs: number;
+  fights: LabFight[];
+}
+
 export interface TimelineResponse {
   entries: TimelineEntry[];
   latestSeq: number;
