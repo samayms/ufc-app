@@ -142,6 +142,7 @@
 }
 
 .event-card-fighter-lastname {
+  width: 100%;
   overflow: hidden;
   color: var(--red-corner-strong);
   font-family: var(--font-display);
@@ -154,19 +155,12 @@
 
 .event-card-fighter-lastname.is-blue {
   color: var(--blue-corner-strong);
+  text-align: right;
 }
 
 .event-card-fighter-lastname.is-loser {
   color: var(--text-faint);
   font-weight: 500;
-}
-
-.event-card-fighter-lastname-compact {
-  font-size: 0.92rem;
-}
-
-.event-card-fighter-lastname-tight {
-  font-size: 0.84rem;
 }
 
 /* Center column — "vs" on the events screen, a status chip + weight class

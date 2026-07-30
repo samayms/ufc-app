@@ -6,6 +6,7 @@ import "./newComponents.css";
  * overflow its box rather than either going illegibly small or getting
  * truncated. */
 const FIT_TEXT_MIN_SCALE = 0.78;
+const FIGHTER_NAME_MIN_SCALE = 0.64;
 
 /**
  * Text that shrinks its own font-size just enough to avoid overflowing a
@@ -42,9 +43,11 @@ function measureTextWidth(text: string, fontSizePx: number, style: CSSStyleDecla
 export function FitText({
   text,
   className,
+  minScale = FIT_TEXT_MIN_SCALE,
 }: {
   text: string;
   className: string;
+  minScale?: number;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
 
@@ -66,7 +69,7 @@ export function FitText({
 
       if (fits(naturalSize)) return;
 
-      const minSize = naturalSize * FIT_TEXT_MIN_SCALE;
+      const minSize = naturalSize * minScale;
       if (!fits(minSize)) {
         // Doesn't fit even at the smallest readable size — leave it there
         // and let it spill past its box rather than going smaller still.
@@ -89,6 +92,10 @@ export function FitText({
 
     fit();
     window.addEventListener("resize", fit);
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(fit);
+    resizeObserver?.observe(el);
 
     // The label is set in a custom webfont (--font-data). If that font is
     // still swapping in when `fit` first runs, the measurement above used
@@ -103,8 +110,9 @@ export function FitText({
     return () => {
       cancelled = true;
       window.removeEventListener("resize", fit);
+      resizeObserver?.disconnect();
     };
-  }, [text]);
+  }, [minScale, text]);
 
   return (
     <span ref={ref} className={className}>
@@ -151,12 +159,6 @@ export function MatchupFighter({
   }
   const showImg = fighter.photoUrl && !imgFailed;
   const { first, last } = splitName(fighter.name);
-  const lastNameClass =
-    last.length >= 14
-      ? "event-card-fighter-lastname event-card-fighter-lastname-tight"
-      : last.length >= 11
-        ? "event-card-fighter-lastname event-card-fighter-lastname-compact"
-        : "event-card-fighter-lastname";
   const loserSuffix = isLoser ? " is-loser" : "";
   return (
     <div className={`event-card-fighter${blueSuffix}`}>
@@ -177,7 +179,11 @@ export function MatchupFighter({
       </span>
       <span className={`event-card-fighter-names${blueSuffix}`}>
         <span className={`event-card-fighter-firstname${blueSuffix}${loserSuffix}`}>{first}</span>
-        <span className={`${lastNameClass}${blueSuffix}${loserSuffix}`}>{last}</span>
+        <FitText
+          text={last}
+          className={`event-card-fighter-lastname${blueSuffix}${loserSuffix}`}
+          minScale={FIGHTER_NAME_MIN_SCALE}
+        />
       </span>
     </div>
   );

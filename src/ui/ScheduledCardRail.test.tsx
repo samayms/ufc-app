@@ -206,4 +206,31 @@ describe("ScheduledCardRail", () => {
     const buttonCount = (markup.match(/<button/g) ?? []).length;
     expect(buttonCount).toBe(4);
   });
+
+  it("renders a long surname intact for measured fitting instead of clipping the text", () => {
+    const longNameCard: EspnScheduledCard = {
+      ...card,
+      sections: [
+        {
+          ...card.sections[0]!,
+          fights: [
+            fight({
+              competitionId: "long-name",
+              matchNumber: 1,
+              red: fighter("Umar Nurmagomedov"),
+              blue: fighter("Song Yadong"),
+            }),
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <ScheduledCardRail card={longNameCard} onSelect={() => undefined} />,
+    );
+
+    expect(markup).toContain(">Nurmagomedov</span>");
+    expect(markup).not.toContain("event-card-fighter-lastname-compact");
+    expect(markup).not.toContain("event-card-fighter-lastname-tight");
+  });
 });
