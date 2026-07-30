@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SherdogRoundObservation } from "../src/schema.ts";
+import type { Bout, SherdogRoundObservation } from "../src/schema.ts";
 import type { ParsedExpertScore } from "../src/sources/x.ts";
 import { loadFixtureEvent } from "../src/store/fixtureEvent.ts";
 import { computeExpertConsensus } from "./expertConsensus.ts";
@@ -65,5 +65,62 @@ describe("computeExpertConsensus", () => {
         leader: "red",
       },
     });
+  });
+
+  it("resolves a card won on a multi-word surname", () => {
+    const duPlessis: Bout = {
+      ...bout,
+      fighters: {
+        red: { ...bout.fighters.red, name: "Dricus Du Plessis" },
+        blue: { ...bout.fighters.blue, name: "Kamaru Usman" },
+      },
+    };
+    const sherdog: SherdogRoundObservation = {
+      boutId: duPlessis.id,
+      round: 1,
+      commentary: "Plain text",
+      scorerCards: [
+        { scorer: "Jay Pettry", winner: "Du Plessis", roundScore: "10-9" },
+        { scorer: "Ben Duffy", winner: "Du Plessis", roundScore: "10-9" },
+        { scorer: "Tyler Treese", winner: "Usman", roundScore: "10-9" },
+      ],
+      sourceUrl: "https://www.sherdog.com/news/fixture",
+      fetchedAt: "2026-07-28T00:00:10Z",
+      parserVersion: "test",
+      payloadHash: "hash",
+    };
+
+    expect(computeExpertConsensus(duPlessis, sherdog, [])?.sherdog).toEqual({
+      source: "sherdog",
+      redVotes: 2,
+      blueVotes: 1,
+      drawVotes: 0,
+      total: 3,
+      leader: "red",
+    });
+  });
+
+  it("does not resolve a corner from an ambiguous name fragment", () => {
+    const duPlessis: Bout = {
+      ...bout,
+      fighters: {
+        red: { ...bout.fighters.red, name: "Dricus Du Plessis" },
+        blue: { ...bout.fighters.blue, name: "Kamaru Usman" },
+      },
+    };
+    const sherdog: SherdogRoundObservation = {
+      boutId: duPlessis.id,
+      round: 1,
+      commentary: "Plain text",
+      scorerCards: [{ scorer: "Jay Pettry", winner: "Du", roundScore: "10-9" }],
+      sourceUrl: "https://www.sherdog.com/news/fixture",
+      fetchedAt: "2026-07-28T00:00:10Z",
+      parserVersion: "test",
+      payloadHash: "hash",
+    };
+
+    expect(
+      computeExpertConsensus(duPlessis, sherdog, [])?.sherdog,
+    ).toBeUndefined();
   });
 });

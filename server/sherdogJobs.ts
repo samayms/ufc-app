@@ -639,6 +639,9 @@ export class SherdogRoundJobs {
       );
     }
 
+    // A live play-by-play page carries the whole card, so the parser needs the
+    // fighters to pick this bout's rounds out of it.
+    const bout = this.getBout(boutId);
     try {
       return await parseSherdogRoundObservations({
         boutId,
@@ -648,6 +651,14 @@ export class SherdogRoundJobs {
         ...(response.publishedAt === undefined
           ? {}
           : { publishedAt: response.publishedAt }),
+        ...(bout === undefined
+          ? {}
+          : {
+              fighterNames: {
+                red: bout.fighters.red.name,
+                blue: bout.fighters.blue.name,
+              },
+            }),
       });
     } catch (error) {
       await this.review?.recordParserError({
