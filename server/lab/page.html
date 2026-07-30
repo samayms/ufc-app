@@ -77,7 +77,7 @@
     }
 
     .shell {
-      width: min(1080px, 100%);
+      width: min(1120px, 100%);
       margin: 0 auto;
       padding: 28px 24px 48px;
     }
@@ -132,7 +132,7 @@
 
     .workspace {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 320px;
+      grid-template-columns: minmax(0, 1fr) 360px;
       gap: 24px;
       align-items: start;
       margin-top: 28px;
@@ -268,41 +268,84 @@
     }
 
     .monitor-copy {
-      min-height: 42px;
       margin: 10px 0 0;
       color: var(--muted);
       font-size: 0.8125rem;
     }
 
-    .monitor-metrics {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+    .elapsed-line {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
       gap: 12px;
       margin-top: 18px;
       padding-top: 16px;
       border-top: 1px solid var(--border);
     }
 
-    .metric-label {
-      display: block;
+    .elapsed-line span:first-child {
       color: var(--faint);
       font-size: 0.6875rem;
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
 
-    .metric-value {
-      display: block;
-      margin-top: 2px;
+    .elapsed-line strong {
       color: var(--text);
       font-size: 1.125rem;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
     }
 
+    .source-list {
+      margin-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .source-item {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .source-head,
+    .source-meta {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .source-name {
+      font-weight: 700;
+    }
+
+    .source-item[data-source="kalshi"] .source-name { color: var(--amber); }
+
+    .source-status {
+      color: var(--muted);
+      font-size: 0.8125rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .source-status.is-complete { color: var(--green); }
+    .source-status.is-error { color: var(--danger); }
+
+    .source-detail {
+      min-height: 38px;
+      margin: 6px 0 10px;
+      color: var(--muted);
+      font-size: 0.8125rem;
+    }
+
+    .source-meta {
+      color: var(--faint);
+      font-size: 0.6875rem;
+      font-variant-numeric: tabular-nums;
+    }
+
     .stop {
       width: 100%;
-      margin-top: 18px;
+      margin-top: 16px;
       color: var(--red);
       background: var(--red-dim);
       border-color: rgba(255, 118, 104, 0.45);
@@ -487,7 +530,7 @@
     <header class="topline">
       <div>
         <h1>Round Stats Lab</h1>
-        <p class="intro">Choose the fight and round. At the horn, start the CITO watch.</p>
+        <p class="intro">Choose the fight and round. At the horn, measure CITO, ESPN, and Kalshi from the same instant.</p>
       </div>
       <div class="event-stamp">
         <strong id="event-name">This weekend’s card</strong>
@@ -518,10 +561,10 @@
         </div>
 
         <button id="round-ended" class="horn" type="button" disabled>
-          Round ended — start polling
+          Round ended — fire all sources
           <span class="keyhint">Spacebar shortcut</span>
         </button>
-        <p id="credential-note" class="credential-note" hidden>CITO credentials are missing. Add them to <span class="num">.env</span> and restart the lab.</p>
+        <p id="credential-note" class="credential-note" hidden>CITO credentials are missing. ESPN and Kalshi will still run; add CITO to <span class="num">.env</span> to include its stats.</p>
       </section>
 
       <aside id="monitor" class="monitor" aria-live="polite">
@@ -529,16 +572,45 @@
           <span class="state-dot" aria-hidden="true"></span>
           <h2 id="monitor-title" class="monitor-title">Ready for the horn</h2>
         </div>
-        <p id="monitor-copy" class="monitor-copy">CITO will check every 5 seconds after you start.</p>
-        <div class="monitor-metrics">
-          <div>
-            <span class="metric-label">Elapsed</span>
-            <span id="elapsed" class="metric-value">—</span>
-          </div>
-          <div>
-            <span class="metric-label">CITO checks</span>
-            <span id="checks" class="metric-value">0</span>
-          </div>
+        <p id="monitor-copy" class="monitor-copy">All three sources fire immediately when you press the button.</p>
+        <div class="elapsed-line">
+          <span>Elapsed</span>
+          <strong id="elapsed">—</strong>
+        </div>
+        <div class="source-list">
+          <article class="source-item" data-source="espn">
+            <div class="source-head">
+              <span class="source-name">ESPN</span>
+              <span id="espn-status" class="source-status">Ready</span>
+            </div>
+            <p id="espn-detail" class="source-detail">Waiting for the horn.</p>
+            <div class="source-meta">
+              <span id="espn-checks">0 checks</span>
+              <span id="espn-latency">—</span>
+            </div>
+          </article>
+          <article class="source-item" data-source="cito">
+            <div class="source-head">
+              <span class="source-name">CITO</span>
+              <span id="cito-status" class="source-status">Ready</span>
+            </div>
+            <p id="cito-detail" class="source-detail">Waiting for the horn.</p>
+            <div class="source-meta">
+              <span id="cito-checks">0 checks</span>
+              <span id="cito-latency">—</span>
+            </div>
+          </article>
+          <article class="source-item" data-source="kalshi">
+            <div class="source-head">
+              <span class="source-name">Kalshi</span>
+              <span id="kalshi-status" class="source-status">Ready</span>
+            </div>
+            <p id="kalshi-detail" class="source-detail">Waiting for the horn.</p>
+            <div class="source-meta">
+              <span id="kalshi-checks">0 checks</span>
+              <span id="kalshi-latency">—</span>
+            </div>
+          </article>
         </div>
         <button id="stop-polling" class="stop" type="button" disabled>Stop polling</button>
       </aside>
@@ -550,14 +622,14 @@
         <span id="received-at" class="received"></span>
       </div>
       <div id="stats" class="stats"></div>
-      <details>
-        <summary>View raw CITO JSON</summary>
-        <div class="json-tools">
-          <button id="copy-json" class="copy" type="button">Copy JSON</button>
-          <pre id="raw-json"></pre>
-        </div>
-      </details>
     </section>
+    <details id="source-json" hidden>
+      <summary>View raw source JSON</summary>
+      <div class="json-tools">
+        <button id="copy-json" class="copy" type="button">Copy JSON</button>
+        <pre id="raw-json"></pre>
+      </div>
+    </details>
   </main>
 
   <script>
@@ -673,7 +745,6 @@
       const active = Boolean(state.session && state.session.polling);
       const ready = Boolean(
         state.card &&
-        state.card.citoReady !== false &&
         Array.isArray(state.card.fights) &&
         state.card.fights.length,
       );
@@ -687,59 +758,151 @@
       });
     }
 
-    function citoPoller() {
+    function pollerFor(name) {
       const pollers = state.watch && Array.isArray(state.watch.pollers)
         ? state.watch.pollers
         : [];
-      return pollers.find((poller) => poller.name === "cito");
+      return pollers.find((poller) => poller.name === name);
+    }
+
+    function sourceEntry(name) {
+      return state.session && state.session.sources
+        ? state.session.sources[name]
+        : null;
+    }
+
+    function allCaptured() {
+      const cito = sourceEntry("cito");
+      const espn = sourceEntry("espn");
+      const kalshi = sourceEntry("kalshi");
+      return Boolean(
+        cito &&
+        espn &&
+        espn.detail &&
+        espn.detail.roundEnded === true &&
+        kalshi,
+      );
+    }
+
+    function kalshiLine(entry) {
+      if (!entry || !entry.detail) return "";
+      if (entry.detail.listed !== true) return "No matching fight market is listed.";
+      const red = entry.detail.red || {};
+      const blue = entry.detail.blue || {};
+      const price = (side) => {
+        if (Number.isFinite(Number(side.yesCents))) {
+          return `${Number(side.yesCents).toFixed(1)}¢`;
+        }
+        return "unpriced";
+      };
+      return `${text(red.fighter)} ${price(red)} · ${text(blue.fighter)} ${price(blue)}`;
+    }
+
+    function renderSource(name) {
+      const entry = sourceEntry(name);
+      const poller = pollerFor(name);
+      const status = $(`${name}-status`);
+      const detail = $(`${name}-detail`);
+      const checks = $(`${name}-checks`);
+      const latency = $(`${name}-latency`);
+      status.className = "source-status";
+
+      const pollCount = Number(poller && poller.polls) || 0;
+      const failures = Number(poller && poller.failures) || 0;
+      checks.textContent = `${pollCount} ${pollCount === 1 ? "check" : "checks"}${failures ? ` · ${failures} failed` : ""}`;
+      latency.textContent = entry && Number.isFinite(Number(entry.deltaMs))
+        ? `+${formatLatency(Number(entry.deltaMs))}`
+        : "—";
+
+      if (!state.session) {
+        status.textContent = "Ready";
+        detail.textContent = "Waiting for the horn.";
+        return;
+      }
+
+      if (name === "espn" && entry) {
+        const done = entry.detail && entry.detail.roundEnded === true;
+        status.textContent = done ? "Round done" : "Waiting";
+        status.classList.toggle("is-complete", done);
+        detail.textContent = entry.label;
+        return;
+      }
+      if (name === "cito" && entry) {
+        status.textContent = "Stats received";
+        status.classList.add("is-complete");
+        const rows = entry.detail && Array.isArray(entry.detail.rows)
+          ? entry.detail.rows.length
+          : 0;
+        detail.textContent = `${rows} fighter stat rows received from CITO.`;
+        return;
+      }
+      if (name === "kalshi" && entry) {
+        status.textContent = entry.detail && entry.detail.listed === true
+          ? "Snapshot received"
+          : "Not listed";
+        status.classList.add("is-complete");
+        detail.textContent = kalshiLine(entry);
+        return;
+      }
+      if (poller && poller.lastError) {
+        status.textContent = "Check failed";
+        status.classList.add("is-error");
+        detail.textContent = `${poller.lastError}. Retrying while the measurement is running.`;
+        return;
+      }
+      if (!state.session.polling) {
+        status.textContent = "Stopped";
+        detail.textContent = "No result captured before polling stopped.";
+        return;
+      }
+
+      status.textContent = "Checking";
+      if (name === "espn") {
+        detail.textContent = "Polling every second for clock 0:00, the next round, or bout completion.";
+      } else if (name === "cito") {
+        detail.textContent = "The first check fired at the horn; pending stats retry every 5 seconds.";
+      } else {
+        detail.textContent = "Capturing the matching fight market at the horn.";
+      }
     }
 
     function renderMonitor() {
       const monitor = $("monitor");
       monitor.className = "monitor";
       let title = "Ready for the horn";
-      let copy = "CITO will check every 5 seconds after you start.";
+      let copy = "All three sources fire immediately when you press the button.";
       let elapsed = "—";
-      let checks = 0;
 
       if (state.session) {
-        const poller = citoPoller();
-        checks = Math.max(
-          0,
-          Number(poller && poller.polls) -
-            Number(state.session.startPolls || 0) -
-            1,
-        ) || 0;
         elapsed = formatElapsed(
           (state.session.completedAtMs || Date.now()) - state.session.startedAtMs,
         );
+        const hasError = ["espn", "cito", "kalshi"].some((name) => {
+          const poller = pollerFor(name);
+          return poller && poller.lastError && !sourceEntry(name);
+        });
 
-        if (state.session.result) {
+        if (allCaptured()) {
           monitor.classList.add("is-complete");
-          title = `Round ${state.session.round} stats received`;
-          copy = `CITO returned the data after ${formatLatency(state.session.result.deltaMs)}.`;
+          title = "All measurements captured";
+          copy = `ESPN, CITO, and Kalshi are tied to the same round ${state.session.round} horn marker.`;
         } else if (state.session.polling) {
-          monitor.classList.add(poller && poller.lastError ? "is-error" : "is-polling");
-          title = poller && poller.lastError ? "CITO check failed" : "Waiting for CITO";
-          if (poller && poller.lastError) {
-            copy = `${poller.lastError}. The next check will retry automatically.`;
-          } else {
-            const nextSeconds = poller && Number.isFinite(Number(poller.nextInMs))
-              ? Math.max(1, Math.ceil(Number(poller.nextInMs) / 1000))
-              : 5;
-            copy = `Checking every 5 seconds. Next check in ${nextSeconds}s.`;
-          }
+          monitor.classList.add(hasError ? "is-error" : "is-polling");
+          title = hasError ? "One source needs attention" : "Measuring source latency";
+          copy = "ESPN checks every second. CITO retries every 5 seconds. Kalshi captures one horn snapshot.";
         } else {
           monitor.classList.add("is-stopped");
-          title = "Polling stopped";
-          copy = "No more CITO requests will run. Start again whenever you’re ready.";
+          title = "Measurement stopped";
+          copy = "No more source requests will run. Captured data remains below.";
         }
       }
 
       $("monitor-title").textContent = title;
       $("monitor-copy").textContent = copy;
       $("elapsed").textContent = elapsed;
-      $("checks").textContent = String(checks);
+      renderSource("espn");
+      renderSource("cito");
+      renderSource("kalshi");
       syncControls();
     }
 
@@ -759,7 +922,7 @@
     }
 
     function renderResult(entry) {
-      const fight = selectedFight();
+      const fight = state.session && state.session.fight;
       const rows = entry.detail && Array.isArray(entry.detail.rows)
         ? entry.detail.rows
         : [];
@@ -795,22 +958,37 @@
         host.append(row);
       });
 
-      state.rawJson = JSON.stringify({
-        fight: {
-          red: fight.red.name,
-          blue: fight.blue.name,
-        },
-        round: state.session.round,
-        receivedAt: entry.at,
-        latencyMs: entry.deltaMs,
-        availability: entry.detail.availability,
-        roundStats: rows,
-      }, null, 2);
-      $("raw-json").textContent = state.rawJson;
       $("result-title").textContent = `${fight.red.name} vs ${fight.blue.name} · Round ${state.session.round}`;
       $("received-at").textContent = `Received +${formatLatency(entry.deltaMs)} · ${new Date(entry.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
       $("results").hidden = false;
       $("results").scrollIntoView({ block: "start" });
+    }
+
+    function renderRawJson() {
+      if (!state.session) return;
+      const sources = {};
+      ["espn", "cito", "kalshi"].forEach((name) => {
+        const entry = sourceEntry(name);
+        if (entry) {
+          sources[name] = {
+            receivedAt: entry.at,
+            latencyMs: entry.deltaMs,
+            label: entry.label,
+            data: entry.detail,
+          };
+        }
+      });
+      state.rawJson = JSON.stringify({
+        fight: {
+          red: state.session.fight.red.name,
+          blue: state.session.fight.blue.name,
+        },
+        round: state.session.round,
+        hornAt: new Date(state.session.startedAtMs).toISOString(),
+        sources,
+      }, null, 2);
+      $("raw-json").textContent = state.rawJson;
+      $("source-json").hidden = Object.keys(sources).length === 0;
     }
 
     async function stopPolling(auto = false) {
@@ -823,7 +1001,7 @@
         if (!auto) state.session.completedAtMs = Date.now();
         setError("");
       } catch (error) {
-        setError(`Could not stop CITO polling: ${error.message}`);
+        setError(`Could not stop source polling: ${error.message}`);
       } finally {
         state.stopping = false;
         renderMonitor();
@@ -833,24 +1011,43 @@
     function consumeEntry(entry) {
       if (
         !state.session ||
-        state.session.result ||
         entry.kind !== "observation" ||
-        entry.source !== "cito" ||
+        !["espn", "cito", "kalshi"].includes(entry.source) ||
         entry.boutId !== state.session.boutId ||
         Number(entry.round) !== state.session.round ||
-        Number(entry.seq) <= state.session.markerSeq ||
-        !entry.detail ||
-        !Array.isArray(entry.detail.rows) ||
-        entry.detail.rows.length === 0
+        Number(entry.seq) <= state.session.markerSeq
       ) {
         return;
       }
 
-      state.session.result = entry;
-      state.session.completedAtMs = Date.parse(entry.at) || Date.now();
-      renderResult(entry);
+      if (entry.source === "cito") {
+        if (
+          !entry.detail ||
+          !Array.isArray(entry.detail.rows) ||
+          entry.detail.rows.length === 0
+        ) {
+          return;
+        }
+        state.session.sources.cito = entry;
+        renderResult(entry);
+      } else if (entry.source === "espn") {
+        state.session.sources.espn = entry;
+      } else {
+        state.session.sources.kalshi = entry;
+      }
+
+      renderRawJson();
       renderMonitor();
-      void stopPolling(true);
+      if (allCaptured()) {
+        const timestamps = Object.values(state.session.sources)
+          .filter(Boolean)
+          .map((source) => Date.parse(source.at))
+          .filter(Number.isFinite);
+        state.session.completedAtMs = timestamps.length
+          ? Math.max(...timestamps)
+          : Date.now();
+        void stopPolling(true);
+      }
     }
 
     async function pollTimeline() {
@@ -864,7 +1061,13 @@
         if (Number.isFinite(Number(response.latestSeq))) {
           state.latestSeq = Number(response.latestSeq);
         }
-        if (state.session && state.session.polling && state.watch && !state.watch.running && !state.session.result) {
+        if (
+          state.session &&
+          state.session.polling &&
+          state.watch &&
+          !state.watch.running &&
+          !allCaptured()
+        ) {
           state.session.polling = false;
           state.session.completedAtMs = Date.now();
         }
@@ -872,7 +1075,7 @@
         setError("");
       } catch (_) {
         if (state.session && state.session.polling) {
-          setError("The lab server is unreachable. CITO status will retry automatically.");
+          setError("The lab server is unreachable. Source status will retry automatically.");
         }
       } finally {
         state.pollInFlight = false;
@@ -881,19 +1084,24 @@
 
     async function startRoundWatch() {
       const fight = selectedFight();
-      if (!fight || !state.card || state.card.citoReady === false) return;
+      if (!fight || !state.card) return;
 
       $("results").hidden = true;
+      $("source-json").hidden = true;
       state.rawJson = "";
       state.session = {
         boutId: fight.id,
+        fight,
         round: state.round,
         markerSeq: state.latestSeq,
         startedAtMs: Date.now(),
         completedAtMs: null,
-        startPolls: 0,
         polling: true,
-        result: null,
+        sources: {
+          espn: null,
+          cito: null,
+          kalshi: null,
+        },
       };
       state.watch = null;
       setError("");
@@ -906,8 +1114,6 @@
           body: JSON.stringify({ boutId: fight.id, round: state.round }),
         });
         state.watch = response.watch;
-        const poller = citoPoller();
-        state.session.startPolls = Number(poller && poller.polls) || 0;
         state.session.markerSeq = Number(response.entry.seq);
         state.session.startedAtMs = Date.parse(response.entry.at) || Date.now();
         state.latestSeq = Math.max(state.latestSeq, state.session.markerSeq);
@@ -915,7 +1121,7 @@
       } catch (error) {
         state.session.polling = false;
         state.session.completedAtMs = Date.now();
-        setError(`Could not start CITO polling: ${error.message}`);
+        setError(`Could not start source polling: ${error.message}`);
         renderMonitor();
       }
     }
