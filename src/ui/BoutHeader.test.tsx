@@ -21,7 +21,7 @@ describe("BoutHeader live clock", () => {
       interpolateClockSeconds(sync, Date.parse("2026-07-28T01:10:00Z")),
     ).toBe(0);
     expect(formatFightClock(193)).toBe("3:13");
-    expect(formatFightClock(undefined)).toBe("--:--");
+    expect(formatFightClock(undefined)).toBe("-:--");
   });
 
   it("renders the synchronized ESPN clock as the primary live datum", () => {

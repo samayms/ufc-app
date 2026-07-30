@@ -204,7 +204,7 @@ export function interpolateClockSeconds(
 }
 
 export function formatFightClock(seconds: number | undefined): string {
-  if (seconds === undefined) return "--:--";
+  if (seconds === undefined) return "-:--";
   const wholeSeconds = Math.max(0, Math.floor(seconds));
   return `${Math.floor(wholeSeconds / 60)}:${String(
     wholeSeconds % 60,

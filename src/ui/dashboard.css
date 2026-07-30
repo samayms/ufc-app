@@ -444,7 +444,7 @@
   margin-top: 2px;
   color: var(--text);
   font-family: var(--font-odds);
-  font-size: 2rem;
+  font-size: 2.5rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 0.96;
@@ -2012,7 +2012,7 @@
 
   .tot-fight-clock {
     margin-top: 1px;
-    font-size: 1.5rem;
+    font-size: 2rem;
   }
 
   .tot-substate {
