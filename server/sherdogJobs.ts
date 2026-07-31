@@ -25,6 +25,7 @@ import {
   type RoundJob,
   type RoundJobClock,
 } from "./roundJobs.ts";
+import type { SherdogScorerProfileStore } from "./sherdogScorerProfiles.ts";
 import type { Storage } from "./storage.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
 import type { ParserErrorSink } from "./review.ts";
@@ -90,6 +91,13 @@ export interface SherdogRoundJobsOptions {
   >;
   fetcher: SherdogFetcher;
   getBout(boutId: string): Bout | undefined;
+  /**
+   * Resolves and caches each scorer's Sherdog author-page profile photo.
+   * Optional so existing tests/callers that don't care about photos don't
+   * need to construct one; when present, resolution failures are logged and
+   * never block or delay persisting the round observation itself.
+   */
+  scorerProfileStore?: SherdogScorerProfileStore;
   dataMode: "fixture" | "live";
   permissionScope: string;
   requestIntervalMs: number;
@@ -370,6 +378,10 @@ export class SherdogRoundJobs {
 
   private readonly getBout: SherdogRoundJobsOptions["getBout"];
 
+  private readonly scorerProfileStore:
+    | SherdogScorerProfileStore
+    | undefined;
+
   private readonly dataMode: SherdogRoundJobsOptions["dataMode"];
 
   private readonly permissionScope: string;
@@ -420,6 +432,7 @@ export class SherdogRoundJobs {
     this.roundStats = options.roundStats;
     this.fetcher = options.fetcher;
     this.getBout = options.getBout;
+    this.scorerProfileStore = options.scorerProfileStore;
     this.dataMode = options.dataMode;
     this.permissionScope = options.permissionScope;
     this.summarizer = options.summarizer ?? createDisabledSummarizer();
@@ -866,6 +879,23 @@ export class SherdogRoundJobs {
       value: next,
     } satisfies PersistedSherdogObservation);
     this.current.set(key, next);
+    // Best-effort: never let scorer-photo resolution block or delay
+    // persisting the round observation itself. The store's own method is
+    // designed to never throw; this try/catch is defense in depth.
+    if (this.scorerProfileStore !== undefined) {
+      const scorerNames = new Set(
+        observation.scorerCards.map((card) => card.scorer),
+      );
+      for (const scorerName of scorerNames) {
+        try {
+          await this.scorerProfileStore.resolveScorerProfile(scorerName);
+        } catch (error) {
+          console.warn(
+            `Sherdog scorer profile resolution failed for "${scorerName}": ${errorText(error)}`,
+          );
+        }
+      }
+    }
     if (
       previous === undefined ||
       previous.observation.payloadHash !== observation.payloadHash
