@@ -170,6 +170,9 @@ function toSnapshot(
     ...(market.marketUpdatedAt === undefined
       ? {}
       : { marketUpdatedAt: market.marketUpdatedAt }),
+    ...(market.metadata?.volume === undefined
+      ? {}
+      : { volume: market.metadata.volume }),
     provenance: {
       source: provider === "odds-api" ? "odds-api" : provider,
       fetchedAt,

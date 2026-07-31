@@ -307,6 +307,13 @@ export interface OddsSnapshot {
   quotes: OddsQuote[];
   /** When the market itself says it was last updated, if it says. */
   marketUpdatedAt?: string;
+  /**
+   * Market trading volume in USD, when the source reports one. Kalshi's
+   * volume is a contract count (each contract settles $0 or $1, so ~1
+   * contract ≈ $1) and is stored here directly, with no unit conversion.
+   * Absent for sportsbook snapshots and anywhere volume is unknown.
+   */
+  volume?: number;
   provenance: Provenance;
 }
 

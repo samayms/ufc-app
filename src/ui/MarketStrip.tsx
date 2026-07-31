@@ -1,14 +1,9 @@
 import { averageImpliedProbability } from "../lib/oddsMath.ts";
-import type { BoutView, OddsSnapshot } from "../schema.ts";
+import { pickPriorityMarket } from "../lib/marketPriority.ts";
+import type { BoutView } from "../schema.ts";
 import { fmtPct } from "./format.ts";
 
 type LatestOdds = BoutView["latestOdds"];
-
-function firstUsable(latestOdds: LatestOdds): OddsSnapshot | null {
-  return (
-    latestOdds.kalshi ?? latestOdds.polymarket ?? latestOdds.sportsbook ?? null
-  );
-}
 
 /**
  * The at-a-glance win-probability bar shown directly under the fighters in
@@ -27,7 +22,7 @@ export function MarketStrip({
   preFightOdds: LatestOdds;
   onOpen: () => void;
 }) {
-  const snapshot = firstUsable(latestOdds);
+  const snapshot = pickPriorityMarket(latestOdds);
   const red = snapshot
     ? averageImpliedProbability(snapshot, "red")
     : null;
@@ -38,7 +33,7 @@ export function MarketStrip({
   const total = (red ?? 0) + (blue ?? 0);
   const redShare = hasData && total > 0 ? ((red as number) / total) * 100 : 50;
 
-  const preFightSnapshot = firstUsable(preFightOdds);
+  const preFightSnapshot = pickPriorityMarket(preFightOdds);
   const preFightRed = preFightSnapshot
     ? averageImpliedProbability(preFightSnapshot, "red")
     : null;

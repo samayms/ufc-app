@@ -26,6 +26,7 @@ interface KalshiMarket {
   no_bid: number;
   no_ask: number;
   last_price: number;
+  volume?: number;
 }
 
 /**
@@ -159,6 +160,11 @@ export function createKalshiSource(config: SourceConfig): OddsSourceWithHistory 
         boutId: bout.id,
         market: "kalshi",
         quotes: [toQuote(red, "red"), toQuote(blue, "blue")],
+        // Each corner is its own Kalshi market; combine both sides' contract
+        // counts the same way the upcoming-odds sync does.
+        ...(red.volume === undefined && blue.volume === undefined
+          ? {}
+          : { volume: (red.volume ?? 0) + (blue.volume ?? 0) }),
         provenance: {
           source: "kalshi",
           fetchedAt: fixture.fetchedAt,

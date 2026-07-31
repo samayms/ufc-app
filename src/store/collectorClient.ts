@@ -1021,6 +1021,7 @@ function applyMarketUpdateResult(
     ...(tick.sourceUpdatedAt === undefined
       ? {}
       : { marketUpdatedAt: tick.sourceUpdatedAt }),
+    ...(tick.volume === undefined ? {} : { volume: tick.volume }),
     provenance: {
       source: schemaSourceFor(tick.source),
       fetchedAt: tick.receivedAt,

@@ -1,5 +1,9 @@
 import type { CollectorUnifiedRound } from "../store/collectorClient.ts";
 import { averageImpliedProbability } from "../lib/oddsMath.ts";
+import {
+  MARKET_PRIORITY_VOLUME_THRESHOLD,
+  pickPriorityMarket,
+} from "../lib/marketPriority.ts";
 import type { OddsSnapshot } from "../schema.ts";
 import type { MarketSnapshot, MarketSnapshotOutcome } from "../sources/contract.ts";
 import { fmtPct } from "./format.ts";
@@ -9,6 +13,7 @@ type RoundMarket = "kalshi" | "polymarket" | "sportsbook";
 interface MarketChoice {
   market: RoundMarket;
   snapshot?: MarketSnapshot;
+  volume?: number;
   red: number;
   blue: number;
 }
@@ -51,6 +56,7 @@ function candidate(
   return {
     market,
     snapshot,
+    volume: redOutcome.volume ?? blueOutcome.volume,
     red,
     blue,
   };
@@ -67,33 +73,48 @@ function choiceFromOddsSnapshot(snapshot: OddsSnapshot | undefined): MarketChoic
   }
   return {
     market: snapshot.market,
+    volume: snapshot.volume,
     red,
     blue,
   };
 }
 
-/** Picks the first complete market in the product's explicit priority order. */
+/**
+ * Picks the first complete market in the product's explicit priority order,
+ * gated on volume the same way `pickPriorityMarket` gates `OddsSnapshot`s:
+ * Kalshi or Polymarket only jump the sportsbook chain once their volume
+ * clears the threshold, and a thin Kalshi/Polymarket market still beats no
+ * market at all when neither sportsbook provider has one.
+ */
 function chooseMarket(
   record: CollectorUnifiedRound,
   redName: string,
   blueName: string,
+  threshold: number = MARKET_PRIORITY_VOLUME_THRESHOLD,
 ): MarketChoice | null {
-  return (
-    candidate("kalshi", record.marketAtEnd.kalshi, redName, blueName) ??
-    candidate("polymarket", record.marketAtEnd.polymarket, redName, blueName) ??
-    candidate("sportsbook", record.marketAtEnd.oddsApiIo, redName, blueName) ??
-    candidate("sportsbook", record.marketAtEnd.theOddsApi, redName, blueName)
+  const kalshi = candidate("kalshi", record.marketAtEnd.kalshi, redName, blueName);
+  if (kalshi !== null && (kalshi.volume ?? 0) >= threshold) return kalshi;
+
+  const polymarket = candidate(
+    "polymarket",
+    record.marketAtEnd.polymarket,
+    redName,
+    blueName,
   );
+  if (polymarket !== null && (polymarket.volume ?? 0) >= threshold) {
+    return polymarket;
+  }
+
+  const sportsbook =
+    candidate("sportsbook", record.marketAtEnd.oddsApiIo, redName, blueName) ??
+    candidate("sportsbook", record.marketAtEnd.theOddsApi, redName, blueName);
+  return sportsbook ?? kalshi ?? polymarket;
 }
 
 function chooseLatestMarket(
   latestOdds: Partial<Record<OddsSnapshot["market"], OddsSnapshot>> | undefined,
 ): MarketChoice | null {
-  return (
-    choiceFromOddsSnapshot(latestOdds?.kalshi) ??
-    choiceFromOddsSnapshot(latestOdds?.polymarket) ??
-    choiceFromOddsSnapshot(latestOdds?.sportsbook)
-  );
+  return choiceFromOddsSnapshot(pickPriorityMarket(latestOdds ?? {}) ?? undefined);
 }
 
 function latestRoundRecord(
