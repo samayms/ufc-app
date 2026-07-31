@@ -221,6 +221,26 @@ export interface SherdogScorerCard {
   cumulativeScore?: string;
 }
 
+/**
+ * A cached Sherdog author-page profile photo for one named round-scorer, so
+ * the photo is resolved once and reused across events instead of re-fetched
+ * per observation. See `server/sherdogScorerProfiles.ts`.
+ */
+export interface SherdogScorerProfile {
+  /** As originally seen in the commentary, e.g. "Ben Duffy". */
+  scorerName: string;
+  /** Lowercase, whitespace-collapsed, trimmed — the dedup/cache key. */
+  normalizedName: string;
+  /** The scorer's Sherdog author page; null if it was never found. */
+  authorPageUrl: string | null;
+  /** Our own served URL (never a sherdog.com URL); default avatar if unresolved. */
+  photoUrl: string;
+  /** False when `photoUrl` is the default-avatar fallback. */
+  resolved: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** One validated, plain-text observation from the permitted live blog. */
 export interface SherdogRoundObservation {
   boutId: string;
