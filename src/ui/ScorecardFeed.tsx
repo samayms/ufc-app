@@ -3,11 +3,14 @@ import type {
   BoutView,
   ExpertConsensus,
   ScorecardAccount,
+  SherdogScorerProfile,
 } from "../schema.ts";
-import type {
-  CollectorSnapshot,
-  CollectorUnifiedRound,
-  CollectorValueDelivery,
+import defaultScorerAvatar from "../assets/sherdog-default-avatar.svg";
+import {
+  collectorBaseUrl,
+  type CollectorSnapshot,
+  type CollectorUnifiedRound,
+  type CollectorValueDelivery,
 } from "../store/collectorClient.ts";
 import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
 import {
@@ -108,6 +111,66 @@ function sourceDelivery(
   return undefined;
 }
 
+function normalizeScorerNameForLookup(name: string): string {
+  return name.toLocaleLowerCase("en-US").replace(/\s+/gu, " ").trim();
+}
+
+/**
+ * Fetches the collector's cached Sherdog scorer-profile photos once per
+ * mount. Best-effort: an empty map just means every scorer renders with no
+ * avatar yet (or the default one), never a loading error state — this is
+ * decorative, not load-bearing.
+ */
+function useSherdogScorerProfiles(): Map<string, SherdogScorerProfile> {
+  const [profiles, setProfiles] = useState<Map<string, SherdogScorerProfile>>(
+    () => new Map(),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${collectorBaseUrl()}/api/sherdog-scorer-profiles`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((records: SherdogScorerProfile[]) => {
+        if (cancelled) return;
+        setProfiles(
+          new Map(records.map((profile) => [profile.normalizedName, profile])),
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return profiles;
+}
+
+function ScorerAvatar({
+  scorer,
+  profiles,
+}: {
+  scorer: string;
+  profiles: Map<string, SherdogScorerProfile>;
+}) {
+  const profile = profiles.get(normalizeScorerNameForLookup(scorer));
+  const src =
+    profile === undefined
+      ? defaultScorerAvatar
+      : profile.resolved
+        ? `${collectorBaseUrl()}${profile.photoUrl}`
+        : defaultScorerAvatar;
+  return (
+    <img
+      className="media-scorecard-avatar"
+      src={src}
+      alt=""
+      width={32}
+      height={32}
+      loading="lazy"
+    />
+  );
+}
+
 export function ScorecardFeed({
   view,
   accounts,
@@ -121,6 +184,7 @@ export function ScorecardFeed({
   round?: number;
   collector?: CollectorSnapshot;
 }) {
+  const scorerProfiles = useSherdogScorerProfiles();
   const record = records
     .filter(
       (candidate) =>
@@ -208,6 +272,10 @@ export function ScorecardFeed({
                   key={`${card.scorer}:${index}`}
                 >
                   <span className="media-scorecard-id">
+                    <ScorerAvatar
+                      scorer={card.scorer}
+                      profiles={scorerProfiles}
+                    />
                     <strong className="media-scorecard-name">
                       {card.scorer}
                     </strong>
