@@ -62,6 +62,9 @@ const PAGE2_HTML = `
 </body></html>
 `;
 
+// Sherdog's prelims preview is a separate article, but (verified live
+// 2026-07-31) it is paginated exactly like the main card, one bout per
+// page, not one page covering every prelim bout back to back.
 const PRELIMS_HTML = `
 <html><body>
 <article>
@@ -74,6 +77,28 @@ const PRELIMS_HTML = `
 </article>
 <nav>Jump To &raquo; <a href="#">Round scoring</a></nav>
 <aside>Unrelated event history and the writer's sign-off.</aside>
+</body></html>
+`;
+
+const PRELIM_PAGE1_HTML = `
+<html><body>
+<article>
+<h3>Lightweight Nasrat Haqparast (16-6-0) vs. Esteban Ribovics (13-1-0) BETTING ODDS: Haqparast -110</h3>
+<p>Haqparast is durable and pushes a heavy pace from the opening bell.</p>
+<p>Ribovics is a rangy kickboxer who likes to work from distance.</p>
+</article>
+<nav>Jump To &raquo; <a href="#">Round scoring</a></nav>
+</body></html>
+`;
+
+const PRELIM_PAGE2_HTML = `
+<html><body>
+<article>
+<h3>Bantamweight Vinicius Oliveira (18-4-0) vs. Cameron Saaiman (10-1-0) BETTING ODDS: Saaiman -130</h3>
+<p>Oliveira is aggressive and hunts for the finish from the first bell.</p>
+<p>Saaiman is younger, faster, and comes forward behind a stiff jab.</p>
+</article>
+<nav>Jump To &raquo; <a href="#">Round scoring</a></nav>
 </body></html>
 `;
 
@@ -125,6 +150,34 @@ describe("extractSherdogPreviewSegments", () => {
     expect(segments[1]?.rawText).not.toContain("sign-off");
   });
 
+  it("matches fighter names carrying diacritics (verified live: ASCII-only broke on real Balkan names)", () => {
+    const html = `
+<h2>Lightweight Duško Todorović (11-4-0) vs. Mateusz Rębecki (20-3-0) BETTING ODDS: Todorovic -120</h2>
+<p>Todorovic pressures behind volume and a granite chin.</p>
+<p>Rebecki is durable and mixes in wrestling when the pace slows down.</p>
+Jump To`;
+    const segments = extractSherdogPreviewSegments(html);
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0]?.fighterAName).toBe("Duško Todorović");
+    expect(segments[0]?.fighterBName).toBe("Mateusz Rębecki");
+  });
+
+  it("matches a record that carries a trailing no-contest note (verified live: \"(21-5, 1 NC)\" broke the plain record pattern)", () => {
+    const html = `
+<h2>Heavyweight Jovan Leka (13-2) vs. Alexander Poppeck (21-5, 1 NC) BETTING ODDS: Leka -220</h2>
+<p>Leka is a heavy handed striker who wants this fight standing.</p>
+<p>Poppeck brings size and a durable chin into the cage with him.</p>
+Jump To`;
+    const segments = extractSherdogPreviewSegments(html);
+
+    expect(segments).toHaveLength(1);
+    expect(segments[0]?.fighterAName).toBe("Jovan Leka");
+    expect(segments[0]?.fighterARecord).toBe("13-2");
+    expect(segments[0]?.fighterBName).toBe("Alexander Poppeck");
+    expect(segments[0]?.fighterBRecord).toBe("21-5, 1 NC");
+  });
+
   it("returns nothing when the page has no matching header", () => {
     expect(extractSherdogPreviewSegments("<html><body>nothing here</body></html>")).toEqual(
       [],
@@ -157,12 +210,20 @@ describe("collectSherdogOutlookContent", () => {
     bout("bout-prelim-2", "Vinicius Oliveira", "Cameron Saaiman", 8),
   ];
 
-  it("fetches every main-card page and the prelims article, and matches every bout", async () => {
+  it("fetches every main-card page and every prelims page, and matches every bout", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = input.toString();
+      if (url.includes("prelims")) {
+        if (url.includes("/news/articles/1/")) {
+          return new Response(PRELIM_PAGE1_HTML, { status: 200 });
+        }
+        if (url.includes("/news/articles/2/")) {
+          return new Response(PRELIM_PAGE2_HTML, { status: 200 });
+        }
+        return new Response("", { status: 404 });
+      }
       if (url.includes("/news/articles/1/")) return new Response(PAGE1_HTML, { status: 200 });
       if (url.includes("/news/articles/2/")) return new Response(PAGE2_HTML, { status: 200 });
-      if (url.includes("prelims")) return new Response(PRELIMS_HTML, { status: 200 });
       return new Response("", { status: 404 });
     });
 
@@ -173,13 +234,14 @@ describe("collectSherdogOutlookContent", () => {
         mainCardBoutCount: 2,
         prelimsArticleUrl:
           "https://www.sherdog.com/news/articles/Preview-UFC-Belgrade-prelims-202127",
+        prelimsBoutCount: 2,
         bouts,
       },
       { permissionScope: "sherdog-read", fetchImpl },
     );
 
     expect(matches).toHaveLength(4);
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
     const byId = new Map(matches.map((match) => [match.bout.id, match.rawPreviewText]));
     expect(byId.get("bout-main")).toContain("heavy hands");
     expect(byId.get("bout-comain")).toContain("dangerous grappler");

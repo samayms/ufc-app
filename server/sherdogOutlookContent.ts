@@ -32,8 +32,18 @@ export interface SherdogPreviewSegment {
  * fighters' names/records so segments can be matched to a real `Bout`
  * without depending on page order.
  */
-const HEADER_RE =
-  /([A-Za-z ]+weights?) ([A-Z][a-zA-Z'.\- ]+)\((\d+-\d+(?:-\d+)?)\)\s*vs\.?\s*([A-Z][a-zA-Z'.\- ]+)\((\d+-\d+(?:-\d+)?)\)\s*BETTING ODDS:/gu;
+// Fighter names use \p{L} (any Unicode letter), not a-z, because Balkan and
+// other international names carry diacritics Sherdog's writers don't strip
+// (verified live 2026-07-31: "Duško Todorović", "Rębecki" both broke the
+// original ASCII-only class and silently dropped their bout's segment).
+// The record itself sometimes carries a trailing no-contest note inside the
+// same parenthesis, e.g. "(21-5, 1 NC)" (also verified live) — the optional
+// group absorbs that without over-matching a normal "(21-5)" record.
+const RECORD_RE = String.raw`\d+-\d+(?:-\d+)?(?:,\s*\d+\s*NC)?`;
+const HEADER_RE = new RegExp(
+  String.raw`([A-Za-z ]+weights?) ([\p{Lu}][\p{L}'.\- ]+)\((${RECORD_RE})\)\s*vs\.?\s*([\p{Lu}][\p{L}'.\- ]+)\((${RECORD_RE})\)\s*BETTING ODDS:`,
+  "gu",
+);
 
 const JUMP_TO_RE = /Jump To/iu;
 
@@ -142,12 +152,36 @@ export interface CollectSherdogOutlookContentInput {
   mainCardBoutCount: number;
   /** The separate prelims preview article, when it has been discovered. */
   prelimsArticleUrl?: string;
+  /**
+   * Number of prelim bouts; pages 1..N of the prelims article are fetched.
+   * Verified live 2026-07-31: contrary to the original assumption that the
+   * prelims preview runs every bout back to back on one page, Sherdog
+   * paginates it exactly like the main card, one bout per page. Required
+   * whenever `prelimsArticleUrl` is given.
+   */
+  prelimsBoutCount?: number;
   /** The real card, used to match each extracted segment to a bout. */
   bouts: readonly Bout[];
 }
 
+async function fetchArticlePages(
+  articleUrl: string,
+  pageCount: number,
+  options: FetchSherdogOutlookContentOptions,
+): Promise<SherdogPreviewSegment[]> {
+  const segments: SherdogPreviewSegment[] = [];
+  for (let page = 1; page <= pageCount; page += 1) {
+    const pageUrl = withSherdogArticlePageNumber(articleUrl, page);
+    const response = await fetchSherdogPage(pageUrl, options);
+    if (response.status === 403) throw new SherdogForbiddenError(pageUrl);
+    if (response.status < 200 || response.status >= 300) continue;
+    segments.push(...extractSherdogPreviewSegments(response.html));
+  }
+  return segments;
+}
+
 /**
- * Fetches every main-card page and the prelims article (when given), splits
+ * Fetches every main-card page and every prelims page (when given), splits
  * each into per-bout segments, and matches them against the real card.
  * Unmatched segments (a header the surname matcher can't place) are
  * silently dropped rather than guessed at — a missing outlook falls back to
@@ -157,24 +191,20 @@ export async function collectSherdogOutlookContent(
   input: CollectSherdogOutlookContentInput,
   options: FetchSherdogOutlookContentOptions,
 ): Promise<SherdogOutlookMatch[]> {
-  const allSegments: SherdogPreviewSegment[] = [];
-
-  for (let page = 1; page <= input.mainCardBoutCount; page += 1) {
-    const pageUrl = withSherdogArticlePageNumber(input.baseArticleUrl, page);
-    const response = await fetchSherdogPage(pageUrl, options);
-    if (response.status === 403) throw new SherdogForbiddenError(pageUrl);
-    if (response.status < 200 || response.status >= 300) continue;
-    allSegments.push(...extractSherdogPreviewSegments(response.html));
-  }
+  const allSegments = await fetchArticlePages(
+    input.baseArticleUrl,
+    input.mainCardBoutCount,
+    options,
+  );
 
   if (input.prelimsArticleUrl !== undefined) {
-    const response = await fetchSherdogPage(input.prelimsArticleUrl, options);
-    if (response.status === 403) {
-      throw new SherdogForbiddenError(input.prelimsArticleUrl);
-    }
-    if (response.status >= 200 && response.status < 300) {
-      allSegments.push(...extractSherdogPreviewSegments(response.html));
-    }
+    allSegments.push(
+      ...(await fetchArticlePages(
+        input.prelimsArticleUrl,
+        input.prelimsBoutCount ?? 1,
+        options,
+      )),
+    );
   }
 
   const matches = new Map<string, SherdogOutlookMatch>();
