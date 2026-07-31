@@ -6,6 +6,7 @@ import type { UpcomingOddsState } from "../store/useUpcomingOdds.ts";
 import {
   boutToScheduledFight,
   ScheduledFightPreview,
+  UpcomingTaleSection,
 } from "./ScheduledFightPreview.tsx";
 
 const bout: Bout = {
@@ -68,5 +69,26 @@ describe("ScheduledFightPreview", () => {
     expect(html).toContain(">Odds</button>");
     expect(html).not.toContain(">Fight</button>");
     expect(html).not.toContain(">Stats</button>");
+  });
+
+  it("renders the fight-outlook heading and text when outlook is present", () => {
+    const html = renderToStaticMarkup(
+      <UpcomingTaleSection
+        fighters={bout.fighters}
+        outlook="Real Sherdog-derived outlook text."
+      />,
+    );
+
+    expect(html).toContain("Fight outlook");
+    expect(html).toContain("Real Sherdog-derived outlook text.");
+  });
+
+  it("omits the fight-outlook heading and panel entirely when outlook is absent", () => {
+    const html = renderToStaticMarkup(
+      <UpcomingTaleSection fighters={bout.fighters} />,
+    );
+
+    expect(html).not.toContain("Fight outlook");
+    expect(html).not.toContain("outlook-panel");
   });
 });

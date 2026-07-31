@@ -217,18 +217,23 @@ export function UpcomingTaleSection({
 }: {
   fighters: Record<Corner, Fighter>;
   statValues?: Partial<Record<Corner, Record<string, string>>>;
-  /** Real Sherdog-derived outlook text; falls back to placeholder copy when absent. */
+  /** Real Sherdog-derived outlook text; the panel is omitted entirely when absent. */
   outlook?: string;
 }) {
   return (
     <>
       <FighterProfile fighters={fighters} />
       <RecentForm fighters={fighters} />
-      <section className="profile-panel" aria-label="Fight outlook">
-        <div className="outlook-panel">
-          <span className="outlook-heading">Fight outlook</span>
-          <p className="outlook-body">{outlook ?? OUTLOOK_PLACEHOLDER}</p>
-        </div>
+      <section
+        className="profile-panel"
+        aria-label={outlook === undefined ? "Fighter stats" : "Fight outlook and fighter stats"}
+      >
+        {outlook === undefined ? undefined : (
+          <div className="outlook-panel">
+            <span className="outlook-heading">Fight outlook</span>
+            <p className="outlook-body">{outlook}</p>
+          </div>
+        )}
         <div className="profile-rows">
           {STAT_ROWS.map(({ key, label }) => (
             <div className="profile-row" key={key}>
@@ -263,14 +268,6 @@ function TaleSection({ fight }: { fight: EspnScheduledFight }) {
     />
   );
 }
-
-// Placeholder fight-outlook copy. Swap for a real AI-generated prediction
-// once a data source exists.
-const OUTLOOK_PLACEHOLDER =
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. This fight outlook " +
-  "will summarize stylistic matchups and a data-driven prediction once a " +
-  "live analysis source is wired up. Sed do eiusmod tempor incididunt ut " +
-  "labore et dolore magna aliqua.";
 
 const STAT_ROWS: { key: string; label: string }[] = [
   { key: "strikeLPM", label: "Sig. strikes landed/min" },

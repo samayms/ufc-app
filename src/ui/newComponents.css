@@ -242,6 +242,11 @@
   gap: 6px;
 }
 
+/* Extra breathing room before the stat rows that follow the outlook text. */
+.outlook-panel + .profile-rows {
+  margin-top: 10px;
+}
+
 .outlook-heading {
   color: var(--text-faint);
   font-family: var(--font-data);
