@@ -74,3 +74,45 @@ export async function discoverSherdogOutlookPreview(
   });
   return findSherdogOutlookPreview(items, target);
 }
+
+export interface SherdogPrelimsOutlookTarget {
+  eventName: string;
+}
+
+/**
+ * The prelims preview is a second, separate article in the same feed (e.g.
+ * "Preview: UFC Belgrade prelims") that covers every prelim bout on one
+ * page, so it has no single fighter pair to match on — only the event name.
+ */
+export function isSherdogPrelimsOutlookPreview(item: SherdogNewsItem): boolean {
+  return isSherdogOutlookPreview(item) && /\bprelims\b/iu.test(item.title);
+}
+
+export function findSherdogPrelimsOutlookPreview(
+  items: readonly SherdogNewsItem[],
+  target: SherdogPrelimsOutlookTarget,
+): SherdogNewsItem | undefined {
+  return items
+    .map((item, index) => ({
+      item,
+      index,
+      score: eventTokenScore(
+        target.eventName,
+        normalizeSearchText(`${item.title} ${item.url}`),
+      ),
+    }))
+    .filter(({ item }) => isSherdogPrelimsOutlookPreview(item))
+    .sort((left, right) => right.score - left.score || left.index - right.index)[0]
+    ?.item;
+}
+
+export async function discoverSherdogPrelimsOutlookPreview(
+  target: SherdogPrelimsOutlookTarget,
+  options: DiscoverSherdogOutlookOptions,
+): Promise<SherdogNewsItem | undefined> {
+  const items = await fetchSherdogNewsFeed({
+    feedPath: SHERDOG_ARTICLES_FEED_PATH,
+    ...options,
+  });
+  return findSherdogPrelimsOutlookPreview(items, target);
+}

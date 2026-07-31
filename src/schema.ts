@@ -156,6 +156,14 @@ export interface Bout {
   scheduledRounds: 3 | 5;
   titleFight: boolean;
   fighters: Record<Corner, Fighter>;
+  /**
+   * Pre-fight outlook paragraph, summarized from Sherdog's written preview.
+   * One source, no provenance tracking needed (unlike round data on
+   * `BoutView`, which is per-source by design). Absent until Sherdog
+   * publishes a preview and the summarizer runs; the UI falls back to a
+   * placeholder when it's missing.
+   */
+  outlook?: string;
   status: BoutStatus;
   /** Current round while live; the round just completed while between rounds. */
   currentRound?: number;

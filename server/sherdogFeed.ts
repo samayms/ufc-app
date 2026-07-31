@@ -151,6 +151,73 @@ async function readWithByteLimit(
   return new TextDecoder().decode(combined);
 }
 
+export interface FetchSherdogPageOptions {
+  permissionScope: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  maxBytes?: number;
+  userAgent?: string;
+}
+
+export interface SherdogPageResponse {
+  status: number;
+  html: string;
+  url: string;
+}
+
+/**
+ * Fetches one arbitrary Sherdog page (an article, not the RSS feed) under
+ * the same courtesy posture as `fetchSherdogNewsFeed`: permission gate,
+ * custom User-Agent, timeout, and a byte cap. Unlike the feed fetch, this
+ * never throws on a non-2xx response — the caller (article content
+ * extraction) needs to see the status itself, because an HTTP 403 means
+ * stop immediately rather than treat it as "page not found".
+ */
+export async function fetchSherdogPage(
+  url: string,
+  options: FetchSherdogPageOptions,
+): Promise<SherdogPageResponse> {
+  if (!permissionAllowsSherdogRead(options.permissionScope)) {
+    throw new Error(
+      "SHERDOG_PERMISSION_SCOPE must include live-blog-read, sherdog-read, or all",
+    );
+  }
+
+  const parsedUrl = new URL(url);
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    throw new TypeError("Sherdog page URL must use HTTP or HTTPS");
+  }
+
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const maxBytes = options.maxBytes ?? SHERDOG_MAX_PAYLOAD_BYTES;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError("Sherdog page fetch timeout must be positive");
+  }
+  if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+    throw new TypeError("Sherdog page fetch maximum response size must be positive");
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await (options.fetchImpl ?? globalThis.fetch)(parsedUrl, {
+      signal: controller.signal,
+      headers: {
+        Accept: "text/html",
+        "User-Agent":
+          options.userAgent ??
+          "UFC Live Dashboard/1.0 (personal non-commercial dashboard)",
+      },
+    });
+    const html = response.ok
+      ? await readWithByteLimit(response, maxBytes)
+      : "";
+    return { status: response.status, html, url: parsedUrl.toString() };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export async function fetchSherdogNewsFeed(
   options: FetchSherdogNewsFeedOptions,
 ): Promise<SherdogNewsItem[]> {
