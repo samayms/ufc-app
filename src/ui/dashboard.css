@@ -1629,10 +1629,17 @@
 .profile-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   padding: 5px 0;
   border-top: 1px solid var(--border);
+}
+
+/* When a stat-row list opens a panel with nothing above it (e.g. no fight
+ * outlook to divide from), the first row's divider line has nothing to
+ * divide and reads as a stray line under the panel's own top edge. */
+.profile-rows--leading .profile-row:first-child {
+  border-top: none;
 }
 
 .profile-row > span {

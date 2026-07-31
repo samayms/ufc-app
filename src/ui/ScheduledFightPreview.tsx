@@ -234,7 +234,11 @@ export function UpcomingTaleSection({
             <p className="outlook-body">{outlook}</p>
           </div>
         )}
-        <div className="profile-rows">
+        <div
+          className={
+            outlook === undefined ? "profile-rows profile-rows--leading" : "profile-rows"
+          }
+        >
           {STAT_ROWS.map(({ key, label }) => (
             <div className="profile-row" key={key}>
               <span className="num">{statValues?.red?.[key] ?? "—"}</span>
