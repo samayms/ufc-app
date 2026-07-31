@@ -1,6 +1,9 @@
 import { SHERDOG_MAX_PAYLOAD_BYTES } from "../src/sources/sherdog.ts";
 
 export const SHERDOG_NEWS_FEED_PATH = "/rss/news.xml";
+/** Feature/preview articles (e.g. fight outlooks) are syndicated separately
+ * from the news feed above — they never appear in /rss/news.xml. */
+export const SHERDOG_ARTICLES_FEED_PATH = "/rss/articles.xml";
 
 export interface SherdogNewsItem {
   title: string;
@@ -11,6 +14,7 @@ export interface SherdogNewsItem {
 export interface FetchSherdogNewsFeedOptions {
   permissionScope: string;
   baseUrl?: string;
+  feedPath?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   maxBytes?: number;
@@ -157,7 +161,7 @@ export async function fetchSherdogNewsFeed(
   }
 
   const baseUrl = options.baseUrl ?? "https://www.sherdog.com";
-  const feedUrl = new URL(SHERDOG_NEWS_FEED_PATH, baseUrl);
+  const feedUrl = new URL(options.feedPath ?? SHERDOG_NEWS_FEED_PATH, baseUrl);
   if (feedUrl.protocol !== "http:" && feedUrl.protocol !== "https:") {
     throw new TypeError("Sherdog base URL must use HTTP or HTTPS");
   }

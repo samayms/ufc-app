@@ -3,6 +3,7 @@ import {
   fetchSherdogNewsFeed,
   fighterSurname,
   normalizeSearchText,
+  SHERDOG_ARTICLES_FEED_PATH,
   type FetchSherdogNewsFeedOptions,
   type SherdogNewsItem,
 } from "./sherdogFeed.ts";
@@ -24,7 +25,10 @@ export function isSherdogOutlookPreview(item: SherdogNewsItem): boolean {
     const host = url.hostname.toLocaleLowerCase("en-US");
     return (
       (host === "sherdog.com" || host === "www.sherdog.com") &&
-      /^\/news\/articles\/\d+\/.+-\d+\/?$/iu.test(url.pathname)
+      // The RSS feed links to the canonical article (no page number); the
+      // browser adds a leading page number when reading a specific page
+      // (page 1 = main event, page 2 = co-main, ...). Both are accepted.
+      /^\/news\/articles\/(?:\d+\/)?.+-\d+\/?$/iu.test(url.pathname)
     );
   } catch {
     return false;
@@ -64,6 +68,9 @@ export async function discoverSherdogOutlookPreview(
   target: SherdogOutlookTarget,
   options: DiscoverSherdogOutlookOptions,
 ): Promise<SherdogNewsItem | undefined> {
-  const items = await fetchSherdogNewsFeed(options);
+  const items = await fetchSherdogNewsFeed({
+    feedPath: SHERDOG_ARTICLES_FEED_PATH,
+    ...options,
+  });
   return findSherdogOutlookPreview(items, target);
 }
