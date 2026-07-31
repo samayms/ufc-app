@@ -16,10 +16,17 @@ Every identifier and every latency below was measured against the live APIs on
 | Cito event id | `ae9a4067-05b9-4ae1-a7f7-28db3498c1aa` |
 | Cito bout ids | `12879` `12966` `12881` `12882` `12883` `12994` (main card), `12904` `12916` `12995` `12906` `12956` `12927` `12996` `12997` (prelims) |
 | Kalshi event tickers | `KXUFCFIGHT-26AUG01…` (14 open events) |
-| Sherdog live blog | **not published yet** — find it on the day, then set `SHERDOG_LIVE_BLOG_URL` |
+| Sherdog live blog | **not published yet** — run `npm run sherdog:find` on the day, then set the printed `SHERDOG_LIVE_BLOG_URL` |
 
 ESPN dates the *event* 14:00Z while Cito dates it 17:00Z. Both are right: ESPN
 is stamping the prelims, Cito the main card. Do not "fix" either.
+
+Sherdog publishes the play-by-play as a news article shortly before coverage.
+`npm run sherdog:find` loads ESPN's nearest card, matches both main-event
+fighter surnames against Sherdog's official news RSS feed, and prints the
+matching URL and `.env` assignment. An exit code of 2 means the article has not
+been published yet; re-run it later rather than guessing the numeric article
+id. The script never edits `.env`.
 
 ## Separate launch commands
 

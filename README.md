@@ -103,6 +103,12 @@ the parser picks each bout's rounds out of it by fighter name, so no per-bout
 mapping is needed. A bout that does carry its own `sherdog` external ref uses
 that instead.
 
+Once Sherdog publishes the article, `npm run sherdog:find` discovers it from
+Sherdog's official news RSS feed by matching the nearest ESPN card's two
+main-event fighters. It prints the `SHERDOG_LIVE_BLOG_URL` assignment without
+modifying `.env`. Pass `--event`, `--red`, and `--blue` to bypass the ESPN
+lookup and search for an explicitly named matchup.
+
 Each Sherdog round is condensed by Gemini into the summary the dashboard
 shows. The raw play-by-play runs two to three thousand characters and the
 summary box clamps at five lines, so the condensation is capped at 380
