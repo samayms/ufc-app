@@ -8,6 +8,7 @@ import type {
   CollectorUnifiedRound,
   CollectorValueDelivery,
 } from "../store/collectorClient.ts";
+import { withoutSportsbookOnEventDay } from "../lib/marketPriority.ts";
 import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
 import type { RoundSelection } from "./RoundSelector.tsx";
 import { RoundOdds } from "./RoundOdds.tsx";
@@ -70,11 +71,13 @@ function preferredSummary(view: BoutView, selection: RoundSelection) {
 
 export function FightSummary({
   view,
+  eventStartsAt,
   selection,
   delivery,
   collectorRounds,
 }: {
   view: BoutView;
+  eventStartsAt: string;
   selection: RoundSelection;
   delivery?: CollectorValueDelivery;
   collectorRounds?: readonly CollectorUnifiedRound[];
@@ -164,7 +167,10 @@ export function FightSummary({
           blueName={view.bout.fighters.blue.name}
           selection={selection}
           records={collectorRounds}
-          latestOdds={view.latestOdds}
+          latestOdds={withoutSportsbookOnEventDay(
+            view.latestOdds,
+            eventStartsAt,
+          )}
         />
       </section>
 

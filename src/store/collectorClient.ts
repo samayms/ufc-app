@@ -19,8 +19,6 @@ import type {
   MarketSource,
   MarketTick,
 } from "../sources/contract.ts";
-import type { ParsedExpertScore } from "../sources/x.ts";
-
 export const DEFAULT_COLLECTOR_PORT = 8600;
 
 export type CollectorConnectionState =
@@ -74,7 +72,6 @@ export interface CollectorUnifiedRound {
     | "fight_completed";
   citoStats?: CollectorRoundStats;
   sherdog?: SherdogRoundObservation;
-  xScores?: ParsedExpertScore[];
   marketAtEnd: {
     kalshi?: MarketSnapshot;
     polymarket?: MarketSnapshot;
@@ -207,8 +204,7 @@ function isDashboardState(value: unknown): value is DashboardState {
     isRecord(value.event) &&
     typeof value.event.id === "string" &&
     Array.isArray(value.event.bouts) &&
-    isRecord(value.boutViews) &&
-    Array.isArray(value.scorecardAccounts)
+    isRecord(value.boutViews)
   );
 }
 
@@ -587,48 +583,10 @@ function parseSherdogObservation(
   };
 }
 
-function parseExpertScore(value: unknown): ParsedExpertScore | null {
-  if (
-    !isRecord(value) ||
-    value.source !== "x" ||
-    typeof value.sourcePostId !== "string" ||
-    typeof value.scorer !== "string" ||
-    !Number.isSafeInteger(value.round) ||
-    (value.round as number) < 1 ||
-    !isRecord(value.score) ||
-    !Number.isSafeInteger(value.score.red) ||
-    !Number.isSafeInteger(value.score.blue) ||
-    !isTimestamp(value.fetchedAt) ||
-    typeof value.parseConfidence !== "number" ||
-    value.parseConfidence < 0 ||
-    value.parseConfidence > 1 ||
-    (value.mode !== "embed" &&
-      value.mode !== "manual" &&
-      value.mode !== "api") ||
-    typeof value.postUrl !== "string"
-  ) {
-    return null;
-  }
-  return {
-    source: "x",
-    sourcePostId: value.sourcePostId,
-    scorer: value.scorer,
-    round: value.round as number,
-    score: {
-      red: value.score.red as number,
-      blue: value.score.blue as number,
-    },
-    fetchedAt: value.fetchedAt,
-    parseConfidence: value.parseConfidence,
-    mode: value.mode,
-    postUrl: value.postUrl,
-  };
-}
-
 function parseExpertConsensus(value: unknown): ExpertConsensus | null {
   if (!isRecord(value)) return null;
   const result: ExpertConsensus = {};
-  for (const source of ["sherdog", "x"] as const) {
+  for (const source of ["sherdog"] as const) {
     const candidate = value[source];
     if (candidate === undefined) continue;
     if (
@@ -673,16 +631,6 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
     value.sherdog === undefined
       ? undefined
       : parseSherdogObservation(value.sherdog);
-  const xScores =
-    value.xScores === undefined
-      ? undefined
-      : Array.isArray(value.xScores)
-        ? value.xScores
-            .map(parseExpertScore)
-            .filter(
-              (score): score is ParsedExpertScore => score !== null,
-            )
-        : null;
   const expertConsensus =
     value.expertConsensus === undefined
       ? undefined
@@ -698,9 +646,6 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
       value.endingSignal !== "fight_completed") ||
     (value.citoStats !== undefined && citoStats === null) ||
     (value.sherdog !== undefined && sherdog === null) ||
-    xScores === null ||
-    (Array.isArray(value.xScores) &&
-      (xScores?.length ?? 0) !== value.xScores.length) ||
     (value.expertConsensus !== undefined &&
       expertConsensus === null) ||
     !isRecord(value.marketAtEnd) ||
@@ -717,7 +662,6 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
     endingSignal: value.endingSignal,
     ...(citoStats == null ? {} : { citoStats }),
     ...(sherdog == null ? {} : { sherdog }),
-    ...(xScores === undefined ? {} : { xScores }),
     marketAtEnd: value.marketAtEnd as CollectorUnifiedRound["marketAtEnd"],
     ...(expertConsensus == null ? {} : { expertConsensus }),
     provisional: value.provisional,
@@ -1268,32 +1212,6 @@ function applyCollectorRound(
     ].sort((left, right) => left.round - right.round);
   }
 
-  const scorecards = [
-    ...view.scorecards,
-    ...(record.xScores ?? []).flatMap((score) =>
-      score.mode !== "embed"
-        ? []
-        : [
-            {
-              boutId: record.boutId,
-              handle: score.scorer.replace(/^@/, ""),
-              postId: score.sourcePostId,
-              round: score.round,
-              provenance: {
-                source: "x-embed" as const,
-                fetchedAt: score.fetchedAt,
-                synthetic: withLifecycle.event.provenance.synthetic,
-              },
-            },
-          ],
-    ),
-  ].filter(
-    (scorecard, index, all) =>
-      all.findIndex(
-        (candidate) => candidate.postId === scorecard.postId,
-      ) === index,
-  );
-
   return {
     ...withLifecycle,
     boutViews: {
@@ -1301,7 +1219,6 @@ function applyCollectorRound(
       [record.boutId]: {
         ...view,
         rounds: nextRounds,
-        scorecards,
       },
     },
   };

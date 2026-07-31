@@ -339,33 +339,6 @@ export interface MarketMove {
 }
 
 // ---------------------------------------------------------------------------
-// Journalist scorecards (X embeds, not paid API search)
-// ---------------------------------------------------------------------------
-
-/** A known journalist/outlet account whose scorecards we embed. */
-export interface ScorecardAccount {
-  /** X handle without the @. */
-  handle: string;
-  displayName: string;
-  /** Set false once an account proves inactive; UI drops it quietly. */
-  active: boolean;
-}
-
-/**
- * A pointer to one embeddable post (round score or fight commentary).
- * We store only the reference; rendering uses X's embed widget.
- */
-export interface ScorecardEmbed {
-  boutId: string;
-  handle: string;
-  /** X post id, enough to render the official embed. */
-  postId: string;
-  /** Round the post scores, when parseable; absent for general commentary. */
-  round?: number;
-  provenance: Provenance;
-}
-
-// ---------------------------------------------------------------------------
 // Dashboard aggregate — what the UI actually consumes
 // ---------------------------------------------------------------------------
 
@@ -386,12 +359,10 @@ export interface BoutView {
    * render absence, never substitute the current price as if it were opening.
    */
   preFightOdds: Partial<Record<OddsSnapshot["market"], OddsSnapshot>>;
-  scorecards: ScorecardEmbed[];
 }
 
 export interface DashboardState {
   event: UfcEvent;
   /** BoutView per bout id. */
   boutViews: Record<string, BoutView>;
-  scorecardAccounts: ScorecardAccount[];
 }

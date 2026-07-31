@@ -25,7 +25,6 @@ import type {
   DashboardState,
   Fighter,
   FightRecord,
-  ScorecardAccount,
   UfcEvent,
   WeightClass,
 } from "../src/schema.ts";
@@ -155,7 +154,6 @@ function emptyBoutView(bout: Bout): BoutView {
     oddsHistory: {},
     marketMoves: {},
     preFightOdds: {},
-    scorecards: [],
   };
 }
 
@@ -165,7 +163,6 @@ function emptyBoutView(bout: Bout): BoutView {
  */
 export function espnCardToDashboardState(
   card: EspnScheduledCard,
-  scorecardAccounts: readonly ScorecardAccount[],
   fetchedAt: string,
   /** Injectable for tests; defaults to the real fixture in production. */
   outlookByBoutId: ReadonlyMap<string, string> = loadFightOutlookFixture(),
@@ -207,12 +204,10 @@ export function espnCardToDashboardState(
   return {
     event,
     boutViews,
-    scorecardAccounts: scorecardAccounts.map((account) => ({ ...account })),
   };
 }
 
 export interface LoadLiveEventStateOptions {
-  scorecardAccounts: readonly ScorecardAccount[];
   now?: () => Date;
   scheduleSource?: ReturnType<typeof createEspnScheduleSource>;
 }
@@ -235,11 +230,7 @@ export async function loadLiveEventState(
   for (const summary of events) {
     const card = await source.getCard(summary.eventId);
     if (card === null) continue;
-    const state = espnCardToDashboardState(
-      card,
-      options.scorecardAccounts,
-      fetchedAt,
-    );
+    const state = espnCardToDashboardState(card, fetchedAt);
     if (state.event.bouts.length > 0) return state;
   }
 

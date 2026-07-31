@@ -65,6 +65,15 @@ function zonedWallTimeToUtc(
   return new Date(guess - offsetMinutes * 60_000);
 }
 
+/** "YYYY-MM-DD" wall-clock date for `date` in `timeZone`, for same-day comparisons. */
+export function zonedCalendarDate(
+  date: Date,
+  timeZone: string = SCHEDULE_TIME_ZONE,
+): string {
+  const { year, month, day } = getZonedDateParts(date, timeZone);
+  return `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+}
+
 /** Every scheduled slot within [-1, +2] days of `now`, sorted ascending. */
 export function scheduleSlotsAround(
   now: Date,

@@ -11,6 +11,7 @@ import { CardRail } from "./ui/CardRail.tsx";
 import { DeliveryFreshness } from "./ui/DeliveryFreshness.tsx";
 import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
+import { withoutSportsbookOnEventDay } from "./lib/marketPriority.ts";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
 import {
   defaultRoundSelection,
@@ -397,8 +398,14 @@ export default function App() {
                   </div>
                 )}
                 <MarketStrip
-                  latestOdds={view.latestOdds}
-                  preFightOdds={view.preFightOdds}
+                  latestOdds={withoutSportsbookOnEventDay(
+                    view.latestOdds,
+                    state?.event.startsAt ?? "",
+                  )}
+                  preFightOdds={withoutSportsbookOnEventDay(
+                    view.preFightOdds,
+                    state?.event.startsAt ?? "",
+                  )}
                   onOpen={() => setSection("odds")}
                 />
                 <SectionTabs active={section} onChange={setSection} />
@@ -413,13 +420,13 @@ export default function App() {
                   <>
                     <FightSummary
                       view={view}
+                      eventStartsAt={state?.event.startsAt ?? ""}
                       selection={round}
                       delivery={roundDelivery}
                       collectorRounds={dashboard.collector?.unifiedRounds}
                     />
                     <ScorecardFeed
                       view={view}
-                      accounts={state.scorecardAccounts}
                       records={
                         dashboard.collector?.unifiedRounds ?? []
                       }

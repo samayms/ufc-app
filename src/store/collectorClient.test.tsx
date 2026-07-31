@@ -115,19 +115,6 @@ function roundRecord(
       parserVersion: "test",
       payloadHash: `hash-${revision}`,
     },
-    xScores: [
-      {
-        source: "x",
-        sourcePostId: "12345",
-        scorer: "MMAJunkie",
-        round: 2,
-        score: { red: 9, blue: 10 },
-        fetchedAt: "2026-07-28T01:02:40Z",
-        parseConfidence: 1,
-        mode: "embed",
-        postUrl: "https://x.com/MMAJunkie/status/12345",
-      },
-    ],
     expertConsensus: {
       sherdog: {
         source: "sherdog",
@@ -170,7 +157,13 @@ describe("collector browser client", () => {
 
     expect(snapshot.connection).toBe("unavailable");
     expect(snapshot.dashboard).toBeNull();
-    expect(resolveDashboardData(fixture, snapshot)).toBe(fixture);
+    // Never having received real data yet is a loading state — the fixture
+    // is a reasonable instant-paint placeholder for it.
+    expect(resolveDashboardData(fixture, snapshot, false)).toBe(fixture);
+    // Once the collector delivered real data at least once, a later null
+    // must never fall back to the fixture — that would show fake prices as
+    // though they were live.
+    expect(resolveDashboardData(fixture, snapshot, true)).toBeNull();
 
     const sources = renderToStaticMarkup(
       <SourceStatus state={fixture} collector={snapshot} />,
@@ -231,16 +224,8 @@ describe("collector browser client", () => {
       bootstrapped.dashboard?.boutViews["bout-main"]?.rounds.sherdog
         ?.find((update) => update.round === 2)?.summary,
     ).toBe("Collector-delivered commentary.");
-    expect(
-      bootstrapped.dashboard?.boutViews["bout-main"]?.scorecards,
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ postId: "12345", round: 2 }),
-      ]),
-    );
     expect(bootstrapped.unifiedRounds[0]?.expertConsensus).toMatchObject({
       sherdog: { source: "sherdog" },
-      x: { source: "x" },
     });
     expect(
       getCollectorRoundDelivery(bootstrapped, "bout-main", 2),

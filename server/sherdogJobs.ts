@@ -787,17 +787,9 @@ export class SherdogRoundJobs {
 
     const bout = this.getBout(observation.boutId);
     if (bout === undefined) return;
-    const existing = this.roundStats.getUnifiedRound(
-      observation.boutId,
-      observation.round,
-    );
     await this.roundStats.setSherdogObservation(
       observation,
-      computeExpertConsensus(
-        bout,
-        observation,
-        existing?.xScores ?? [],
-      ),
+      computeExpertConsensus(bout, observation),
     );
     await this.publishHealth?.({
       source: "sherdog",

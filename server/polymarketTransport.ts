@@ -6,6 +6,8 @@ import type { CollectorConfig } from "./config.ts";
 import {
   adaptWebSocket,
   FixtureReplayTransport,
+  type MarketRestFallbackOptions,
+  type MarketReconciliationOptions,
   type MarketSocket,
   type MarketSocketFactory,
   type MarketSubscription,
@@ -23,6 +25,12 @@ import type { ParserErrorSink } from "./review.ts";
 const POLYMARKET_SOCKET_URL =
   "wss://ws-subscriptions-clob.polymarket.com/ws/market";
 export const POLYMARKET_PING_INTERVAL_MS = 10_000;
+export const POLYMARKET_REST_BASE_URL = "https://clob.polymarket.com";
+
+interface PolymarketBookResponse {
+  bids?: unknown;
+  asks?: unknown;
+}
 
 interface PolymarketLiveTransportOptions {
   tickStore: Pick<
@@ -37,6 +45,11 @@ interface PolymarketLiveTransportOptions {
   reconnect?: Partial<ReconnectPolicy>;
   metrics?: Metrics;
   review?: ParserErrorSink;
+  /** REST fetch used by both the disconnect fallback and reconciliation. */
+  fetchImpl?: typeof fetch;
+  restBaseUrl?: string;
+  restFallbackIntervalMs?: number;
+  reconciliationIntervalMs?: number;
 }
 
 export function startPolymarketPingLoop(
@@ -321,10 +334,72 @@ export class PolymarketFixtureTransport extends FixtureReplayTransport {
   }
 }
 
+/**
+ * REST order-book fetch, one token id per subscription. Reused both for the
+ * 3s disconnect fallback (best bid/ask keep the UI moving) and the 60s
+ * full-book reconciliation (the same response carries full depth), so an
+ * outage and routine drift correction share one code path.
+ */
+export function createPolymarketRestBookFetcher(options: {
+  fetchImpl?: typeof fetch;
+  baseUrl?: string;
+  clock?: MarketTransportClock;
+}): (subscriptions: readonly MarketSubscription[]) => Promise<MarketTick[]> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const baseUrl = options.baseUrl ?? POLYMARKET_REST_BASE_URL;
+  const clock = options.clock ?? { now: () => Date.now() };
+
+  return async (subscriptions) => {
+    const receivedAt = new Date(clock.now()).toISOString();
+    const results = await Promise.all(
+      subscriptions.map(async (subscription) => {
+        const response = await fetchImpl(
+          `${baseUrl}/book?token_id=${encodeURIComponent(subscription.externalId)}`,
+        );
+        if (!response.ok) return [];
+        const payload = (await response.json()) as PolymarketBookResponse;
+        const bids = depthPrices(payload.bids, "descending");
+        const asks = depthPrices(payload.asks, "ascending");
+        if (bids.length === 0 && asks.length === 0) return [];
+        return [
+          baseTick(subscription, receivedAt, receivedAt, {
+            ...(bids[0] === undefined ? {} : { bid: bids[0] }),
+            ...(asks[0] === undefined ? {} : { ask: asks[0] }),
+            depth: { bids, asks },
+          }),
+        ];
+      }),
+    );
+    return results.flat();
+  };
+}
+
 class PolymarketLiveTransport extends SupervisedMarketTransport {
   private stopPing: (() => void) | undefined;
 
   constructor(options: PolymarketLiveTransportOptions) {
+    const restBookFetcher = createPolymarketRestBookFetcher({
+      ...(options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: options.fetchImpl }),
+      ...(options.restBaseUrl === undefined
+        ? {}
+        : { baseUrl: options.restBaseUrl }),
+      ...(options.clock === undefined ? {} : { clock: options.clock }),
+    });
+    const restFallback: MarketRestFallbackOptions = {
+      fetchSnapshot: restBookFetcher,
+      ...(options.restFallbackIntervalMs === undefined
+        ? {}
+        : { intervalMs: options.restFallbackIntervalMs }),
+    };
+    const reconciliation: MarketReconciliationOptions = {
+      fetchFullBook: restBookFetcher,
+      ...(options.reconciliationIntervalMs === undefined
+        ? {}
+        : { intervalMs: options.reconciliationIntervalMs }),
+    };
+
     super({
       source: "polymarket",
       tickStore: options.tickStore,
@@ -341,6 +416,8 @@ class PolymarketLiveTransport extends SupervisedMarketTransport {
           options.subscriptions,
           receivedAt,
         ),
+      restFallback,
+      reconciliation,
       ...(options.clock === undefined ? {} : { clock: options.clock }),
       ...(options.timer === undefined ? {} : { timer: options.timer }),
       ...(options.random === undefined ? {} : { random: options.random }),

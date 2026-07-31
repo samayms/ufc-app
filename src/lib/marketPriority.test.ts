@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { OddsSnapshot } from "../schema.ts";
-import { pickPriorityMarket } from "./marketPriority.ts";
+import { pickPriorityMarket, withoutSportsbookOnEventDay } from "./marketPriority.ts";
 
 function snapshot(
   market: OddsSnapshot["market"],
@@ -63,5 +63,29 @@ describe("pickPriorityMarket", () => {
 
   it("returns null when nothing is available", () => {
     expect(pickPriorityMarket({})).toBeNull();
+  });
+});
+
+describe("withoutSportsbookOnEventDay", () => {
+  it("drops sportsbook when now falls on the event's calendar day", () => {
+    const kalshi = snapshot("kalshi");
+    const sportsbook = snapshot("sportsbook");
+    const result = withoutSportsbookOnEventDay(
+      { kalshi, sportsbook },
+      "2026-07-29T22:00:00Z",
+      Date.parse("2026-07-29T08:00:00Z"),
+    );
+    expect(result).toEqual({ kalshi });
+  });
+
+  it("keeps sportsbook on any other day", () => {
+    const kalshi = snapshot("kalshi");
+    const sportsbook = snapshot("sportsbook");
+    const result = withoutSportsbookOnEventDay(
+      { kalshi, sportsbook },
+      "2026-07-29T22:00:00Z",
+      Date.parse("2026-07-28T08:00:00Z"),
+    );
+    expect(result).toEqual({ kalshi, sportsbook });
   });
 });

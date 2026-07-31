@@ -14,7 +14,6 @@ import type {
   ExpertConsensus,
   SherdogRoundObservation,
 } from "../src/schema.ts";
-import type { ParsedExpertScore } from "../src/sources/x.ts";
 import type {
   CollectorEvent,
   CollectorEventBus,
@@ -81,7 +80,6 @@ export interface UnifiedRoundRecord {
   endingSignal: RoundEndingSignal;
   citoStats?: RoundStatsRecord;
   sherdog?: SherdogRoundObservation;
-  xScores?: ParsedExpertScore[];
   marketAtEnd: MarketAtEnd;
   expertConsensus?: ExpertConsensus;
   provisional: boolean;
@@ -199,31 +197,9 @@ function isSherdogObservation(
   );
 }
 
-function isParsedExpertScore(value: unknown): value is ParsedExpertScore {
-  return (
-    isRecord(value) &&
-    value.source === "x" &&
-    typeof value.sourcePostId === "string" &&
-    typeof value.scorer === "string" &&
-    Number.isSafeInteger(value.round) &&
-    (value.round as number) >= 1 &&
-    isRecord(value.score) &&
-    Number.isSafeInteger(value.score.red) &&
-    Number.isSafeInteger(value.score.blue) &&
-    isTimestamp(value.fetchedAt) &&
-    typeof value.parseConfidence === "number" &&
-    value.parseConfidence >= 0 &&
-    value.parseConfidence <= 1 &&
-    (value.mode === "embed" ||
-      value.mode === "manual" ||
-      value.mode === "api") &&
-    typeof value.postUrl === "string"
-  );
-}
-
 function isExpertConsensus(value: unknown): value is ExpertConsensus {
   if (!isRecord(value)) return false;
-  return ["sherdog", "x"].every((source) => {
+  return ["sherdog"].every((source) => {
     const consensus = value[source];
     return (
       consensus === undefined ||
@@ -254,9 +230,6 @@ function isUnifiedRoundRecord(
       isRoundStatsRecord(value.citoStats)) &&
     (value.sherdog === undefined ||
       isSherdogObservation(value.sherdog)) &&
-    (value.xScores === undefined ||
-      (Array.isArray(value.xScores) &&
-        value.xScores.every(isParsedExpertScore))) &&
     isRecord(value.marketAtEnd) &&
     (value.expertConsensus === undefined ||
       isExpertConsensus(value.expertConsensus)) &&
@@ -309,15 +282,6 @@ function copySherdog(
   };
 }
 
-function copyXScores(
-  scores: readonly ParsedExpertScore[],
-): ParsedExpertScore[] {
-  return scores.map((score) => ({
-    ...score,
-    score: { ...score.score },
-  }));
-}
-
 function copyExpertConsensus(
   consensus: ExpertConsensus,
 ): ExpertConsensus {
@@ -325,7 +289,6 @@ function copyExpertConsensus(
     ...(consensus.sherdog === undefined
       ? {}
       : { sherdog: { ...consensus.sherdog } }),
-    ...(consensus.x === undefined ? {} : { x: { ...consensus.x } }),
   };
 }
 
@@ -338,9 +301,6 @@ function copyUnified(record: UnifiedRoundRecord): UnifiedRoundRecord {
     ...(record.sherdog === undefined
       ? {}
       : { sherdog: copySherdog(record.sherdog) }),
-    ...(record.xScores === undefined
-      ? {}
-      : { xScores: copyXScores(record.xScores) }),
     marketAtEnd: copyMarketAtEnd(record.marketAtEnd),
     ...(record.expertConsensus === undefined
       ? {}
@@ -632,65 +592,6 @@ export class RoundStatsPipeline {
       const next: UnifiedRoundRecord = {
         ...copyUnified(previous),
         sherdog: copySherdog(observation),
-        ...(expertConsensus === undefined
-          ? {}
-          : {
-              expertConsensus: copyExpertConsensus(expertConsensus),
-            }),
-      };
-      await this.persistUnified(next);
-      return true;
-    });
-  }
-
-  setXScores(
-    boutId: string,
-    round: number,
-    scores: readonly ParsedExpertScore[],
-    expertConsensus?: ExpertConsensus,
-  ): Promise<boolean> {
-    return this.enqueueState(async () => {
-      if (
-        boutId.trim().length === 0 ||
-        !Number.isSafeInteger(round) ||
-        round < 1 ||
-        !scores.every(isParsedExpertScore)
-      ) {
-        throw new TypeError("X scores are not normalized");
-      }
-      const previous = this.unified.get(roundKey(boutId, round));
-      if (previous === undefined) return false;
-      const knownPostIds = new Set(
-        this.getUnifiedRounds().flatMap((record) =>
-          (record.xScores ?? []).map((score) => score.sourcePostId),
-        ),
-      );
-      const currentPostIds = new Set(
-        (previous.xScores ?? []).map((score) => score.sourcePostId),
-      );
-      const unique = new Map<string, ParsedExpertScore>();
-      for (const score of [...(previous.xScores ?? []), ...scores]) {
-        if (
-          score.round !== round ||
-          (knownPostIds.has(score.sourcePostId) &&
-            !currentPostIds.has(score.sourcePostId))
-        ) {
-          continue;
-        }
-        unique.set(`${score.source}:${score.sourcePostId}`, score);
-      }
-      const nextScores = copyXScores([...unique.values()]);
-      if (
-        JSON.stringify(previous.xScores ?? []) ===
-          JSON.stringify(nextScores) &&
-        JSON.stringify(previous.expertConsensus) ===
-          JSON.stringify(expertConsensus)
-      ) {
-        return false;
-      }
-      const next: UnifiedRoundRecord = {
-        ...copyUnified(previous),
-        ...(nextScores.length === 0 ? {} : { xScores: nextScores }),
         ...(expertConsensus === undefined
           ? {}
           : {
@@ -1128,9 +1029,6 @@ export class RoundStatsPipeline {
         ...(previous?.sherdog === undefined
           ? {}
           : { sherdog: copySherdog(previous.sherdog) }),
-        ...(previous?.xScores === undefined
-          ? {}
-          : { xScores: copyXScores(previous.xScores) }),
         marketAtEnd: this.marketAtEndFor(
           event.boutId,
           event.round,

@@ -188,7 +188,7 @@ async function startCollector(
       ...extraEnv,
     },
     storage,
-    sse: { heartbeatMs: 50 },
+    sse: { heartbeatMs: 50, flushIntervalMs: 0 },
   });
   collectors.push(collector);
   return { collector, port: await collector.start() };
@@ -385,7 +385,7 @@ describe.skipIf(!localhostAvailable)(
     await collector.push.publish("update", {
       note: secretValues.join(" "),
       authorization: credentialEnv.CITO_API_KEY,
-      nested: { token: credentialEnv.X_BEARER_TOKEN },
+      nested: { token: credentialEnv.KALSHI_API_KEY_ID },
     });
     const update = await client.nextEvent();
     const bootstrapResponse = await fetch(
@@ -491,7 +491,7 @@ describe.skipIf(!localhostAvailable)(
     const collector = await createCollector({
       env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
       storage: new MemoryStorage(),
-      sse: { heartbeatMs: 50 },
+      sse: { heartbeatMs: 50, flushIntervalMs: 0 },
       lifecycle: { enabled: true, clock: time, timer: time },
     });
     collectors.push(collector);
@@ -534,7 +534,7 @@ describe.skipIf(!localhostAvailable)(
         PRE_EVENT_POLL_NON_EVENT_DAY_MS: "1000",
       },
       storage: new MemoryStorage(),
-      sse: { heartbeatMs: 50 },
+      sse: { heartbeatMs: 50, flushIntervalMs: 0 },
       preEventPoll: {
         enabled: true,
         clock: time,
@@ -812,9 +812,7 @@ describe("fixture collector loading", () => {
 
   it("keeps the live Sherdog transport fail-closed without permission and wires it when permitted", async () => {
     const liveEnv = Object.fromEntries(
-      CREDENTIAL_ENV_NAMES.filter((name) => name !== "X_BEARER_TOKEN").map(
-        (name) => [name, `secret-${name}`],
-      ),
+      CREDENTIAL_ENV_NAMES.map((name) => [name, `secret-${name}`]),
     );
     const stateLoader = async () => {
       const state = await loadFixtureState();
@@ -945,50 +943,4 @@ describe("fixture collector loading", () => {
     );
   });
 
-  it("wires configured manual X score links into the unified round", async () => {
-    const collector = await createCollector({
-      env: {
-        DATA_MODE: "fixture",
-        COLLECTOR_PORT: "0",
-        X_MODE: "manual",
-        X_MANUAL_SCORES_JSON: JSON.stringify([
-          {
-            boutId: "bout-main",
-            sourcePostId: "12345",
-            scorer: "MMAJunkie",
-            round: 1,
-            score: { red: 10, blue: 9 },
-            postUrl: "https://x.com/MMAJunkie/status/12345",
-          },
-        ]),
-      },
-      storage: new MemoryStorage(),
-    });
-    collectors.push(collector);
-
-    collector.eventBus.emit({
-      type: "ROUND_ENDED",
-      boutId: "bout-main",
-      round: 1,
-      detectedAt: "2026-07-28T00:00:00Z",
-      confirmation: "period_transition",
-    });
-    await collector.xJobs.idle();
-
-    expect(
-      collector.roundStats.getUnifiedRound("bout-main", 1),
-    ).toMatchObject({
-      xScores: [
-        {
-          source: "x",
-          sourcePostId: "12345",
-          mode: "manual",
-          postUrl: "https://x.com/MMAJunkie/status/12345",
-        },
-      ],
-      expertConsensus: {
-        x: expect.objectContaining({ source: "x", leader: "red" }),
-      },
-    });
-  });
 });

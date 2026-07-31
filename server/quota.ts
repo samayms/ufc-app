@@ -5,10 +5,18 @@ export const DEFAULT_QUOTA_STORAGE_STREAM = "quota-acquisitions";
 export const DEFAULT_INTERVAL_QUOTA_STORAGE_STREAM =
   "interval-quota-acquisitions";
 export const DEFAULT_SPEND_STORAGE_STREAM = "spend-acquisitions";
+/**
+ * 75 requests/hour, 400/day. perMinute is 5: well above the ~1.25/minute
+ * average implied by the hourly cap, so a burst of immediate triggers
+ * landing in the same minute (e.g. a round ending seconds before a
+ * fast-finish fight completion, each firing its own immediate fetch plus a
+ * retry) isn't blocked by the per-minute window — only the hour/day totals
+ * are meant to shape steady-state cadence.
+ */
 export const DEFAULT_ODDS_API_IO_QUOTA_POLICY: QuotaPolicy = {
-  perMinute: 90,
-  perHour: 90,
-  perDay: 450,
+  perMinute: 5,
+  perHour: 75,
+  perDay: 400,
 };
 
 export type QuotaWindow = "minute" | "hour" | "day";

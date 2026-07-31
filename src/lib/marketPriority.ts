@@ -1,3 +1,4 @@
+import { isEventDay } from "./eventIdentity.ts";
 import type { OddsSnapshot } from "../schema.ts";
 
 /** Below this trading volume, Kalshi/Polymarket defer to sportsbook odds. */
@@ -21,4 +22,18 @@ export function pickPriorityMarket(
     return polymarket;
   }
   return latestOdds.sportsbook ?? kalshi ?? polymarket ?? null;
+}
+
+/**
+ * The Odds API ("sportsbook") only ever collects twice daily — on the
+ * event's calendar day it stops updating, so the UI stops showing it
+ * rather than displaying an increasingly stale price as though it were
+ * current. Kalshi/Polymarket/Odds-API.io are unaffected.
+ */
+export function withoutSportsbookOnEventDay<
+  T extends Partial<Record<OddsSnapshot["market"], OddsSnapshot>>,
+>(odds: T, eventStartsAt: string, now: number = Date.now()): T {
+  if (!isEventDay(eventStartsAt, now)) return odds;
+  const { sportsbook: _sportsbook, ...rest } = odds;
+  return rest as T;
 }

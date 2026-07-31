@@ -90,6 +90,7 @@ describe("SsePush", () => {
       getBootstrap: () => ({ state: { id: "fixture" } }),
       secrets: ["collector-secret"],
       heartbeatMs: 60_000,
+      flushIntervalMs: 0,
     });
     const first = request();
     const second = request();
@@ -125,6 +126,7 @@ describe("SsePush", () => {
       storage: new MemoryStorage(),
       getBootstrap: () => ({ state: "current" }),
       heartbeatMs: 60_000,
+      flushIntervalMs: 0,
     });
     await push.restore();
     await push.publish("update", { sequence: 1 });
@@ -162,6 +164,7 @@ describe("SsePush", () => {
       getBootstrap: () => ({ revision: 1 }),
       bufferSize: 2,
       heartbeatMs: 60_000,
+      flushIntervalMs: 0,
     });
     await first.publish("update", { sequence: 1 });
     await first.publish("update", { sequence: 2 });
@@ -173,6 +176,7 @@ describe("SsePush", () => {
       getBootstrap: () => ({ revision: 2 }),
       bufferSize: 2,
       heartbeatMs: 60_000,
+      flushIntervalMs: 0,
     });
     await second.restore();
     expect(second.getLastEventId()).toBe(3);
@@ -216,6 +220,47 @@ describe("SsePush", () => {
       ": heartbeat 2026-07-28T01:02:03Z",
     );
     expect(push.getLastEventId()).toBe(0);
+    await push.close();
+  });
+
+  it("batches client writes to at most one flush per flushIntervalMs", async () => {
+    vi.useFakeTimers();
+    const push = new SsePush({
+      storage: new MemoryStorage(),
+      getBootstrap: () => ({ state: "fixture" }),
+      heartbeatMs: 60_000,
+      flushIntervalMs: 500,
+    });
+    const client = request();
+    await push.handle(
+      client.request as unknown as IncomingMessage,
+      client.response as unknown as ServerResponse,
+    );
+
+    // handle() writes the connect-time bootstrap immediately (it's a
+    // one-time, per-client message, not part of the broadcast batch).
+    expect(client.response.chunks).toHaveLength(1);
+
+    await Promise.all([
+      push.publish("update", { sequence: 1 }),
+      push.publish("update", { sequence: 2 }),
+    ]);
+
+    // Both events are durably appended immediately, but neither has reached
+    // the client's socket yet — the flush is still pending.
+    expect(client.response.chunks).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    expect(client.response.chunks).toHaveLength(2);
+    expect(contents(client.response)).toContain('"sequence":1');
+    expect(contents(client.response)).toContain('"sequence":2');
+
+    const third = push.publish("update", { sequence: 3 });
+    await vi.advanceTimersByTimeAsync(500);
+    await third;
+    expect(client.response.chunks).toHaveLength(3);
+
     await push.close();
   });
 });

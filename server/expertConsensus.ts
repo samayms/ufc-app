@@ -6,10 +6,6 @@ import type {
   SherdogRoundObservation,
 } from "../src/schema.ts";
 import { fighterNameMatches } from "../src/sources/sherdog.ts";
-import {
-  scoreWinner,
-  type ParsedExpertScore,
-} from "../src/sources/x.ts";
 
 function winnerCorner(bout: Bout, winner: string): Corner | undefined {
   return (["red", "blue"] as const).find((corner) =>
@@ -47,7 +43,6 @@ function consensusValue(
 export function computeExpertConsensus(
   bout: Bout,
   sherdog: SherdogRoundObservation | undefined,
-  xScores: readonly ParsedExpertScore[],
 ): ExpertConsensus | undefined {
   const sherdogConsensus =
     sherdog === undefined
@@ -60,18 +55,9 @@ export function computeExpertConsensus(
             return corner === undefined ? [] : [corner];
           }),
         );
-  const xConsensus = consensusValue(
-    "x",
-    xScores.map((score) => scoreWinner(score.score)),
-  );
 
-  if (sherdogConsensus === undefined && xConsensus === undefined) {
+  if (sherdogConsensus === undefined) {
     return undefined;
   }
-  return {
-    ...(sherdogConsensus === undefined
-      ? {}
-      : { sherdog: sherdogConsensus }),
-    ...(xConsensus === undefined ? {} : { x: xConsensus }),
-  };
+  return { sherdog: sherdogConsensus };
 }

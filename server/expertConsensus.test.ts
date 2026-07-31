@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { Bout, SherdogRoundObservation } from "../src/schema.ts";
-import type { ParsedExpertScore } from "../src/sources/x.ts";
 import { loadFixtureEvent } from "../src/store/fixtureEvent.ts";
 import { computeExpertConsensus } from "./expertConsensus.ts";
 
@@ -9,7 +8,7 @@ const bout = loadFixtureEvent().bouts.find(
 )!;
 
 describe("computeExpertConsensus", () => {
-  it("keeps Sherdog cards and X scores in separate labeled values", () => {
+  it("labels Sherdog cards as a source-specific consensus value", () => {
     const sherdog: SherdogRoundObservation = {
       boutId: bout.id,
       round: 1,
@@ -23,46 +22,14 @@ describe("computeExpertConsensus", () => {
       parserVersion: "test",
       payloadHash: "hash",
     };
-    const xScores: ParsedExpertScore[] = [
-      {
-        source: "x",
-        sourcePostId: "1",
-        scorer: "MMAJunkie",
-        round: 1,
-        score: { red: 10, blue: 9 },
-        fetchedAt: "2026-07-28T00:00:40Z",
-        parseConfidence: 1,
-        mode: "manual",
-        postUrl: "https://x.com/MMAJunkie/status/1",
-      },
-      {
-        source: "x",
-        sourcePostId: "2",
-        scorer: "KevinI",
-        round: 1,
-        score: { red: 10, blue: 9 },
-        fetchedAt: "2026-07-28T00:00:40Z",
-        parseConfidence: 1,
-        mode: "manual",
-        postUrl: "https://x.com/KevinI/status/2",
-      },
-    ];
 
-    expect(computeExpertConsensus(bout, sherdog, xScores)).toEqual({
+    expect(computeExpertConsensus(bout, sherdog)).toEqual({
       sherdog: {
         source: "sherdog",
         redVotes: 1,
         blueVotes: 1,
         drawVotes: 0,
         total: 2,
-      },
-      x: {
-        source: "x",
-        redVotes: 2,
-        blueVotes: 0,
-        drawVotes: 0,
-        total: 2,
-        leader: "red",
       },
     });
   });
@@ -90,7 +57,7 @@ describe("computeExpertConsensus", () => {
       payloadHash: "hash",
     };
 
-    expect(computeExpertConsensus(duPlessis, sherdog, [])?.sherdog).toEqual({
+    expect(computeExpertConsensus(duPlessis, sherdog)?.sherdog).toEqual({
       source: "sherdog",
       redVotes: 2,
       blueVotes: 1,
@@ -120,7 +87,7 @@ describe("computeExpertConsensus", () => {
     };
 
     expect(
-      computeExpertConsensus(duPlessis, sherdog, [])?.sherdog,
+      computeExpertConsensus(duPlessis, sherdog)?.sherdog,
     ).toBeUndefined();
   });
 });

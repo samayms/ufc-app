@@ -1,9 +1,5 @@
 import { DEFAULT_GEMINI_MODEL } from "./geminiSummarizer.ts";
 import { DEFAULT_DATA_DIRECTORY } from "./storage.ts";
-import type {
-  XConfiguredScore,
-  XEmbedMetadata,
-} from "../src/sources/x.ts";
 
 export const CREDENTIAL_ENV_NAMES = [
   "CITO_API_KEY",
@@ -11,17 +7,14 @@ export const CREDENTIAL_ENV_NAMES = [
   "THE_ODDS_API_KEY",
   "KALSHI_API_KEY_ID",
   "KALSHI_PRIVATE_KEY_PATH",
-  "X_BEARER_TOKEN",
   "GEMINI_API_KEY",
 ] as const;
 
 export type CredentialEnvName = (typeof CREDENTIAL_ENV_NAMES)[number];
 export type DataMode = "fixture" | "live";
-export type XMode = "disabled" | "embed" | "manual" | "api";
 
 export interface CollectorConfig {
   dataMode: DataMode;
-  xMode: XMode;
   port: number;
   persistencePath: string;
   staleAfterMs: {
@@ -66,10 +59,6 @@ export interface CollectorConfig {
   /** Optional hand-pinned Cito event slug for a card whose automatic lookup is inconclusive. */
   citoEventSlug?: string;
   oddsApiIoBookmakers: readonly string[];
-  xSpendCapUsd: number;
-  xRequestCostUsd: number;
-  xEmbeds: readonly XEmbedMetadata[];
-  xManualScores: readonly XConfiguredScore[];
   sherdog: {
     permissionScope: string;
     requestIntervalMs: number;
@@ -222,103 +211,13 @@ function readCredentials(
   return credentials;
 }
 
-function parseXConfiguredScores(
-  env: CollectorEnvironment,
-  name: string,
-): readonly XConfiguredScore[] {
-  const raw = env[name]?.trim();
-  if (!raw) return [];
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    throw new TypeError(`${name} must be valid JSON`);
-  }
-  if (!Array.isArray(parsed)) {
-    throw new TypeError(`${name} must be a JSON array`);
-  }
-
-  return parsed.map((value, index) => {
-    if (
-      typeof value !== "object" ||
-      value === null ||
-      typeof value.boutId !== "string" ||
-      typeof value.sourcePostId !== "string" ||
-      typeof value.scorer !== "string" ||
-      !Number.isSafeInteger(value.round) ||
-      typeof value.score !== "object" ||
-      value.score === null ||
-      !Number.isSafeInteger(value.score.red) ||
-      !Number.isSafeInteger(value.score.blue) ||
-      (value.postUrl !== undefined && typeof value.postUrl !== "string")
-    ) {
-      throw new TypeError(`${name}[${index}] is not a configured X score`);
-    }
-    return {
-      boutId: value.boutId,
-      sourcePostId: value.sourcePostId,
-      scorer: value.scorer,
-      round: value.round as number,
-      score: {
-        red: value.score.red as number,
-        blue: value.score.blue as number,
-      },
-      ...(value.postUrl === undefined
-        ? {}
-        : { postUrl: value.postUrl }),
-    };
-  });
-}
-
-function parseXEmbeds(
-  env: CollectorEnvironment,
-  name: string,
-): readonly XEmbedMetadata[] {
-  const raw = env[name]?.trim();
-  if (!raw) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    throw new TypeError(`${name} must be valid JSON`);
-  }
-  if (!Array.isArray(parsed)) {
-    throw new TypeError(`${name} must be a JSON array`);
-  }
-  return parsed.map((value, index) => {
-    if (
-      typeof value !== "object" ||
-      value === null ||
-      typeof value.boutId !== "string" ||
-      typeof value.postId !== "string" ||
-      typeof value.scorer !== "string" ||
-      (value.round !== undefined && !Number.isSafeInteger(value.round)) ||
-      (value.postUrl !== undefined && typeof value.postUrl !== "string")
-    ) {
-      throw new TypeError(`${name}[${index}] is not X embed metadata`);
-    }
-    return {
-      boutId: value.boutId,
-      postId: value.postId,
-      scorer: value.scorer,
-      ...(value.round === undefined
-        ? {}
-        : { round: value.round as number }),
-      ...(value.postUrl === undefined ? {} : { postUrl: value.postUrl }),
-    };
-  });
-}
 
 function assertLiveCredentials(
   credentials: Readonly<Partial<Record<CredentialEnvName, string>>>,
-  xMode: XMode,
 ): void {
-  const required =
-    xMode === "api"
-      ? [...LIVE_REQUIRED_CREDENTIALS, "X_BEARER_TOKEN" as const]
-      : LIVE_REQUIRED_CREDENTIALS;
-  const missing = required.filter((name) => !credentials[name]);
+  const missing = LIVE_REQUIRED_CREDENTIALS.filter(
+    (name) => !credentials[name],
+  );
 
   if (missing.length > 0) {
     throw new Error(
@@ -345,24 +244,14 @@ export function loadConfig(
     ["fixture", "live"] as const,
     "fixture",
   );
-  const xMode = parseChoice(
-    env,
-    "X_MODE",
-    ["disabled", "embed", "manual", "api"] as const,
-    "embed",
-  );
   const credentials = readCredentials(env);
 
-  if (xMode === "api" && !credentials.X_BEARER_TOKEN) {
-    throw new Error("X API mode requires server credentials: X_BEARER_TOKEN");
-  }
   if (dataMode === "live") {
-    assertLiveCredentials(credentials, xMode);
+    assertLiveCredentials(credentials);
   }
 
   return {
     dataMode,
-    xMode,
     port: parsePort(env),
     persistencePath:
       env.PERSISTENCE_PATH?.trim() || DEFAULT_DATA_DIRECTORY,
@@ -400,7 +289,7 @@ export function loadConfig(
       oddsApiIo: parsePositiveInteger(
         env,
         "ODDS_API_IO_ACTIVE_POLL_MS",
-        15_000,
+        60_000,
       ),
       theOddsApi: parsePositiveInteger(
         env,
@@ -443,17 +332,6 @@ export function loadConfig(
       ? { citoEventSlug: env.CITO_EVENT_SLUG.trim() }
       : {}),
     oddsApiIoBookmakers: parseBookmakers(env),
-    xSpendCapUsd: parseNonNegativeNumber(env, "X_SPEND_CAP_USD", 0),
-    xRequestCostUsd: parseNonNegativeNumber(
-      env,
-      "X_REQUEST_COST_USD",
-      0.01,
-    ),
-    xEmbeds: parseXEmbeds(env, "X_EMBED_POSTS_JSON"),
-    xManualScores: parseXConfiguredScores(
-      env,
-      "X_MANUAL_SCORES_JSON",
-    ),
     sherdog: {
       permissionScope:
         env.SHERDOG_PERMISSION_SCOPE?.trim() || "none",

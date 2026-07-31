@@ -5,12 +5,7 @@
  */
 
 import { useEffect, useState } from "react";
-import type {
-  BoutView,
-  DashboardState,
-  OddsSnapshot,
-  ScorecardAccount,
-} from "../schema.ts";
+import type { BoutView, DashboardState, OddsSnapshot } from "../schema.ts";
 import { marketMovesForBout } from "../lib/oddsMath.ts";
 import type { SourceConfig } from "../sources/contract.ts";
 import { createCitoSource } from "../sources/cito.ts";
@@ -19,7 +14,6 @@ import { createKalshiSource } from "../sources/kalshi.ts";
 import { createOddsApiSource } from "../sources/oddsapi.ts";
 import { createPolymarketSource } from "../sources/polymarket.ts";
 import { createSherdogSource } from "../sources/sherdog.ts";
-import { createXSource } from "../sources/x.ts";
 import {
   createCollectorClient,
   type CollectorSnapshot,
@@ -44,15 +38,6 @@ export interface DashboardLoadState {
   reload: () => void;
 }
 
-/** Journalists whose scorecards we embed; trimmed once activity is confirmed. */
-const SCORECARD_ACCOUNTS: ScorecardAccount[] = [
-  { handle: "arielhelwani", displayName: "Ariel Helwani", active: true },
-  { handle: "DinThomas", displayName: "Din Thomas", active: true },
-  { handle: "KevinI", displayName: "Kevin Iole", active: true },
-  { handle: "lthomasnews", displayName: "Luke Thomas", active: true },
-  { handle: "MMAJunkie", displayName: "MMA Junkie", active: true },
-];
-
 export async function assembleDashboard(): Promise<DashboardState> {
   const event = loadFixtureEvent();
   const polymarket = createPolymarketSource(config);
@@ -61,7 +46,6 @@ export async function assembleDashboard(): Promise<DashboardState> {
   const kalshi = createKalshiSource(config);
   const espn = createEspnSource(config);
   const cito = createCitoSource(config);
-  const x = createXSource({ mode: "embed", fixtureMode: true });
 
   const boutViews: Record<string, BoutView> = {};
   await Promise.all(
@@ -125,12 +109,11 @@ export async function assembleDashboard(): Promise<DashboardState> {
         oddsHistory,
         marketMoves,
         preFightOdds,
-        scorecards: x.configuredEmbeds(bout.id),
       };
     }),
   );
 
-  return { event, boutViews, scorecardAccounts: SCORECARD_ACCOUNTS };
+  return { event, boutViews };
 }
 
 /**
@@ -196,11 +179,21 @@ export function collectorSnapshotIsStale(
   );
 }
 
+/**
+ * The fixture is only ever a loading placeholder for the instant it takes an
+ * SSE connection to deliver its first real bootstrap. Once the collector has
+ * delivered real data even once, a later `null` (a reconnect that hasn't
+ * re-bootstrapped yet) must not silently fall back to fixture odds — that
+ * would show fake prices as though they were live. `hasReceivedLiveData`
+ * lets the caller track that one-way transition.
+ */
 export function resolveDashboardData(
   fixture: DashboardState,
   snapshot: CollectorSnapshot,
-): DashboardState {
-  return snapshot.dashboard ?? fixture;
+  hasReceivedLiveData: boolean,
+): DashboardState | null {
+  if (snapshot.dashboard !== null) return snapshot.dashboard;
+  return hasReceivedLiveData ? null : fixture;
 }
 
 export function useDashboard(): DashboardLoadState {
@@ -250,12 +243,19 @@ export function useDashboard(): DashboardLoadState {
         if (collectorDisabled(window.location.search)) return;
 
         const collector = createCollectorClient();
+        let hasReceivedLiveData = false;
         const unsubscribe = collector.subscribe((snapshot) => {
           if (cancelled) return;
+          if (snapshot.dashboard !== null) hasReceivedLiveData = true;
+          const data = resolveDashboardData(
+            fixture,
+            snapshot,
+            hasReceivedLiveData,
+          );
           setState((current) => ({
             status: "ready",
-            data: resolveDashboardData(fixture, snapshot),
-            stale: collectorSnapshotIsStale(snapshot),
+            data,
+            stale: data === null || collectorSnapshotIsStale(snapshot),
             collector: snapshot,
             ...(current.message === undefined
               ? {}

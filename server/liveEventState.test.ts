@@ -40,7 +40,7 @@ describe("espnCardToDashboardState outlook wiring", () => {
       ["comp-1", "Medic pressures behind volume; Rodriguez looks to grind it out."],
     ]);
 
-    const state = espnCardToDashboardState(card(), [], "2026-07-30T00:00:00Z", outlookByBoutId);
+    const state = espnCardToDashboardState(card(), "2026-07-30T00:00:00Z", outlookByBoutId);
 
     expect(state.event.bouts.find((b) => b.id === "comp-1")?.outlook).toBe(
       "Medic pressures behind volume; Rodriguez looks to grind it out.",
@@ -50,7 +50,6 @@ describe("espnCardToDashboardState outlook wiring", () => {
   it("leaves outlook undefined for a bout with no fixture entry", () => {
     const state = espnCardToDashboardState(
       card(),
-      [],
       "2026-07-30T00:00:00Z",
       new Map(),
     );
@@ -62,7 +61,7 @@ describe("espnCardToDashboardState outlook wiring", () => {
     // Real fixture starts empty in this checkout / for a card it hasn't
     // covered, so this just proves the default path doesn't throw and
     // produces no outlook rather than crashing.
-    const state = espnCardToDashboardState(card(), [], "2026-07-30T00:00:00Z");
+    const state = espnCardToDashboardState(card(), "2026-07-30T00:00:00Z");
 
     expect(state.event.bouts).toHaveLength(2);
   });

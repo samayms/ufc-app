@@ -101,6 +101,7 @@ async function harness(
     quotaPolicy?: QuotaPolicy;
     activePollMs?: number;
     getH2hSnapshot?: ReturnType<typeof vi.fn>;
+    enabled?: boolean | (() => boolean);
   } = {},
 ): Promise<Harness> {
   const eventBus = new CollectorEventBus();
@@ -123,6 +124,9 @@ async function harness(
     ...(overrides.quotaPolicy === undefined
       ? {}
       : { quotaPolicy: overrides.quotaPolicy }),
+    ...(overrides.enabled === undefined
+      ? {}
+      : { enabled: overrides.enabled }),
   });
 
   return { poller, eventBus, timer, getH2hSnapshot, ingest, snapshotSource };
@@ -310,6 +314,64 @@ describe("TheOddsApiActivePoller", () => {
     await poller.idle();
 
     expect(getH2hSnapshot).not.toHaveBeenCalled();
+    await poller.close();
+  });
+
+  it("never starts polling when disabled with a boolean", async () => {
+    const { poller, eventBus, getH2hSnapshot } = await harness({
+      enabled: false,
+    });
+
+    eventBus.emit({
+      type: "FIGHT_STARTED",
+      boutId: BOUT.id,
+      detectedAt: "2026-08-15T21:05:00.000Z",
+    });
+    await poller.idle();
+
+    expect(poller.isActive(BOUT.id)).toBe(false);
+    expect(getH2hSnapshot).not.toHaveBeenCalled();
+    await poller.close();
+  });
+
+  it("never starts polling when the enabled predicate returns false", async () => {
+    const { poller, eventBus, getH2hSnapshot } = await harness({
+      enabled: () => false,
+    });
+
+    eventBus.emit({
+      type: "FIGHT_STARTED",
+      boutId: BOUT.id,
+      detectedAt: "2026-08-15T21:05:00.000Z",
+    });
+    await poller.idle();
+
+    expect(poller.isActive(BOUT.id)).toBe(false);
+    expect(getH2hSnapshot).not.toHaveBeenCalled();
+    await poller.close();
+  });
+
+  it("stops scheduling further polls once the predicate flips to false mid-event", async () => {
+    let enabled = true;
+    const { poller, eventBus, timer, getH2hSnapshot } = await harness({
+      enabled: () => enabled,
+    });
+
+    eventBus.emit({
+      type: "FIGHT_STARTED",
+      boutId: BOUT.id,
+      detectedAt: "2026-08-15T21:05:00.000Z",
+    });
+    await poller.idle();
+    expect(getH2hSnapshot).toHaveBeenCalledTimes(1);
+    expect(timer.pending.size).toBe(1);
+
+    enabled = false;
+    timer.fireAll();
+    await poller.idle();
+
+    expect(getH2hSnapshot).toHaveBeenCalledTimes(1);
+    expect(timer.pending.size).toBe(0);
     await poller.close();
   });
 });

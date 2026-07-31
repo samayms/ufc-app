@@ -47,3 +47,19 @@ export function hasEventStarted(
   const startsAtMs = Date.parse(startsAt);
   return Number.isFinite(startsAtMs) && now >= startsAtMs;
 }
+
+/** True when `startsAt` falls on the same calendar day as `now`, in the
+ * viewer's local time zone. Used to gate same-day-only display rules (e.g.
+ * hiding a provider that only misbehaves on the day of the event) — distinct
+ * from `hasEventStarted`, which cares about the instant, not the date. */
+export function isEventDay(startsAt: string, now: number = Date.now()): boolean {
+  const startsAtMs = Date.parse(startsAt);
+  if (!Number.isFinite(startsAtMs)) return false;
+  const eventDate = new Date(startsAtMs);
+  const nowDate = new Date(now);
+  return (
+    eventDate.getUTCFullYear() === nowDate.getUTCFullYear() &&
+    eventDate.getUTCMonth() === nowDate.getUTCMonth() &&
+    eventDate.getUTCDate() === nowDate.getUTCDate()
+  );
+}

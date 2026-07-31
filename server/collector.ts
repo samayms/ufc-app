@@ -10,7 +10,6 @@ import type {
   DashboardState,
   ExternalRef,
   OddsSnapshot,
-  ScorecardAccount,
   SourceId,
 } from "../src/schema.ts";
 import {
@@ -41,11 +40,6 @@ import {
   createLiveGeminiSummarizer,
   type RoundSummarizer,
 } from "./geminiSummarizer.ts";
-import {
-  createXSource,
-  type XApiFetcher,
-  type XScoreSource,
-} from "../src/sources/x.ts";
 import {
   createLiveCitoDiscoveryTransport,
   discoverCitoBouts,
@@ -146,7 +140,7 @@ import {
   type TickStoreClock,
 } from "./tickStore.ts";
 import { TheOddsApiRoundJob } from "./theOddsApiJob.ts";
-import { XRoundJobs } from "./xJobs.ts";
+import { isEventCalendarDay } from "./espnPollingSchedule.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
 export const COLLECTOR_HEALTH_STREAM = SOURCE_HEALTH_STORAGE_STREAM;
@@ -244,11 +238,6 @@ export interface CollectorSherdogOptions {
   baseUrl?: string;
 }
 
-export interface CollectorXOptions {
-  source?: XScoreSource;
-  apiFetcher?: XApiFetcher;
-}
-
 export interface CollectorLifecycleDriverOptions {
   /** Overrides config.lifecycleDriverEnabled (defaults to live mode only; see README). */
   enabled?: boolean;
@@ -279,14 +268,13 @@ export interface CreateCollectorOptions {
   host?: string;
   sse?: Pick<
     SsePushOptions,
-    "bufferSize" | "heartbeatMs" | "now"
+    "bufferSize" | "heartbeatMs" | "now" | "flushIntervalMs"
   >;
   roundStats?: CollectorRoundStatsOptions;
   cito?: CollectorCitoOptions;
   market?: CollectorMarketOptions;
   sportsbook?: CollectorSportsbookOptions;
   sherdog?: CollectorSherdogOptions;
-  x?: CollectorXOptions;
   lifecycle?: CollectorLifecycleDriverOptions;
   preEventPoll?: CollectorPreEventPollOptions;
   health?: {
@@ -309,7 +297,6 @@ export interface Collector {
   readonly theOddsApiJob: TheOddsApiRoundJob;
   readonly theOddsApiActivePoller: TheOddsApiActivePoller;
   readonly sherdogJobs: SherdogRoundJobs;
-  readonly xJobs: XRoundJobs;
   readonly lifecycle: FightLifecycleMachine;
   readonly lifecycleDriver: LifecycleDriver;
   readonly preEventPoller: PreEventPoller;
@@ -328,18 +315,6 @@ interface PersistedCollectorState {
   state: DashboardState;
 }
 
-const SCORECARD_ACCOUNTS: readonly ScorecardAccount[] = [
-  {
-    handle: "arielhelwani",
-    displayName: "Ariel Helwani",
-    active: true,
-  },
-  { handle: "DinThomas", displayName: "Din Thomas", active: true },
-  { handle: "KevinI", displayName: "Kevin Iole", active: true },
-  { handle: "lthomasnews", displayName: "Luke Thomas", active: true },
-  { handle: "MMAJunkie", displayName: "MMA Junkie", active: true },
-];
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -350,8 +325,7 @@ function isDashboardState(value: unknown): value is DashboardState {
     isRecord(value.event) &&
     typeof value.event.id === "string" &&
     Array.isArray(value.event.bouts) &&
-    isRecord(value.boutViews) &&
-    Array.isArray(value.scorecardAccounts)
+    isRecord(value.boutViews)
   );
 }
 
@@ -426,12 +400,7 @@ function fixtureHealth(state: DashboardState): SourceHealth[] {
   });
 }
 
-export async function loadFixtureState(
-  collectorConfig?: Pick<
-    CollectorConfig,
-    "xMode" | "xEmbeds" | "xManualScores"
-  >,
-): Promise<DashboardState> {
+export async function loadFixtureState(): Promise<DashboardState> {
   const sourceConfig: SourceConfig = { mode: "fixture" };
   const event = loadFixtureEvent();
   const polymarket = createPolymarketSource(sourceConfig);
@@ -440,15 +409,6 @@ export async function loadFixtureState(
   const kalshi = createKalshiSource(sourceConfig);
   const espn = createEspnSource(sourceConfig);
   const cito = createCitoSource(sourceConfig);
-  const x = createXSource({
-    mode:
-      (collectorConfig?.xMode ?? "embed") === "embed"
-        ? "embed"
-        : "disabled",
-    embeds: collectorConfig?.xEmbeds ?? [],
-    manualScores: collectorConfig?.xManualScores ?? [],
-    fixtureMode: true,
-  });
   const boutViews: Record<string, BoutView> = {};
 
   for (const bout of event.bouts) {
@@ -505,30 +465,23 @@ export async function loadFixtureState(
       oddsHistory,
       preFightOdds,
       marketMoves,
-      scorecards: x.configuredEmbeds(bout.id),
     };
   }
 
-  return {
-    event,
-    boutViews,
-    scorecardAccounts: SCORECARD_ACCOUNTS.map((account) => ({
-      ...account,
-    })),
-  };
+  return { event, boutViews };
 }
 
 async function defaultStateLoader(
   config: CollectorConfig,
 ): Promise<DashboardState> {
   if (config.dataMode === "fixture") {
-    return loadFixtureState(config);
+    return loadFixtureState();
   }
 
   // Live mode builds the card from ESPN's public schedule. Every bout starts
   // with an empty BoutView; the lifecycle driver, tick store and round
   // pipelines fill those in from real observations during the event.
-  return loadLiveEventState({ scorecardAccounts: SCORECARD_ACCOUNTS });
+  return loadLiveEventState({});
 }
 
 function sendJson(
@@ -982,6 +935,11 @@ export async function createCollector(
       : { citoProvider: lifecycleCitoProvider }),
     espnPollingMs: config.pollingMs.espn,
     citoPollingMs: config.pollingMs.cito,
+    // Tiered ESPN polling (6a/6p ET non-event-day, 60s pre-start, 5s live,
+    // stopped after completion) only makes sense against a real event date.
+    ...(config.dataMode === "live"
+      ? { eventStartsAt: loaded.event.startsAt }
+      : {}),
     espnFailureThreshold: config.lifecycleEspnFailureThreshold,
     ...(options.lifecycle?.clock === undefined
       ? {}
@@ -1168,36 +1126,6 @@ export async function createCollector(
       ? {}
       : { requestTimeoutMs: options.sherdog.requestTimeoutMs }),
   });
-  const initializedXSource =
-    options.x?.source ??
-    createXSource({
-      mode: config.xMode,
-      bearerToken: config.credentials.X_BEARER_TOKEN,
-      embeds: config.xEmbeds,
-      manualScores: config.xManualScores,
-      fixtureMode: config.dataMode === "fixture",
-      ...(options.x?.apiFetcher === undefined
-        ? {}
-        : { apiFetcher: options.x.apiFetcher }),
-      ...(roundJobClock === undefined
-        ? {}
-        : {
-            now: () =>
-              new Date(roundJobClock.now()).toISOString(),
-          }),
-    });
-  const initializedXJobs = await XRoundJobs.create({
-    eventBus,
-    scheduler: initializedRoundStats.scheduler,
-    storage,
-    source: initializedXSource,
-    roundStats: initializedRoundStats,
-    getBout: findBout,
-    spendingCapUsd: config.xSpendCapUsd,
-    requestCostUsd: config.xRequestCostUsd,
-    metrics: healthRegistry,
-    ...(roundJobClock === undefined ? {} : { clock: roundJobClock }),
-  });
   const initializedOddsApiIoPoller = await OddsApiIoPoller.create({
     eventBus,
     storage,
@@ -1247,6 +1175,17 @@ export async function createCollector(
   const theOddsApiSource =
     options.sportsbook?.theOddsApiSource ??
     createOddsApiSource(sourceConfig, theOddsApiLiveHook);
+  // The Odds API only ever runs as part of the twice-daily upcoming sync —
+  // zero live/event-day collection. Historical snapshots already written
+  // stay in place; this only gates new collection going forward.
+  const theOddsApiEnabled: boolean | (() => boolean) =
+    config.dataMode === "live"
+      ? () =>
+          !isEventCalendarDay(
+            new Date(sportsbookClock?.now() ?? Date.now()),
+            new Date(loaded.event.startsAt),
+          )
+      : true;
   const initializedTheOddsApiJob = new TheOddsApiRoundJob({
     eventBus,
     scheduler: initializedRoundStats.scheduler,
@@ -1260,6 +1199,7 @@ export async function createCollector(
       });
     },
     metrics: healthRegistry,
+    enabled: theOddsApiEnabled,
     ...(sportsbookClock === undefined ? {} : { clock: sportsbookClock }),
     ...(options.sportsbook?.random === undefined
       ? {}
@@ -1278,6 +1218,7 @@ export async function createCollector(
         await push.publish("update", { kind: "market-tick", tick });
       },
       metrics: healthRegistry,
+      enabled: theOddsApiEnabled,
       ...(sportsbookClock === undefined ? {} : { clock: sportsbookClock }),
       ...(sportsbookTimer === undefined ? {} : { timer: sportsbookTimer }),
     });
@@ -1503,7 +1444,6 @@ export async function createCollector(
     theOddsApiJob: initializedTheOddsApiJob,
     theOddsApiActivePoller: initializedTheOddsApiActivePoller,
     sherdogJobs: initializedSherdogJobs,
-    xJobs: initializedXJobs,
     lifecycle,
     lifecycleDriver,
     preEventPoller,
@@ -1554,7 +1494,6 @@ export async function createCollector(
       await initializedTheOddsApiJob.close();
       await initializedTheOddsApiActivePoller.close();
       await initializedSherdogJobs.close();
-      await initializedXJobs.close();
       await Promise.all(
         marketTransports.map((transport) => transport.disconnect()),
       );

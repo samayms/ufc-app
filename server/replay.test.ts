@@ -158,9 +158,6 @@ describe("complete deterministic fixture replay", () => {
         }),
         expect.objectContaining({
           sherdog: expect.any(Object),
-          xScores: [
-            expect.objectContaining({ mode: "embed" }),
-          ],
           expertConsensus: expect.any(Object),
         }),
       ]),
@@ -194,10 +191,8 @@ describe("complete deterministic fixture replay", () => {
         provisional: false,
         citoStats: expect.any(Object),
         sherdog: expect.any(Object),
-        xScores: [expect.objectContaining({ mode: "embed" })],
         expertConsensus: {
           sherdog: expect.any(Object),
-          x: expect.any(Object),
         },
       });
     }

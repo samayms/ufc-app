@@ -78,6 +78,23 @@ export interface TheOddsApiActivePollerOptions {
   quotaPolicy?: QuotaPolicy;
   publishTick?: (tick: MarketTick) => Promise<void>;
   metrics?: Metrics;
+  /**
+   * Gates all live/event-day polling. The Odds API must run only as part of
+   * the twice-daily upcoming-fights sync, never on the calendar day of the
+   * event, so the integrator passes `false` (or a live "is it event day"
+   * predicate) on event day. Re-checked on every poll tick, not just at
+   * construction, so polling stops promptly if the predicate flips mid-run.
+   * Defaults to always-enabled so existing callers keep their current
+   * behaviour.
+   */
+  enabled?: boolean | (() => boolean);
+}
+
+function normalizeEnabled(
+  enabled: boolean | (() => boolean) | undefined,
+): () => boolean {
+  if (enabled === undefined) return () => true;
+  return typeof enabled === "function" ? enabled : () => enabled;
 }
 
 /**
@@ -143,6 +160,8 @@ export class TheOddsApiActivePoller {
 
   private readonly metrics: Metrics;
 
+  private readonly enabled: () => boolean;
+
   private readonly activeBouts = new Set<string>();
 
   private readonly timers = new Map<string, unknown>();
@@ -164,6 +183,7 @@ export class TheOddsApiActivePoller {
     this.timer = options.timer ?? defaultTimer();
     this.publishTick = options.publishTick;
     this.metrics = options.metrics ?? NOOP_METRICS;
+    this.enabled = normalizeEnabled(options.enabled);
     this.quota =
       options.quota ??
       new RollingQuotaGuard({
@@ -197,7 +217,9 @@ export class TheOddsApiActivePoller {
   /** Starts collection for a bout already live when the collector booted. */
   startActiveBout(boutId: string): void {
     this.enqueue(async () => {
-      if (this.closed || this.activeBouts.has(boutId)) return;
+      if (this.closed || !this.enabled() || this.activeBouts.has(boutId)) {
+        return;
+      }
       this.activeBouts.add(boutId);
       await this.poll(boutId, "start");
     });
@@ -235,7 +257,13 @@ export class TheOddsApiActivePoller {
   private async onFightStarted(
     event: Extract<CollectorEvent, { type: "FIGHT_STARTED" }>,
   ): Promise<void> {
-    if (this.closed || this.activeBouts.has(event.boutId)) return;
+    if (
+      this.closed ||
+      !this.enabled() ||
+      this.activeBouts.has(event.boutId)
+    ) {
+      return;
+    }
     this.activeBouts.add(event.boutId);
     await this.poll(event.boutId, "start");
   }
@@ -254,7 +282,9 @@ export class TheOddsApiActivePoller {
     reason: PollReason,
     round?: number,
   ): Promise<void> {
-    if (this.closed || !this.activeBouts.has(boutId)) return;
+    if (this.closed || !this.enabled() || !this.activeBouts.has(boutId)) {
+      return;
+    }
 
     const policy = theOddsApiPollingPolicy(
       await this.quota.remaining(THE_ODDS_API_QUOTA_SOURCE),
@@ -329,7 +359,7 @@ export class TheOddsApiActivePoller {
 
   private async scheduleNext(boutId: string): Promise<void> {
     this.clearTimer(boutId);
-    if (this.closed) return;
+    if (this.closed || !this.enabled()) return;
     const policy = theOddsApiPollingPolicy(
       await this.quota.remaining(THE_ODDS_API_QUOTA_SOURCE),
       this.activePollMs,

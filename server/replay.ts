@@ -1,5 +1,4 @@
 import { pathToFileURL } from "node:url";
-import type { ParsedExpertScore, XScoreSource } from "../src/sources/x.ts";
 import {
   createCollector,
   type Collector,
@@ -96,70 +95,12 @@ export interface FixtureReplayResult {
   recordsByStream: Readonly<Record<string, readonly unknown[]>>;
 }
 
-function replayXSource(clock: ReplayClock): XScoreSource {
-  const scores = new Map<number, ParsedExpertScore>([
-    [
-      1,
-      {
-        source: "x",
-        sourcePostId: "fixture-x-round-1",
-        scorer: "MMAJunkie",
-        round: 1,
-        score: { red: 10, blue: 9 },
-        fetchedAt: "2026-07-26T02:40:58.000Z",
-        parseConfidence: 1,
-        mode: "embed",
-        postUrl: "https://x.com/MMAJunkie/status/fixture-x-round-1",
-      },
-    ],
-    [
-      2,
-      {
-        source: "x",
-        sourcePostId: "fixture-x-round-2",
-        scorer: "lthomasnews",
-        round: 2,
-        score: { red: 9, blue: 10 },
-        fetchedAt: "2026-07-26T02:41:28.000Z",
-        parseConfidence: 1,
-        mode: "embed",
-        postUrl: "https://x.com/lthomasnews/status/fixture-x-round-2",
-      },
-    ],
-  ]);
-  return {
-    mode: "embed",
-    configuredScores(boutId, round) {
-      const score = scores.get(round);
-      if (boutId !== REPLAY_BOUT_ID || score === undefined) return [];
-      return [
-        {
-          ...score,
-          score: { ...score.score },
-          fetchedAt:
-            Date.parse(score.fetchedAt) <= clock.now()
-              ? score.fetchedAt
-              : clock.nowIso(),
-        },
-      ];
-    },
-    configuredEmbeds() {
-      return [];
-    },
-    async fetchApiScores() {
-      return [];
-    },
-  };
-}
-
 async function drain(collector: Collector): Promise<void> {
   await collector.tickStore.idle();
   await collector.oddsApiIoPoller.idle();
   await collector.roundStats.idle();
   await collector.sherdogJobs.idle();
   await collector.theOddsApiJob.idle();
-  await collector.roundStats.idle();
-  await collector.xJobs.idle();
   await collector.roundStats.idle();
   await collector.health.flush();
 }
@@ -214,7 +155,6 @@ export async function runFixtureReplay(
     env: {
       DATA_MODE: "fixture",
       COLLECTOR_PORT: "0",
-      X_MODE: "embed",
       SHERDOG_REQUEST_INTERVAL_MS: "1",
       ...(persistencePath === undefined
         ? {}
@@ -224,6 +164,7 @@ export async function runFixtureReplay(
     sse: {
       heartbeatMs: 60_000,
       now: () => clock.nowIso(),
+      flushIntervalMs: 0,
     },
     health: {
       now: () => clock.nowIso(),
@@ -243,9 +184,6 @@ export async function runFixtureReplay(
       clock,
       timer: clock,
       random: () => 0,
-    },
-    x: {
-      source: replayXSource(clock),
     },
   });
 
