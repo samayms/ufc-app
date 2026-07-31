@@ -42,11 +42,34 @@ describe("enforceRoundSummary", () => {
     );
   });
 
-  it("keeps a scoreline written with a dash readable as a score", () => {
+  it("normalizes a scoreline written with a dash before stripping it", () => {
     const result = enforceRoundSummary("The writers had it 10–9 Reyes.");
 
-    expect(result).toBe("The writers had it 10-9 Reyes.");
+    // The en dash reads as a score, not punctuation, but rule 8 forbids
+    // restating judges' numbers at all, so the score itself is scrubbed too.
     expect(result).not.toContain("–");
+    expect(result).not.toMatch(/\b\d{1,2}-\d{1,2}\b/);
+  });
+
+  it("strips a judges' scoreline the model restated despite rule 8", () => {
+    const result = enforceRoundSummary(
+      "Coria took it clearly, up 10-9 on two cards and 30-27 overall entering the third.",
+    );
+
+    expect(result).not.toMatch(/\b\d{1,2}-\d{1,2}\b/);
+    expect(result).toContain("Coria took it clearly");
+    expect(result).toContain("entering the third");
+  });
+
+  it("strips a scoreline followed by the fighter's name", () => {
+    const result = enforceRoundSummary(
+      "Judges had it 10-9 Coria after a close opening round.",
+    );
+
+    expect(result).not.toMatch(/\b\d{1,2}-\d{1,2}\b/);
+    expect(result).not.toContain("Coria");
+    expect(result).toContain("Judges had it");
+    expect(result).toContain("after a close opening round");
   });
 
   it("collapses newlines and stray whitespace into flowing prose", () => {

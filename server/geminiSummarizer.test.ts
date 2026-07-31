@@ -112,6 +112,26 @@ describe("createLiveGeminiSummarizer", () => {
     );
   });
 
+  it("strips a judges' scoreline the model restated despite the instruction", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        geminiResponse(
+          "Coria took it clearly, up 10-9 on two cards and 30-27 overall entering the third.",
+        ),
+      );
+    const summarizer = createLiveGeminiSummarizer({
+      apiKey: "test-key",
+      fetchImpl,
+    });
+
+    const result = await summarizer.summarize(input);
+
+    expect(result).not.toMatch(/\b\d{1,2}-\d{1,2}\b/);
+    expect(result).toContain("Coria took it clearly");
+    expect(result).toContain("entering the third");
+  });
+
   it("returns nothing when the model is refused or rate limited", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()

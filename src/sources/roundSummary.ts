@@ -58,9 +58,24 @@ export function enforceRoundSummary(text: string): string {
     .replace(/\s+/g, " ")
     .trim();
 
-  return dashed.length <= ROUND_SUMMARY_MAX_CHARS
-    ? dashed
-    : truncateToBudget(dashed);
+  const scoreless = dashed
+    // A judge's scorecard number the model restated despite rule 8 (e.g.
+    // "10-9 Coria" or "30-27"). Strip the score token and, when a fighter or
+    // corner name immediately follows it, that too, then close up whatever
+    // punctuation and whitespace it leaves behind.
+    .replace(/\b\d{1,2}-\d{1,2}\b(\s+[A-Z][\p{L}'-]*)?/gu, "")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s+([,.!?;:)])/g, "$1")
+    .replace(/([([])\s+/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .replace(/,\s*,+/g, ",")
+    .replace(/,\s*([.!?])/g, "$1")
+    .replace(/^[\s,]+/, "")
+    .trim();
+
+  return scoreless.length <= ROUND_SUMMARY_MAX_CHARS
+    ? scoreless
+    : truncateToBudget(scoreless);
 }
 
 /**

@@ -237,6 +237,9 @@ describe("dashboard state surfaces", () => {
 
     expect(scorecards).toContain("Measured exchanges.");
     expect(scorecards).toContain("Sherdog");
+    // The scorer card's roundScore field itself, not just the scorer's name,
+    // must reach the DOM — this is what actually proves the score renders.
+    expect(scorecards).toContain("10-9");
     expect(scorecards).toContain("X scorecards");
     expect(scorecards).toContain("official-x-embed");
     expect(scorecards).toContain("Sherdog and X stay separate");
