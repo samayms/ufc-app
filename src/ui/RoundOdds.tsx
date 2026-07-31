@@ -1,5 +1,5 @@
 import type { CollectorUnifiedRound } from "../store/collectorClient.ts";
-import { averageImpliedProbability } from "../lib/oddsMath.ts";
+import { devigPair, marketProbabilities } from "../lib/oddsMath.ts";
 import {
   MARKET_PRIORITY_VOLUME_THRESHOLD,
   pickPriorityMarket,
@@ -48,11 +48,15 @@ function candidate(
   if (snapshot === undefined) return null;
   const redOutcome = findOutcome(snapshot.outcomes, redName);
   const blueOutcome = findOutcome(snapshot.outcomes, blueName);
-  const red = probability(redOutcome);
-  const blue = probability(blueOutcome);
-  if (red == null || blue == null || redOutcome === undefined || blueOutcome === undefined) {
+  const rawRed = probability(redOutcome);
+  const rawBlue = probability(blueOutcome);
+  if (rawRed == null || rawBlue == null || redOutcome === undefined || blueOutcome === undefined) {
     return null;
   }
+  // devigPair on an already-normalized noVigProbability pair is a no-op
+  // (sum ~1); on a raw vigged pair it strips the overround. Applying it
+  // unconditionally means the displayed pair always sums to 100%.
+  const { red, blue } = devigPair(rawRed, rawBlue);
   return {
     market,
     snapshot,
@@ -66,16 +70,15 @@ function choiceFromOddsSnapshot(snapshot: OddsSnapshot | undefined): MarketChoic
   if (snapshot === undefined) return null;
   const redQuote = snapshot.quotes.find((quote) => quote.corner === "red");
   const blueQuote = snapshot.quotes.find((quote) => quote.corner === "blue");
-  const red = averageImpliedProbability(snapshot, "red");
-  const blue = averageImpliedProbability(snapshot, "blue");
-  if (red == null || blue == null || redQuote === undefined || blueQuote === undefined) {
+  const probs = marketProbabilities(snapshot);
+  if (probs === null || redQuote === undefined || blueQuote === undefined) {
     return null;
   }
   return {
     market: snapshot.market,
     volume: snapshot.volume,
-    red,
-    blue,
+    red: probs.red,
+    blue: probs.blue,
   };
 }
 

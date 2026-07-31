@@ -1,4 +1,4 @@
-import { averageImpliedProbability } from "../lib/oddsMath.ts";
+import { marketProbabilities } from "../lib/oddsMath.ts";
 import { pickPriorityMarket } from "../lib/marketPriority.ts";
 import type { BoutView } from "../schema.ts";
 import { fmtPct } from "./format.ts";
@@ -23,23 +23,21 @@ export function MarketStrip({
   onOpen: () => void;
 }) {
   const snapshot = pickPriorityMarket(latestOdds);
-  const red = snapshot
-    ? averageImpliedProbability(snapshot, "red")
-    : null;
-  const blue = snapshot
-    ? averageImpliedProbability(snapshot, "blue")
-    : null;
+  // De-vigged, not the raw implied probability — sportsbook lines otherwise
+  // sum to >100% (the book's overround) instead of a clean 100%.
+  const probs = snapshot ? marketProbabilities(snapshot) : null;
+  const red = probs?.red ?? null;
+  const blue = probs?.blue ?? null;
   const hasData = red != null && blue != null;
   const total = (red ?? 0) + (blue ?? 0);
   const redShare = hasData && total > 0 ? ((red as number) / total) * 100 : 50;
 
   const preFightSnapshot = pickPriorityMarket(preFightOdds);
-  const preFightRed = preFightSnapshot
-    ? averageImpliedProbability(preFightSnapshot, "red")
+  const preFightProbs = preFightSnapshot
+    ? marketProbabilities(preFightSnapshot)
     : null;
-  const preFightBlue = preFightSnapshot
-    ? averageImpliedProbability(preFightSnapshot, "blue")
-    : null;
+  const preFightRed = preFightProbs?.red ?? null;
+  const preFightBlue = preFightProbs?.blue ?? null;
 
   return (
     <button
