@@ -71,6 +71,9 @@ export interface EspnScheduledFight {
   currentRound?: number;
   /** Only present once status is "final". */
   result?: BoutResult;
+  /** Pre-fight outlook paragraph, carried over from `Bout.outlook` when the
+   * fight originates from the canonical event rather than a raw ESPN fetch. */
+  outlook?: string;
 }
 
 export interface EspnScheduledSection {

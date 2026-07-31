@@ -105,6 +105,7 @@ export function boutToScheduledFight(bout: Bout): EspnScheduledFight {
     status: bout.status,
     ...(bout.currentRound === undefined ? {} : { currentRound: bout.currentRound }),
     ...(bout.result === undefined ? {} : { result: bout.result }),
+    ...(bout.outlook === undefined ? {} : { outlook: bout.outlook }),
   };
 }
 
@@ -212,9 +213,12 @@ export function UpcomingOddsSection({
 export function UpcomingTaleSection({
   fighters,
   statValues,
+  outlook,
 }: {
   fighters: Record<Corner, Fighter>;
   statValues?: Partial<Record<Corner, Record<string, string>>>;
+  /** Real Sherdog-derived outlook text; falls back to placeholder copy when absent. */
+  outlook?: string;
 }) {
   return (
     <>
@@ -223,7 +227,7 @@ export function UpcomingTaleSection({
       <section className="profile-panel" aria-label="Fight outlook">
         <div className="outlook-panel">
           <span className="outlook-heading">Fight outlook</span>
-          <p className="outlook-body">{OUTLOOK_PLACEHOLDER}</p>
+          <p className="outlook-body">{outlook ?? OUTLOOK_PLACEHOLDER}</p>
         </div>
         <div className="profile-rows">
           {STAT_ROWS.map(({ key, label }) => (
@@ -247,6 +251,7 @@ function TaleSection({ fight }: { fight: EspnScheduledFight }) {
   return (
     <UpcomingTaleSection
       fighters={fighters}
+      outlook={fight.outlook}
       statValues={{
         red: Object.fromEntries(
           STAT_ROWS.map(({ key }) => [key, statValue(fight.red, key)]),
