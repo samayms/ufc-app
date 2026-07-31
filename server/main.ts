@@ -18,11 +18,14 @@ import { pathToFileURL } from "node:url";
 import { createCollector } from "./collector.ts";
 import { closeDb } from "./db/client.ts";
 import { runMigrations } from "./db/migrate.ts";
+import { materializeKalshiPrivateKey } from "./kalshiKeyMaterializer.ts";
 import { UpcomingScheduler } from "./scheduler.ts";
 
 export async function startApp(): Promise<{
   stop: () => Promise<void>;
 }> {
+  materializeKalshiPrivateKey();
+
   console.log("Running database migrations…");
   runMigrations();
 
