@@ -101,7 +101,7 @@ export function eventTokenScore(eventName: string, candidate: string): number {
     );
 }
 
-function permissionAllowsSherdogRead(scope: string): boolean {
+export function permissionAllowsSherdogRead(scope: string): boolean {
   const permissions = new Set(
     scope
       .toLocaleLowerCase("en-US")
