@@ -35,6 +35,7 @@ import {
   type EspnScheduledFight,
   type EspnScheduledFighter,
 } from "../src/sources/espnSchedule.ts";
+import { loadFightOutlookFixture } from "./fightOutlookFixture.ts";
 
 /** ESPN's free-text weight-class labels, mapped onto the schema's enum. */
 const WEIGHT_CLASS_BY_LABEL: Record<string, WeightClass> = {
@@ -114,6 +115,7 @@ function toBout(
   eventId: string,
   cardPosition: number,
   fetchedAt: string,
+  outlookByBoutId: ReadonlyMap<string, string>,
 ): Bout {
   // ESPN's fightcenter payload carries no scheduled-rounds field for a future
   // fight; modern UFC convention is five rounds for title fights and main
@@ -138,6 +140,9 @@ function toBout(
       ? {}
       : { currentRound: fight.currentRound }),
     ...(fight.result === undefined ? {} : { result: fight.result }),
+    ...(outlookByBoutId.get(fight.competitionId) === undefined
+      ? {}
+      : { outlook: outlookByBoutId.get(fight.competitionId) }),
     provenance: { source: "espn", fetchedAt, synthetic: false },
   };
 }
@@ -162,6 +167,8 @@ export function espnCardToDashboardState(
   card: EspnScheduledCard,
   scorecardAccounts: readonly ScorecardAccount[],
   fetchedAt: string,
+  /** Injectable for tests; defaults to the real fixture in production. */
+  outlookByBoutId: ReadonlyMap<string, string> = loadFightOutlookFixture(),
 ): DashboardState {
   const bouts: Bout[] = [];
   for (const section of card.sections) {
@@ -177,6 +184,7 @@ export function espnCardToDashboardState(
           card.eventId,
           bouts.length + 1,
           fetchedAt,
+          outlookByBoutId,
         ),
       );
     }
