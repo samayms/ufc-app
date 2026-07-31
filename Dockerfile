@@ -45,6 +45,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV DB_PATH=/data/ufc.db
 
+# litestream (Go, uses the OS trust store) needs ca-certificates to verify
+# the R2 endpoint's TLS certificate — Node's own bundled root store doesn't
+# cover it.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=litestream /tmp/litestream /usr/local/bin/litestream
 COPY --from=runtime-deps /app/node_modules ./node_modules
 COPY package.json package-lock.json ./
