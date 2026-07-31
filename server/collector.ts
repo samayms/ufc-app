@@ -1,9 +1,11 @@
+import { readFile } from "node:fs/promises";
 import {
   createServer,
   type IncomingMessage,
   type Server,
   type ServerResponse,
 } from "node:http";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
   BoutView,
@@ -132,6 +134,12 @@ import {
   SherdogRoundJobs,
   type SherdogFetcher,
 } from "./sherdogJobs.ts";
+import {
+  DEFAULT_SHERDOG_SCORER_PHOTOS_DIRECTORY,
+  isValidSherdogScorerPhotoFilename,
+  SHERDOG_SCORER_PHOTOS_API_PREFIX,
+  SherdogScorerProfileStore,
+} from "./sherdogScorerProfiles.ts";
 import {
   JsonlStorage,
   type Storage,
@@ -530,6 +538,14 @@ async function defaultStateLoader(
   // pipelines fill those in from real observations during the event.
   return loadLiveEventState({ scorecardAccounts: SCORECARD_ACCOUNTS });
 }
+
+const SHERDOG_SCORER_PHOTO_CONTENT_TYPES: Readonly<Record<string, string>> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+};
 
 function sendJson(
   response: ServerResponse,
@@ -1147,6 +1163,12 @@ export async function createCollector(
           model: config.roundSummary.model,
         })
       : createDisabledSummarizer());
+  const scorerProfileStore = await SherdogScorerProfileStore.create({
+    storage,
+    dataMode: config.dataMode,
+    permissionScope: config.sherdog.permissionScope,
+    baseUrl: config.sherdog.baseUrl,
+  });
   const initializedSherdogJobs = await SherdogRoundJobs.create({
     summarizer,
     eventBus,
@@ -1157,6 +1179,7 @@ export async function createCollector(
       options.sherdog?.fetcher ??
       defaultSherdogFetcher,
     getBout: findBout,
+    scorerProfileStore,
     dataMode: config.dataMode,
     permissionScope: config.sherdog.permissionScope,
     requestIntervalMs: config.sherdog.requestIntervalMs,
@@ -1420,6 +1443,51 @@ export async function createCollector(
         await review.getReviewRecords(),
         secrets,
       );
+      return;
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/sherdog-scorer-profiles"
+    ) {
+      sendJson(response, 200, scorerProfileStore.list(), secrets);
+      return;
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname.startsWith(SHERDOG_SCORER_PHOTOS_API_PREFIX)
+    ) {
+      const filename = url.pathname.slice(
+        SHERDOG_SCORER_PHOTOS_API_PREFIX.length,
+      );
+      if (!isValidSherdogScorerPhotoFilename(filename)) {
+        throw new HttpRequestError(400, "Invalid scorer photo filename");
+      }
+      const filePath = join(
+        DEFAULT_SHERDOG_SCORER_PHOTOS_DIRECTORY,
+        filename,
+      );
+      let fileBytes: Buffer;
+      try {
+        fileBytes = await readFile(filePath);
+      } catch {
+        throw new HttpRequestError(404, "Scorer photo not found");
+      }
+      const extension = filename.slice(filename.lastIndexOf(".") + 1);
+      const contentType =
+        SHERDOG_SCORER_PHOTO_CONTENT_TYPES[extension] ??
+        "application/octet-stream";
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "no-store",
+        "Content-Length": String(fileBytes.byteLength),
+        "Content-Type": contentType,
+      });
+      // The project's node:http typings (server/node-shims.d.ts) narrow
+      // write/end to `string` for the JSON-response common case; binary
+      // photo bytes are the one place that doesn't fit that shape, so this
+      // cast bypasses the narrowed typing — the underlying runtime response
+      // accepts a Buffer natively.
+      (response as unknown as { end(chunk: Buffer): void }).end(fileBytes);
       return;
     }
     if (

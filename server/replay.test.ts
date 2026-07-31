@@ -104,6 +104,7 @@ function normalizedForDeterminism(value: unknown): unknown {
         ([key]) =>
           key !== "receivedAt" &&
           key !== "createdAt" &&
+          key !== "updatedAt" &&
           key !== "checkedAt" &&
           key !== "localTimestamp" &&
           key !== "firstObservedAt" &&
