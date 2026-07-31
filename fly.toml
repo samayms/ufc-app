@@ -1,0 +1,34 @@
+# Fly.io app config: one Machine running Node (API + SSE + collector +
+# scheduler) behind Litestream, backed by a single SQLite volume.
+#
+# No Managed Postgres, no second Machine, no release_command — the release
+# Machine does not have the /data volume attached, so migrations run at
+# application startup instead (see server/main.ts).
+
+app = "ufc-live-dashboard"
+primary_region = "ewr"
+
+[build]
+
+[env]
+  DB_PATH = "/data/ufc.db"
+  DATA_MODE = "live"
+
+[[mounts]]
+  source = "ufc_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+[http_service]
+  internal_port = 8600
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+# The container's ENTRYPOINT (see Dockerfile) already runs
+# `litestream replicate -exec "node server/main.ts"` — no [processes]
+# override needed here.
