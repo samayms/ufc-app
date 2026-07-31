@@ -30,7 +30,11 @@ export async function startApp(): Promise<{
   runMigrations();
 
   console.log("Starting collector (API + SSE + collector)…");
-  const collector = await createCollector();
+  // Bind every interface in production so Fly's proxy can reach the
+  // Machine; local dev tooling still gets collector.ts's 127.0.0.1 default.
+  const collector = await createCollector({
+    host: process.env.HOST ?? "0.0.0.0",
+  });
   const port = await collector.start();
   console.log(`UFC app listening on http://127.0.0.1:${port}`);
 
