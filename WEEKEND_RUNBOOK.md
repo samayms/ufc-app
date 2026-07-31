@@ -17,6 +17,7 @@ Every identifier and every latency below was measured against the live APIs on
 | Cito bout ids | `12879` `12966` `12881` `12882` `12883` `12994` (main card), `12904` `12916` `12995` `12906` `12956` `12927` `12996` `12997` (prelims) |
 | Kalshi event tickers | `KXUFCFIGHT-26AUG01…` (14 open events) |
 | Sherdog live blog | **not published yet** — run `npm run sherdog:find` on the day, then set the printed `SHERDOG_LIVE_BLOG_URL` |
+| Sherdog fight outlook | run `npm run sherdog:outlook:find` (one-shot) or leave `npm run sherdog:outlook:watch` running from 3 days out; both print `SHERDOG_FIGHT_OUTLOOK_URL` |
 
 ESPN dates the *event* 14:00Z while Cito dates it 17:00Z. Both are right: ESPN
 is stamping the prelims, Cito the main card. Do not "fix" either.

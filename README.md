@@ -109,6 +109,14 @@ main-event fighters. It prints the `SHERDOG_LIVE_BLOG_URL` assignment without
 modifying `.env`. Pass `--event`, `--red`, and `--blue` to bypass the ESPN
 lookup and search for an explicitly named matchup.
 
+Sherdog also publishes a fight-outlook ("Preview") article ahead of the
+live blog. `npm run sherdog:outlook:find` finds it the same way and prints
+`SHERDOG_FIGHT_OUTLOOK_URL`. `npm run sherdog:outlook:watch` automates the
+lookup: it sleeps until 3 days before the event, then checks twice daily
+until the article is found (or the event starts without one ever appearing),
+caching the result in `data/sherdog-outlook-state.json` so restarts don't
+re-fetch.
+
 Each Sherdog round is condensed by Gemini into the summary the dashboard
 shows. The raw play-by-play runs two to three thousand characters and the
 summary box clamps at five lines, so the condensation is capped at 380

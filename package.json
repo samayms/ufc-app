@@ -16,6 +16,8 @@
     "sync:upcoming": "node --env-file-if-exists=.env server/syncUpcoming.ts",
     "sync:upcoming:live": "DATA_MODE=live node --env-file-if-exists=.env server/syncUpcoming.ts",
     "sherdog:find": "node --env-file-if-exists=.env scripts/findSherdogLiveBlog.mjs",
+    "sherdog:outlook:find": "node --env-file-if-exists=.env scripts/findSherdogOutlook.mjs",
+    "sherdog:outlook:watch": "node --env-file-if-exists=.env scripts/watchSherdogOutlook.mjs",
     "collector:live": "DATA_MODE=live node --env-file-if-exists=.env server/collector.ts",
     "dev:live": "DATA_MODE=live node --env-file-if-exists=.env scripts/devLive.mjs",
     "app": "node scripts/weekend.mjs",
