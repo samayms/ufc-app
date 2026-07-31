@@ -1763,6 +1763,10 @@
   line-height: 0.85;
 }
 
+.page-heading h2.events-title {
+  color: var(--red-corner-strong);
+}
+
 .page-count {
   flex: none;
   color: var(--text-faint);

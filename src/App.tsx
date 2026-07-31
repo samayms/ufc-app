@@ -451,7 +451,7 @@ export default function App() {
               <section className="card-screen" aria-labelledby="card-title">
                 <div className="page-heading">
                   <div>
-                    <h2 id="card-title">Events</h2>
+                    <h2 id="card-title" className="events-title">Events</h2>
                   </div>
                 </div>
                 {upcomingEspn.status === "error" && (
