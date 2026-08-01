@@ -58,6 +58,7 @@ interface EspnCompetitor {
     displayName?: string;
   };
   records?: EspnRecord[];
+  statistics?: Array<{ name?: string; displayValue?: string; value?: number }>;
 }
 
 interface EspnCompetition {
@@ -489,6 +490,17 @@ export interface EspnLifecycleEntry {
   period: number;
   completed: boolean;
   clockSeconds?: number;
+  cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
+}
+
+export interface EspnCumulativeStats {
+  significantStrikesLanded: number; significantStrikesAttempted: number;
+  totalStrikesLanded: number; totalStrikesAttempted: number;
+  takedownsLanded: number; takedownsAttempted: number;
+  submissionsAttempted: number; reversals: number; controlTimeSeconds: number;
+  knockdowns: number; headStrikesLanded: number; headStrikesAttempted: number;
+  bodyStrikesLanded: number; bodyStrikesAttempted: number;
+  legStrikesLanded: number; legStrikesAttempted: number;
 }
 
 export interface EspnLifecycleFetcher {
@@ -560,6 +572,30 @@ function parseLifecycleState(
   return "pre";
 }
 
+function parseStatPair(value: string | undefined): [number, number] {
+  const match = value?.match(/(\d+)\s*\/\s*(\d+)/);
+  return match ? [Number(match[1]), Number(match[2])] : [0, 0];
+}
+
+function parseControlSeconds(value: string | undefined): number {
+  const match = value?.match(/^(\d+):(\d{2})$/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : 0;
+}
+
+function parseCumulativeStats(competitor: EspnCompetitor): EspnCumulativeStats | undefined {
+  if (competitor.statistics === undefined || competitor.statistics.length === 0) return undefined;
+  const values = new Map(competitor.statistics.map((stat) => [stat.name?.toLowerCase(), stat.displayValue]));
+  const pair = (name: string) => parseStatPair(values.get(name));
+  const scalar = (name: string) => Number(values.get(name) ?? 0) || 0;
+  const [significantStrikesLanded, significantStrikesAttempted] = pair("significant strikes");
+  const [totalStrikesLanded, totalStrikesAttempted] = pair("total strikes");
+  const [takedownsLanded, takedownsAttempted] = pair("takedowns");
+  const [headStrikesLanded, headStrikesAttempted] = pair("head");
+  const [bodyStrikesLanded, bodyStrikesAttempted] = pair("body");
+  const [legStrikesLanded, legStrikesAttempted] = pair("leg");
+  return { significantStrikesLanded, significantStrikesAttempted, totalStrikesLanded, totalStrikesAttempted, takedownsLanded, takedownsAttempted, submissionsAttempted: scalar("submission attempts"), reversals: scalar("reversals"), controlTimeSeconds: parseControlSeconds(values.get("control time")), knockdowns: scalar("knockdowns"), headStrikesLanded, headStrikesAttempted, bodyStrikesLanded, bodyStrikesAttempted, legStrikesLanded, legStrikesAttempted };
+}
+
 /**
  * Pure normalization: raw ESPN scoreboard JSON -> per-bout lifecycle entries.
  *
@@ -620,6 +656,9 @@ export function parseEspnScoreboardLifecycle(
 
     const status = competition.status;
     const clockSeconds = parseDisplayClockSeconds(status?.displayClock);
+    const competitors = [...(competition.competitors ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const fighterA = competitors[0] === undefined ? undefined : parseCumulativeStats(competitors[0]);
+    const fighterB = competitors[1] === undefined ? undefined : parseCumulativeStats(competitors[1]);
 
     return [
       {
@@ -628,6 +667,7 @@ export function parseEspnScoreboardLifecycle(
         period: status?.period ?? 0,
         completed: status?.type?.completed === true,
         ...(clockSeconds === undefined ? {} : { clockSeconds }),
+        ...(fighterA === undefined || fighterB === undefined ? {} : { cumulativeStats: { fighterA, fighterB } }),
       },
     ];
   });

@@ -31,6 +31,11 @@ import {
 } from "./roundJobs.ts";
 import type { Storage } from "./storage.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
+import {
+  EspnRoundStatsAccumulator,
+  type EspnCumulativeSnapshot,
+  type EspnDerivedRoundStats,
+} from "./espnRoundStats.ts";
 
 export const ROUND_STATS_STORAGE_STREAM = "round-stats";
 export const UNIFIED_ROUNDS_STORAGE_STREAM = "unified-rounds";
@@ -448,6 +453,10 @@ export class RoundStatsPipeline {
 
   private readonly stats = new Map<string, RoundStatsRecord>();
 
+  private readonly liveEspnStats = new Map<string, EspnDerivedRoundStats>();
+
+  private readonly espnAccumulator = new EspnRoundStatsAccumulator();
+
   private readonly histories = new Map<string, RoundStatsRecord[]>();
 
   private readonly unified = new Map<string, UnifiedRoundRecord>();
@@ -552,6 +561,26 @@ export class RoundStatsPipeline {
     return (this.histories.get(roundKey(boutId, round)) ?? []).map(
       copyRoundStats,
     );
+  }
+
+  /** Latest ESPN-derived live round totals; these are never fetched from Cito. */
+  getLiveEspnRoundStats(
+    boutId: string,
+    round: number,
+  ): EspnDerivedRoundStats | undefined {
+    const record = this.liveEspnStats.get(roundKey(boutId, round));
+    return record === undefined
+      ? undefined
+      : { ...record, fighterA: { ...record.fighterA }, fighterB: { ...record.fighterB } };
+  }
+
+  observeEspnCumulative(
+    snapshot: EspnCumulativeSnapshot,
+  ): EspnDerivedRoundStats {
+    const derived = this.espnAccumulator.observe(snapshot);
+    this.liveEspnStats.set(roundKey(derived.boutId, derived.round), derived);
+    this.metrics.recordPayload("espn", snapshot.observedAt, snapshot.observedAt);
+    return this.getLiveEspnRoundStats(derived.boutId, derived.round)!;
   }
 
   getUnifiedRound(
@@ -768,6 +797,12 @@ export class RoundStatsPipeline {
   ): Promise<void> {
     await this.restore();
     const key = roundKey(event.boutId, event.round);
+
+    this.espnAccumulator.markRoundEnded(
+      event.boutId,
+      event.round,
+      event.detectedAt,
+    );
 
     if (event.type === "ROUND_ENDED") {
       this.confirmedRounds.add(key);

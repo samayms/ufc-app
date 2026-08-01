@@ -1,4 +1,5 @@
 import type { CollectorEvent, CollectorEventBus } from "./eventBus.ts";
+import type { EspnCumulativeStats } from "../src/sources/espn.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
 import type { Storage } from "./storage.ts";
 
@@ -10,6 +11,8 @@ export interface FightLifecycleState {
   period: number;
   completed: boolean;
   clockSeconds?: number;
+  /** ESPN's cumulative fight totals, forwarded for live round subtraction. */
+  cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
   sourceUpdatedAt?: string;
   receivedAt: string;
 }
@@ -138,6 +141,7 @@ function copyState(state: FightLifecycleState): FightLifecycleState {
     ...(state.clockSeconds === undefined
       ? {}
       : { clockSeconds: state.clockSeconds }),
+    ...(state.cumulativeStats === undefined ? {} : { cumulativeStats: state.cumulativeStats }),
     ...(state.sourceUpdatedAt === undefined
       ? {}
       : { sourceUpdatedAt: state.sourceUpdatedAt }),

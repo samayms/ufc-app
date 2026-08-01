@@ -5,6 +5,7 @@ import {
 } from "../src/sources/cito.ts";
 import {
   createLiveEspnLifecycleFetcher,
+  type EspnCumulativeStats,
 } from "../src/sources/espn.ts";
 import { espnPollDelayMs } from "./espnPollingSchedule.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
@@ -50,6 +51,7 @@ export interface LifecycleScoreboardEntry {
   period: number;
   completed: boolean;
   clockSeconds?: number;
+  cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
 }
 
 export interface LifecycleScoreboardFetcher {
@@ -102,6 +104,7 @@ function createScoreboardObservationProvider(options: {
           ...(entry.clockSeconds === undefined
             ? {}
             : { clockSeconds: entry.clockSeconds }),
+          ...(entry.cumulativeStats === undefined ? {} : { cumulativeStats: entry.cumulativeStats }),
           receivedAt,
         });
       }

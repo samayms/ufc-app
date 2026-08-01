@@ -164,6 +164,11 @@ export interface CollectorRoundStatsOptions {
   quotaPolicy?: QuotaPolicy;
 }
 
+/** @deprecated Cito is intentionally ignored by the ESPN-only live collector. */
+export interface CollectorCitoOptions {
+  discoveryTransport?: unknown;
+}
+
 /** Keeps vendor ids at the source boundary; round jobs continue to use canonical ids. */
 export function createCitoRoundStatsRefTranslator(
   fetcher: CitoRoundStatsFetcher,
@@ -259,6 +264,8 @@ export interface CreateCollectorOptions {
     "bufferSize" | "heartbeatMs" | "now" | "flushIntervalMs"
   >;
   roundStats?: CollectorRoundStatsOptions;
+  /** Retained only so older fixture callers remain source-compatible. */
+  cito?: CollectorCitoOptions;
   market?: CollectorMarketOptions;
   sportsbook?: CollectorSportsbookOptions;
   sherdog?: CollectorSherdogOptions;
@@ -864,6 +871,16 @@ export async function createCollector(
           observation.boutId,
           observation,
         );
+        if (observation.cumulativeStats !== undefined && observation.period >= 1) {
+          const stats = initializedRoundStats.observeEspnCumulative({
+            boutId: observation.boutId,
+            round: observation.period,
+            fighterA: observation.cumulativeStats.fighterA,
+            fighterB: observation.cumulativeStats.fighterB,
+            observedAt: observation.receivedAt,
+          });
+          await push.publish("update", { kind: "espn-round-live", stats });
+        }
       }
       await push.publish("update", {
         kind: "lifecycle-observations",
