@@ -522,15 +522,25 @@ export class SherdogScorerProfileStore {
         this.baseUrl,
       );
     }
-    const hub = await fetchSherdogPage(this.hubUrl, {
-      permissionScope: this.permissionScope,
-      fetchImpl: this.fetchImpl,
-      ...(this.timeoutMs === undefined ? {} : { timeoutMs: this.timeoutMs }),
-      ...(this.maxBytes === undefined ? {} : { maxBytes: this.maxBytes }),
-      ...(this.userAgent === undefined ? {} : { userAgent: this.userAgent }),
-    });
-    if (hub.status < 200 || hub.status >= 300) return undefined;
-    return extractAuthorUrlFromHub(hub.html, scorerName, this.baseUrl);
+    const hubs = [
+      this.hubUrl,
+      new URL("/contact.php", this.baseUrl).toString(),
+      new URL("/Article", this.baseUrl).toString(),
+    ];
+    for (const hubUrl of [...new Set(hubs)]) {
+      const hub = await fetchSherdogPage(hubUrl, {
+        permissionScope: this.permissionScope,
+        fetchImpl: this.fetchImpl,
+        ...(this.timeoutMs === undefined ? {} : { timeoutMs: this.timeoutMs }),
+        ...(this.maxBytes === undefined ? {} : { maxBytes: this.maxBytes }),
+        ...(this.userAgent === undefined ? {} : { userAgent: this.userAgent }),
+      });
+      if (hub.status < 200 || hub.status >= 300) continue;
+      const authorUrl = extractAuthorUrlFromHub(hub.html, scorerName, this.baseUrl);
+      if (authorUrl !== undefined) return authorUrl;
+      await this.throttle.wait();
+    }
+    return undefined;
   }
 
   private async fetchAuthorPageHtml(

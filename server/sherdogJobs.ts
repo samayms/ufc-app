@@ -413,6 +413,9 @@ export class SherdogRoundJobs {
 
   private restorePromise: Promise<void> | undefined;
 
+  /** Best-effort profile recovery for observations restored after a restart. */
+  private profileBackfill: Promise<void> = Promise.resolve();
+
   private stopped = false;
 
   private stoppedAt: string | undefined;
@@ -533,6 +536,7 @@ export class SherdogRoundJobs {
   async idle(): Promise<void> {
     await this.eventQueue;
     await this.scheduler.idle();
+    await this.profileBackfill;
   }
 
   async close(): Promise<void> {
@@ -580,6 +584,33 @@ export class SherdogRoundJobs {
       this.baselines.set(`${record.boutId}:${record.round}`, record.payloadHash);
     }
     await this.quota.restore();
+    this.startProfileBackfill();
+  }
+
+  private startProfileBackfill(): void {
+    if (this.scorerProfileStore === undefined) return;
+    const scorerNames = new Set<string>();
+    for (const revision of this.current.values()) {
+      for (const card of revision.observation.scorerCards) {
+        if (card.scorer.trim().length > 0) scorerNames.add(card.scorer);
+      }
+    }
+    // A corrupt or unexpectedly broad persistence file must never turn
+    // startup into an unbounded scrape. New names will still resolve as their
+    // rounds are observed normally.
+    const boundedNames = [...scorerNames].slice(0, 32);
+    if (boundedNames.length === 0) return;
+    this.profileBackfill = (async () => {
+      for (const scorerName of boundedNames) {
+        try {
+          await this.scorerProfileStore?.resolveScorerProfile(scorerName);
+        } catch (error) {
+          console.warn(
+            `Sherdog scorer profile restore failed for "${scorerName}": ${errorText(error)}`,
+          );
+        }
+      }
+    })();
   }
 
   private async scheduleBaseline(
