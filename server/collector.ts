@@ -941,6 +941,7 @@ export async function createCollector(
             },
             observation.completed,
           );
+          await initializedRoundStats.persistEspnRoundStats(stats);
           if (observation.completed) {
             finalizedEspnStatsBouts.add(observation.boutId);
           }

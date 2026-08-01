@@ -85,6 +85,10 @@ interface EspnCompetition {
       completed?: boolean;
       description?: string;
     };
+    result?: {
+      name?: string;
+      displayName?: string;
+    };
   };
   result?: {
     method?: {
@@ -316,7 +320,9 @@ function parseResult(competition: EspnCompetition): BoutResult | undefined {
   );
   const winnerCorner = winner ? cornerForCompetitor(winner) : "draw";
   const method = parseMethod(
-    competition.result?.method?.displayName ??
+    competition.status?.result?.displayName ??
+      competition.status?.result?.name ??
+      competition.result?.method?.displayName ??
       competition.result?.method?.name,
   );
 

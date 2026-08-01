@@ -224,6 +224,7 @@ interface RawEspnFightcenterStatus {
   period?: number;
   displayClock?: string;
   type?: RawEspnFightcenterStatusType;
+  result?: RawEspnFightcenterResultMethod;
 }
 
 interface RawEspnFightcenterResultMethod {
@@ -389,18 +390,29 @@ export function buildEspnAthleteUrl(athleteId: string): string {
 // ---------------------------------------------------------------------------
 
 const CONTENDER_SERIES_PATTERN = /contender series/i;
+/** Keep a completed card available through the post-event review window. */
+export const COMPLETED_EVENT_RETENTION_MS = 18 * 60 * 60 * 1_000;
+
+export function eventWithinReviewWindow(
+  startsAt: string,
+  now: Date,
+): boolean {
+  const startMs = Date.parse(startsAt);
+  const age = now.getTime() - startMs;
+  return Number.isFinite(startMs) &&
+    age >= 0 &&
+    age <= COMPLETED_EVENT_RETENTION_MS;
+}
 
 /**
- * Parses the ESPN scoreboard payload into current/upcoming, non-Contender-
- * Series event summaries. A non-final card remains eligible after its listed
- * start time: a process restarting during a live card must rediscover that
- * card rather than jump directly to next week's event. Never throws on
- * malformed input — an unrecognized shape just yields an empty list, matching
- * every other source client's "no data" convention.
+ * Parses the ESPN scoreboard payload into current/recent/upcoming,
+ * non-Contender-Series event summaries. A freshly completed card remains
+ * eligible long enough to review its results and round stats; after that
+ * bounded window it drops out and the next event becomes current.
  */
 export function parseEspnScheduleEvents(
   payload: unknown,
-  _now: Date,
+  now: Date,
 ): EspnScheduledEventSummary[] {
   if (typeof payload !== "object" || payload === null) return [];
 
@@ -425,7 +437,9 @@ export function parseEspnScheduleEvents(
 
     const statusType = event.status?.type;
     if (statusType?.name === "STATUS_FINAL" || statusType?.completed === true) {
-      continue;
+      if (!eventWithinReviewWindow(date, now)) {
+        continue;
+      }
     }
 
     // A past *scheduled* time alone is not proof that a card is over. ESPN
@@ -568,7 +582,10 @@ function parseFightResult(
   );
   const winnerCorner = winnerRaw ? cornerForRawCompetitor(winnerRaw) : "draw";
   const method = parseAthleteBioMethod(
-    competition.result?.method?.displayName ?? competition.result?.method?.name,
+    competition.status?.result?.displayName ??
+      competition.status?.result?.name ??
+      competition.result?.method?.displayName ??
+      competition.result?.method?.name,
   );
 
   return {

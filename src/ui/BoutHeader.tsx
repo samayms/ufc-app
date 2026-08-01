@@ -137,21 +137,63 @@ function CenterStatus({
       winner === "draw" || winner === "nc"
         ? null
         : fighters[winner as Corner].name.split(" ").at(-1);
+    const outcome =
+      winner === "draw"
+        ? "Draw"
+        : winner === "nc"
+          ? "No contest"
+          : `${name ?? "Winner"} wins`;
     return (
       <>
         <span className="tot-live-label">Final</span>
-        <span className="tot-round-label">
-          {name ? `${name} wins` : winner.toUpperCase()}
-        </span>
+        <span className="tot-round-label">{fmtMethod(method)}</span>
         <span className="tot-substate num">
-          {fmtMethod(method)}
-          {round ? ` · R${round}` : ""}
+          {outcome}
+          {round ? ` · Round ${round}` : ""}
           {time ? ` ${time}` : ""}
         </span>
       </>
     );
   }
+  if (status === "final") {
+    return (
+      <>
+        <span className="tot-live-label">Final</span>
+        <span className="tot-round-label">Result</span>
+        <span className="tot-substate">Waiting for ESPN</span>
+      </>
+    );
+  }
   if (status === "between-rounds" || status === "in-round") {
+    const isWalkouts = status === "in-round" && (currentRound ?? 0) < 1;
+    if (isWalkouts) {
+      return (
+        <>
+          <span className="tot-live-label">
+            <span className="live-dot" aria-hidden="true" />
+            Walkouts
+          </span>
+          <span className="tot-round-label">Round 1</span>
+          <span className="tot-substate">Bout starting</span>
+        </>
+      );
+    }
+    if (status === "between-rounds") {
+      const nextRound = (currentRound ?? 0) + 1;
+      return (
+        <>
+          <span className="tot-live-label tot-between">End round</span>
+          <span className="tot-round-label">
+            {currentRound === undefined ? "—" : `R${currentRound}`}
+          </span>
+          <span className="tot-substate">
+            {currentRound !== undefined && currentRound < scheduledRounds
+              ? `Round ${nextRound} next`
+              : "Result pending"}
+          </span>
+        </>
+      );
+    }
     const clockSeconds = clockMatchesBoutState
       ? interpolateClockSeconds(clockSync, now)
       : undefined;
@@ -161,10 +203,10 @@ function CenterStatus({
     return (
       <>
         <span
-          className={`tot-live-label${status === "between-rounds" ? " tot-between" : ""}`}
+          className="tot-live-label"
         >
           <span className="live-dot" aria-hidden="true" />
-          {status === "in-round" ? "Live" : "Between rds"}
+          In round
         </span>
         <span
           className="tot-fight-clock"
@@ -178,7 +220,7 @@ function CenterStatus({
           {clockText}
         </span>
         <span className="tot-substate">
-          {status === "in-round" ? `R${currentRound}` : `End R${currentRound}`}
+          {`Round ${currentRound}`}
           {" · "}
           {clockSeconds === undefined ? "waiting for ESPN" : sourceLabel}
         </span>

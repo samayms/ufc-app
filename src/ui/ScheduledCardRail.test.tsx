@@ -174,10 +174,44 @@ describe("ScheduledCardRail", () => {
       <ScheduledCardRail card={liveCard} onSelect={() => undefined} />,
     );
 
-    expect(markup).toContain(">LIVE R2<");
-    expect(markup).toContain(">Red · KO/TKO R1<");
+    expect(markup).toContain(">IN R2<");
+    expect(markup).toContain(">KO/TKO · R1<");
     expect(markup).toContain('class="event-card is-live"');
     expect(markup).not.toContain(">UPCOMING<");
+  });
+
+  it("distinguishes walkouts, active rounds, and completed rounds", () => {
+    const phaseCard: EspnScheduledCard = {
+      ...card,
+      sections: [{
+        ...card.sections[0]!,
+        fights: [
+          fight({
+            competitionId: "walkouts",
+            matchNumber: 1,
+            status: "in-round",
+            currentRound: 0,
+            red: fighter("Walkout Red"),
+            blue: fighter("Walkout Blue"),
+          }),
+          fight({
+            competitionId: "break",
+            matchNumber: 2,
+            status: "between-rounds",
+            currentRound: 1,
+            red: fighter("Break Red"),
+            blue: fighter("Break Blue"),
+          }),
+        ],
+      }],
+    };
+
+    const markup = renderToStaticMarkup(
+      <ScheduledCardRail card={phaseCard} onSelect={() => undefined} />,
+    );
+    expect(markup).toContain(">WALKOUTS<");
+    expect(markup).toContain(">END R1<");
+    expect(markup).not.toContain("LIVE R0");
   });
 
   it("never renders a per-fight timestamp, only the section's", () => {

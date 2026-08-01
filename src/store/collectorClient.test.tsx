@@ -100,6 +100,48 @@ function roundRecord(
       firstObservedAt: "2026-07-28T01:02:04Z",
       lastObservedAt: `2026-07-28T01:02:0${revision + 3}Z`,
     },
+    espnStats: {
+      boutId: "bout-main",
+      round: 2,
+      fighterA: {
+        significantStrikesLanded: 13,
+        significantStrikesAttempted: 14,
+        totalStrikesLanded: 13,
+        totalStrikesAttempted: 14,
+        takedownsLanded: 0,
+        takedownsAttempted: 0,
+        submissionsAttempted: 0,
+        reversals: 0,
+        controlTimeSeconds: 4,
+        knockdowns: 1,
+        headStrikesLanded: 11,
+        headStrikesAttempted: 11,
+        bodyStrikesLanded: 1,
+        bodyStrikesAttempted: 2,
+        legStrikesLanded: 1,
+        legStrikesAttempted: 1,
+      },
+      fighterB: {
+        significantStrikesLanded: 1,
+        significantStrikesAttempted: 3,
+        totalStrikesLanded: 1,
+        totalStrikesAttempted: 3,
+        takedownsLanded: 0,
+        takedownsAttempted: 0,
+        submissionsAttempted: 0,
+        reversals: 0,
+        controlTimeSeconds: 0,
+        knockdowns: 0,
+        headStrikesLanded: 0,
+        headStrikesAttempted: 2,
+        bodyStrikesLanded: 0,
+        bodyStrikesAttempted: 0,
+        legStrikesLanded: 1,
+        legStrikesAttempted: 1,
+      },
+      observedAt: "2026-07-28T01:02:06Z",
+      finalized: !provisional,
+    },
     sherdog: {
       boutId: "bout-main",
       round: 2,
@@ -227,6 +269,11 @@ describe("collector browser client", () => {
       status: "between-rounds",
       currentRound: 2,
     });
+    expect(
+      bootstrapped.dashboard?.boutViews["bout-main"]?.rounds.espn
+        ?.find((update) => update.round === 2)
+        ?.stats?.red?.significantStrikesLanded,
+    ).toBe(13);
     expect(
       bootstrapped.dashboard?.boutViews["bout-main"]?.rounds.cito
         ?.find((update) => update.round === 2)

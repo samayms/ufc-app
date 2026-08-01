@@ -62,6 +62,15 @@ interface CollectorRoundStats {
   lastObservedAt: string;
 }
 
+interface CollectorEspnRoundStats {
+  boutId: string;
+  round: number;
+  fighterA: RoundStats;
+  fighterB: RoundStats;
+  observedAt: string;
+  finalized: boolean;
+}
+
 export interface CollectorUnifiedRound {
   boutId: string;
   round: number;
@@ -71,6 +80,7 @@ export interface CollectorUnifiedRound {
     | "period_transition"
     | "fight_completed";
   citoStats?: CollectorRoundStats;
+  espnStats?: CollectorEspnRoundStats;
   sherdog?: SherdogRoundObservation;
   marketAtEnd: {
     kalshi?: MarketSnapshot;
@@ -515,6 +525,63 @@ function parseRoundStats(value: unknown): CollectorRoundStats | null {
   };
 }
 
+const ESPN_STAT_KEYS = [
+  "significantStrikesLanded",
+  "significantStrikesAttempted",
+  "totalStrikesLanded",
+  "totalStrikesAttempted",
+  "takedownsLanded",
+  "takedownsAttempted",
+  "submissionsAttempted",
+  "reversals",
+  "controlTimeSeconds",
+  "knockdowns",
+  "headStrikesLanded",
+  "headStrikesAttempted",
+  "bodyStrikesLanded",
+  "bodyStrikesAttempted",
+  "legStrikesLanded",
+  "legStrikesAttempted",
+] as const satisfies readonly (keyof RoundStats)[];
+
+function parseEspnFighterStats(value: unknown): RoundStats | null {
+  if (!isRecord(value)) return null;
+  const stats: RoundStats = {};
+  for (const key of ESPN_STAT_KEYS) {
+    const stat = value[key];
+    if (typeof stat !== "number" || !Number.isFinite(stat) || stat < 0) {
+      return null;
+    }
+    stats[key] = stat;
+  }
+  return stats;
+}
+
+function parseEspnRoundStats(value: unknown): CollectorEspnRoundStats | null {
+  if (!isRecord(value)) return null;
+  const fighterA = parseEspnFighterStats(value.fighterA);
+  const fighterB = parseEspnFighterStats(value.fighterB);
+  if (
+    typeof value.boutId !== "string" ||
+    !Number.isSafeInteger(value.round) ||
+    (value.round as number) < 1 ||
+    fighterA === null ||
+    fighterB === null ||
+    !isTimestamp(value.observedAt) ||
+    typeof value.finalized !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    boutId: value.boutId,
+    round: value.round as number,
+    fighterA,
+    fighterB,
+    observedAt: value.observedAt,
+    finalized: value.finalized,
+  };
+}
+
 function parseSherdogObservation(
   value: unknown,
 ): SherdogRoundObservation | null {
@@ -627,6 +694,10 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
     value.citoStats === undefined
       ? undefined
       : parseRoundStats(value.citoStats);
+  const espnStats =
+    value.espnStats === undefined
+      ? undefined
+      : parseEspnRoundStats(value.espnStats);
   const sherdog =
     value.sherdog === undefined
       ? undefined
@@ -645,6 +716,7 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
       value.endingSignal !== "period_transition" &&
       value.endingSignal !== "fight_completed") ||
     (value.citoStats !== undefined && citoStats === null) ||
+    (value.espnStats !== undefined && espnStats === null) ||
     (value.sherdog !== undefined && sherdog === null) ||
     (value.expertConsensus !== undefined &&
       expertConsensus === null) ||
@@ -661,6 +733,7 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
     detectedEndedAt: value.detectedEndedAt,
     endingSignal: value.endingSignal,
     ...(citoStats == null ? {} : { citoStats }),
+    ...(espnStats == null ? {} : { espnStats }),
     ...(sherdog == null ? {} : { sherdog }),
     marketAtEnd: value.marketAtEnd as CollectorUnifiedRound["marketAtEnd"],
     ...(expertConsensus == null ? {} : { expertConsensus }),
@@ -1231,6 +1304,28 @@ function applyCollectorRound(
       },
     };
     nextRounds.cito = [
+      ...existing.filter((round) => round.round !== record.round),
+      update,
+    ].sort((left, right) => left.round - right.round);
+  }
+
+  if (record.espnStats !== undefined) {
+    const stats = record.espnStats;
+    const existing = view.rounds.espn ?? [];
+    const update: RoundUpdate = {
+      boutId: record.boutId,
+      round: record.round,
+      stats: {
+        red: { ...stats.fighterA },
+        blue: { ...stats.fighterB },
+      },
+      provenance: {
+        source: "espn",
+        fetchedAt: stats.observedAt,
+        synthetic: withLifecycle.event.provenance.synthetic,
+      },
+    };
+    nextRounds.espn = [
       ...existing.filter((round) => round.round !== record.round),
       update,
     ].sort((left, right) => left.round - right.round);

@@ -30,6 +30,7 @@ import type {
 } from "../src/schema.ts";
 import {
   createEspnScheduleSource,
+  eventWithinReviewWindow,
   type EspnScheduledCard,
   type EspnScheduledFight,
   type EspnScheduledFighter,
@@ -209,6 +210,8 @@ export function espnCardToDashboardState(
 export interface LoadLiveEventStateOptions {
   now?: () => Date;
   scheduleSource?: ReturnType<typeof createEspnScheduleSource>;
+  /** Persisted/recent event ids to try before ESPN's upcoming-only list. */
+  preferredEventIds?: readonly string[];
 }
 
 /**
@@ -223,7 +226,20 @@ export async function loadLiveEventState(
   options: LoadLiveEventStateOptions,
 ): Promise<DashboardState> {
   const source = options.scheduleSource ?? createEspnScheduleSource();
-  const fetchedAt = (options.now?.() ?? new Date()).toISOString();
+  const now = options.now?.() ?? new Date();
+  const fetchedAt = now.toISOString();
+  for (const eventId of options.preferredEventIds ?? []) {
+    const card = await source.getCard(eventId);
+    if (
+      card === null ||
+      card.startsAt === undefined ||
+      !eventWithinReviewWindow(card.startsAt, now)
+    ) {
+      continue;
+    }
+    const state = espnCardToDashboardState(card, fetchedAt);
+    if (state.event.bouts.length > 0) return state;
+  }
   const events = await source.listUpcomingEvents();
 
   for (const summary of events) {

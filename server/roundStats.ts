@@ -33,6 +33,7 @@ import type { Storage } from "./storage.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
 import {
   EspnRoundStatsAccumulator,
+  type EspnCumulativeFighterStats,
   type EspnCumulativeSnapshot,
   type EspnDerivedRoundStats,
 } from "./espnRoundStats.ts";
@@ -84,6 +85,7 @@ export interface UnifiedRoundRecord {
   detectedEndedAt: string;
   endingSignal: RoundEndingSignal;
   citoStats?: RoundStatsRecord;
+  espnStats?: EspnDerivedRoundStats;
   sherdog?: SherdogRoundObservation;
   marketAtEnd: MarketAtEnd;
   expertConsensus?: ExpertConsensus;
@@ -170,6 +172,49 @@ function isRoundStatsRecord(value: unknown): value is RoundStatsRecord {
   );
 }
 
+const ESPN_STAT_KEYS = [
+  "significantStrikesLanded",
+  "significantStrikesAttempted",
+  "totalStrikesLanded",
+  "totalStrikesAttempted",
+  "takedownsLanded",
+  "takedownsAttempted",
+  "submissionsAttempted",
+  "reversals",
+  "controlTimeSeconds",
+  "knockdowns",
+  "headStrikesLanded",
+  "headStrikesAttempted",
+  "bodyStrikesLanded",
+  "bodyStrikesAttempted",
+  "legStrikesLanded",
+  "legStrikesAttempted",
+] as const satisfies readonly (keyof EspnCumulativeFighterStats)[];
+
+function isEspnFighterStats(
+  value: unknown,
+): value is EspnCumulativeFighterStats {
+  return isRecord(value) && ESPN_STAT_KEYS.every((key) => {
+    const stat = value[key];
+    return typeof stat === "number" && Number.isFinite(stat) && stat >= 0;
+  });
+}
+
+function isEspnDerivedRoundStats(
+  value: unknown,
+): value is EspnDerivedRoundStats {
+  return (
+    isRecord(value) &&
+    typeof value.boutId === "string" &&
+    Number.isSafeInteger(value.round) &&
+    (value.round as number) >= 1 &&
+    isEspnFighterStats(value.fighterA) &&
+    isEspnFighterStats(value.fighterB) &&
+    isTimestamp(value.observedAt) &&
+    typeof value.finalized === "boolean"
+  );
+}
+
 function isTimestamp(value: unknown): value is string {
   return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
@@ -234,6 +279,8 @@ function isUnifiedRoundRecord(
       value.endingSignal === "fight_completed") &&
     (value.citoStats === undefined ||
       isRoundStatsRecord(value.citoStats)) &&
+    (value.espnStats === undefined ||
+      isEspnDerivedRoundStats(value.espnStats)) &&
     (value.sherdog === undefined ||
       isSherdogObservation(value.sherdog)) &&
     isRecord(value.marketAtEnd) &&
@@ -279,6 +326,14 @@ function copyRoundStats(record: RoundStatsRecord): RoundStatsRecord {
   };
 }
 
+function copyEspnStats(record: EspnDerivedRoundStats): EspnDerivedRoundStats {
+  return {
+    ...record,
+    fighterA: { ...record.fighterA },
+    fighterB: { ...record.fighterB },
+  };
+}
+
 function copySherdog(
   observation: SherdogRoundObservation,
 ): SherdogRoundObservation {
@@ -304,6 +359,9 @@ function copyUnified(record: UnifiedRoundRecord): UnifiedRoundRecord {
     ...(record.citoStats === undefined
       ? {}
       : { citoStats: copyRoundStats(record.citoStats) }),
+    ...(record.espnStats === undefined
+      ? {}
+      : { espnStats: copyEspnStats(record.espnStats) }),
     ...(record.sherdog === undefined
       ? {}
       : { sherdog: copySherdog(record.sherdog) }),
@@ -586,6 +644,35 @@ export class RoundStatsPipeline {
     return this.getLiveEspnRoundStats(derived.boutId, derived.round)!;
   }
 
+  /** Attach a live/final ESPN delta to the persisted unified round. */
+  async persistEspnRoundStats(record: EspnDerivedRoundStats): Promise<void> {
+    if (!isEspnDerivedRoundStats(record)) {
+      throw new TypeError("ESPN round stats are not normalized");
+    }
+    const stored = copyEspnStats(record);
+    this.liveEspnStats.set(roundKey(stored.boutId, stored.round), stored);
+    await this.enqueueState(async () => {
+      const key = roundKey(stored.boutId, stored.round);
+      const previous = this.unified.get(key);
+      if (previous === undefined) return;
+      const provisional =
+        previous.endingSignal === "clock_zero_provisional" ||
+        !stored.finalized;
+      await this.persistUnified({
+        ...copyUnified(previous),
+        espnStats: stored,
+        provisional,
+        ...(!provisional
+          ? {
+              finalizedAt:
+                previous.finalizedAt ??
+                new Date(this.clock.now()).toISOString(),
+            }
+          : {}),
+      });
+    });
+  }
+
   getUnifiedRound(
     boutId: string,
     round: number,
@@ -764,6 +851,7 @@ export class RoundStatsPipeline {
     }
 
     this.unified.clear();
+    this.liveEspnStats.clear();
     this.confirmedRounds.clear();
     this.marketSnapshots.clear();
     for (const persisted of unifiedRecords) {
@@ -771,6 +859,9 @@ export class RoundStatsPipeline {
       const record = copyUnified(persisted.record);
       const key = roundKey(record.boutId, record.round);
       this.unified.set(key, record);
+      if (record.espnStats !== undefined) {
+        this.liveEspnStats.set(key, copyEspnStats(record.espnStats));
+      }
       if (record.endingSignal !== "clock_zero_provisional") {
         this.confirmedRounds.add(key);
       }
@@ -1056,10 +1147,14 @@ export class RoundStatsPipeline {
       }
 
       const stats = this.stats.get(key);
+      const espnStats =
+        this.liveEspnStats.get(key) ?? previous?.espnStats;
+      const hasSettledStats =
+        espnStats?.finalized === true ||
+        (stats !== undefined && !stats.provisional);
       const provisional =
         event.type === "PROVISIONAL_ROUND_ENDED" ||
-        stats === undefined ||
-        stats.provisional;
+        !hasSettledStats;
       const next: UnifiedRoundRecord = {
         boutId: event.boutId,
         round: event.round,
@@ -1068,6 +1163,9 @@ export class RoundStatsPipeline {
         ...(stats === undefined
           ? {}
           : { citoStats: copyRoundStats(stats) }),
+        ...(espnStats === undefined
+          ? {}
+          : { espnStats: copyEspnStats(espnStats) }),
         ...(previous?.sherdog === undefined
           ? {}
           : { sherdog: copySherdog(previous.sherdog) }),

@@ -46,6 +46,56 @@ describe("BoutHeader live clock", () => {
 
     expect(markup).toContain('role="timer"');
     expect(markup).toContain("3:17");
-    expect(markup).toContain("R2 · ESPN sync");
+    expect(markup).toContain("In round");
+    expect(markup).toContain("Round 2 · ESPN sync");
+  });
+
+  it("renders walkouts and end-of-round states without fake round zero copy", () => {
+    const bout = loadFixtureEvent().bouts[0]!;
+    const walkouts = renderToStaticMarkup(
+      <BoutHeader
+        weightClassLabel="Welterweight"
+        titleFight={false}
+        scheduledRounds={3}
+        fighters={bout.fighters}
+        status="in-round"
+        currentRound={0}
+      />,
+    );
+    const roundEnd = renderToStaticMarkup(
+      <BoutHeader
+        weightClassLabel="Welterweight"
+        titleFight={false}
+        scheduledRounds={3}
+        fighters={bout.fighters}
+        status="between-rounds"
+        currentRound={2}
+      />,
+    );
+
+    expect(walkouts).toContain("Walkouts");
+    expect(walkouts).toContain("Round 1");
+    expect(walkouts).not.toContain("R0");
+    expect(roundEnd).toContain("End round");
+    expect(roundEnd).toContain("R2");
+    expect(roundEnd).toContain("Round 3 next");
+  });
+
+  it("makes the final method and round explicit", () => {
+    const bout = loadFixtureEvent().bouts[0]!;
+    const markup = renderToStaticMarkup(
+      <BoutHeader
+        weightClassLabel="Welterweight"
+        titleFight={false}
+        scheduledRounds={3}
+        fighters={bout.fighters}
+        status="final"
+        result={{ winner: "red", method: "submission", round: 2, time: "3:41" }}
+      />,
+    );
+
+    expect(markup).toContain(">SUB<");
+    expect(markup).toContain("Round 2");
+    expect(markup).toContain("wins");
   });
 });

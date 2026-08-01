@@ -1,6 +1,6 @@
 import type { Bout } from "../schema.ts";
 import { FitText, MatchupCard } from "./MatchupCard.tsx";
-import { fmtMethod, WEIGHT_LABEL } from "./format.ts";
+import { fmtFightPhase, WEIGHT_LABEL } from "./format.ts";
 import "./newComponents.css";
 
 const SEGMENT_LABEL = {
@@ -10,38 +10,18 @@ const SEGMENT_LABEL = {
 } as const;
 
 function StatusChip({ bout }: { bout: Bout }) {
+  const label = fmtFightPhase(bout.status, bout.currentRound, bout.result);
   switch (bout.status) {
     case "in-round":
-      return <span className="chip chip-live">LIVE R{bout.currentRound}</span>;
     case "between-rounds":
-      return <span className="chip chip-live">END R{bout.currentRound}</span>;
-    case "final": {
-      const r = bout.result;
-      const winner =
-        r?.winner === "red" || r?.winner === "blue"
-          ? bout.fighters[r.winner].name.split(" ").at(-1)
-          : r?.winner === "draw"
-            ? "DRAW"
-            : r?.winner === "nc"
-              ? "NO CONTEST"
-              : undefined;
-      return (
-        <span className="chip chip-final">
-          {r
-            ? `${winner ?? "FINAL"} · ${fmtMethod(r.method)}${r.round ? ` R${r.round}` : ""}`
-            : "FINAL"}
-        </span>
-      );
-    }
+      return <span className="chip chip-live">{label}</span>;
+    case "final":
+      return <span className="chip chip-final">{label}</span>;
     case "canceled":
     case "postponed":
-      return (
-        <span className="chip chip-canceled">
-          {bout.status.toUpperCase()}
-        </span>
-      );
+      return <span className="chip chip-canceled">{label}</span>;
     default:
-      return <span className="chip chip-upcoming">UPCOMING</span>;
+      return <span className="chip chip-upcoming">{label}</span>;
   }
 }
 

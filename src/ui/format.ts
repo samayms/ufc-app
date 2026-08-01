@@ -1,4 +1,10 @@
-import type { FightRecord, FinishMethod, NativePrice } from "../schema.ts";
+import type {
+  BoutResult,
+  BoutStatus,
+  FightRecord,
+  FinishMethod,
+  NativePrice,
+} from "../schema.ts";
 
 export function fmtRecord(r: FightRecord): string {
   const base = `${r.wins}-${r.losses}-${r.draws}`;
@@ -68,6 +74,35 @@ const METHOD_LABEL: Record<FinishMethod, string> = {
 
 export function fmtMethod(m: FinishMethod): string {
   return METHOD_LABEL[m];
+}
+
+/** Compact, mutually exclusive fight phase for card-rail status chips. */
+export function fmtFightPhase(
+  status: BoutStatus,
+  currentRound?: number,
+  result?: BoutResult,
+): string {
+  switch (status) {
+    case "in-round":
+      return currentRound !== undefined && currentRound >= 1
+        ? `IN R${currentRound}`
+        : "WALKOUTS";
+    case "between-rounds":
+      return currentRound !== undefined && currentRound >= 1
+        ? `END R${currentRound}`
+        : "END ROUND";
+    case "final": {
+      if (result === undefined) return "FINAL";
+      const method = result.method === "other" ? "FINAL" : fmtMethod(result.method);
+      return `${method}${result.round ? ` · R${result.round}` : ""}`;
+    }
+    case "canceled":
+      return "CANCELED";
+    case "postponed":
+      return "POSTPONED";
+    default:
+      return "UPCOMING";
+  }
 }
 
 export const WEIGHT_LABEL: Record<string, string> = {

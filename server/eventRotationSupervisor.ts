@@ -91,6 +91,16 @@ export class EventRotationSupervisor {
     // The collector loaded for this process is authoritative. Persisted state
     // is only a fallback for callers that do not already own a live runtime.
     this.currentEventId = this.initialEventId ?? persistedEventId;
+    if (
+      this.initialEventId !== undefined &&
+      this.initialEventId !== persistedEventId
+    ) {
+      await this.storage.replace(this.stream, [{
+        version: 1,
+        eventId: this.initialEventId,
+        rotatedAt: new Date(this.clock.now()).toISOString(),
+      } satisfies PersistedEventRotation]);
+    }
     this.started = true;
     await this.enqueue(() => this.pollOnce());
   }

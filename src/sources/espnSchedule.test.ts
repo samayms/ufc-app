@@ -116,17 +116,22 @@ describe("parseEspnScheduleEvents", () => {
     expect(events.some((event) => event.name === "Noche UFC")).toBe(true);
   });
 
-  it("keeps a non-final card after its scheduled start but drops completed cards", () => {
+  it("keeps a recent completed card for review but drops it after the retention window", () => {
     const now = new Date("2026-08-20T00:00:00Z");
     const events = parseEspnScheduleEvents({
       events: [
         { id: "live", date: "2026-08-19T23:00:00Z", name: "UFC Live", status: { type: { name: "STATUS_IN_PROGRESS", completed: false } } },
-        { id: "final", date: "2026-08-19T23:00:00Z", name: "UFC Final", status: { type: { name: "STATUS_FINAL", completed: true } } },
+        { id: "recent-final", date: "2026-08-19T18:00:00Z", name: "UFC Recent Final", status: { type: { name: "STATUS_FINAL", completed: true } } },
+        { id: "old-final", date: "2026-08-18T05:00:00Z", name: "UFC Old Final", status: { type: { name: "STATUS_FINAL", completed: true } } },
         { id: "next", date: "2026-08-27T23:00:00Z", name: "UFC Next" },
       ],
     }, now);
 
-    expect(events.map((event) => event.eventId)).toEqual(["live", "next"]);
+    expect(events.map((event) => event.eventId)).toEqual([
+      "recent-final",
+      "live",
+      "next",
+    ]);
   });
 
   it("de-duplicates by event id", () => {
@@ -356,8 +361,8 @@ describe("parseEspnFightcenterCard", () => {
                 period: 3,
                 displayClock: "2:14",
                 type: { state: "post", completed: true },
+                result: { name: "submission", displayName: "Submission" },
               },
-              result: { method: { displayName: "Submission" } },
               competitors: [
                 { order: 1, athlete: { id: "a1", displayName: "Fighter One" } },
                 {

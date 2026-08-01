@@ -100,6 +100,9 @@ describe("EventRotationSupervisor", () => {
     await supervisor.start();
     expect(rotate).toHaveBeenCalledExactlyOnceWith("event-new");
     expect(supervisor.getCurrentEventId()).toBe("event-new");
+    expect(await storage.read("event-rotation-supervisor")).toEqual([
+      expect.objectContaining({ eventId: "event-new" }),
+    ]);
     await supervisor.close();
   });
 

@@ -19,11 +19,18 @@ import { createCollector } from "./collector.ts";
 import { loadConfig } from "./config.ts";
 import { closeDb } from "./db/client.ts";
 import { runMigrations } from "./db/migrate.ts";
-import { EventRotationSupervisor } from "./eventRotationSupervisor.ts";
+import {
+  EVENT_ROTATION_STORAGE_STREAM,
+  EventRotationSupervisor,
+} from "./eventRotationSupervisor.ts";
 import { materializeKalshiPrivateKey } from "./kalshiKeyMaterializer.ts";
 import { loadLiveEventState } from "./liveEventState.ts";
 import { JsonlStorage } from "./storage.ts";
-import { createEspnScheduleSource } from "../src/sources/espnSchedule.ts";
+import {
+  createEspnScheduleSource,
+  eventWithinReviewWindow,
+} from "../src/sources/espnSchedule.ts";
+import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
 
 export const EVENT_ROTATION_INTERVAL_MS = 15 * 60 * 1_000;
 
@@ -38,18 +45,49 @@ export async function startApp(): Promise<{
   runMigrations();
 
   console.log("Starting collector (API + SSE + collector)…");
+  const scheduleSource = createEspnScheduleSource();
+  const nowMs = Date.now();
+  const preferredEventIds: string[] = [];
+  if (config.dataMode === "live") {
+    const upcoming = await readUpcomingOddsDocument(config.persistencePath);
+    preferredEventIds.push(
+      ...(upcoming?.events ?? [])
+        .filter((event) => {
+          if (event.startsAt === undefined) return false;
+          return eventWithinReviewWindow(event.startsAt, new Date(nowMs));
+        })
+        .sort(
+          (left, right) =>
+            Date.parse(right.startsAt ?? "") - Date.parse(left.startsAt ?? ""),
+        )
+        .map((event) => event.espnEventId),
+    );
+    const persistedEventId = (await storage.read<Record<string, unknown>>(
+      EVENT_ROTATION_STORAGE_STREAM,
+    )).flatMap((entry) =>
+      typeof entry.eventId === "string" ? [entry.eventId] : []
+    ).at(-1);
+    if (persistedEventId !== undefined) preferredEventIds.push(persistedEventId);
+  }
   // Bind every interface in production so Fly's proxy can reach the
   // Machine; local dev tooling still gets collector.ts's 127.0.0.1 default.
   const collectorOptions = {
     host: process.env.HOST ?? "0.0.0.0",
     storage,
+    ...(config.dataMode === "live"
+      ? {
+          stateLoader: () => loadLiveEventState({
+            scheduleSource,
+            preferredEventIds: [...new Set(preferredEventIds)],
+          }),
+        }
+      : {}),
   } as const;
   let collector = await createCollector(collectorOptions);
   const port = await collector.start();
   console.log(`UFC app listening on http://127.0.0.1:${port}`);
 
   let activeEventId = collector.getBootstrap().state?.event.id;
-  const scheduleSource = createEspnScheduleSource();
   const rotation =
     config.dataMode === "live"
       ? new EventRotationSupervisor({
@@ -58,8 +96,15 @@ export async function startApp(): Promise<{
             ? {}
             : { initialEventId: activeEventId }),
           intervalMs: EVENT_ROTATION_INTERVAL_MS,
-          resolveEventId: async () =>
-            (await scheduleSource.listUpcomingEvents())[0]?.eventId,
+          resolveEventId: async () => {
+            const activeStartsAt = collector.getBootstrap().state?.event.startsAt;
+            if (activeEventId !== undefined && activeStartsAt !== undefined) {
+              if (eventWithinReviewWindow(activeStartsAt, new Date())) {
+                return activeEventId;
+              }
+            }
+            return (await scheduleSource.listUpcomingEvents())[0]?.eventId;
+          },
           rotate: async (eventId) => {
             if (eventId === activeEventId) return;
             console.log(`ESPN event changed to ${eventId}; rotating collector…`);

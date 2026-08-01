@@ -3,7 +3,7 @@ import type {
   EspnScheduledFight,
 } from "../sources/espnSchedule.ts";
 import { FitText, MatchupCard } from "./MatchupCard.tsx";
-import { fmtMethod, fmtTime } from "./format.ts";
+import { fmtFightPhase, fmtTime } from "./format.ts";
 import "./newComponents.css";
 
 /**
@@ -13,40 +13,22 @@ import "./newComponents.css";
  * and saying "upcoming" forever.
  */
 function FightStatusChip({ fight }: { fight: EspnScheduledFight }) {
+  const label = fmtFightPhase(
+    fight.status,
+    fight.currentRound,
+    fight.result,
+  );
   switch (fight.status) {
     case "in-round":
-      return <span className="chip chip-live">LIVE R{fight.currentRound}</span>;
     case "between-rounds":
-      return <span className="chip chip-live">END R{fight.currentRound}</span>;
-    case "final": {
-      const r = fight.result;
-      const winner =
-        r?.winner === "red" || r?.winner === "blue"
-          ? fight[r.winner].name.split(" ").at(-1)
-          : r?.winner === "draw"
-            ? "DRAW"
-            : r?.winner === "nc"
-              ? "NO CONTEST"
-              : undefined;
-      return (
-        <span className="chip chip-final">
-          {r
-            ? `${winner ?? "FINAL"} · ${fmtMethod(r.method)}${r.round ? ` R${r.round}` : ""}`
-            : "FINAL"}
-        </span>
-      );
-    }
+      return <span className="chip chip-live">{label}</span>;
+    case "final":
+      return <span className="chip chip-final">{label}</span>;
     case "canceled":
     case "postponed":
-      return (
-        <span className="chip chip-canceled">{fight.status.toUpperCase()}</span>
-      );
+      return <span className="chip chip-canceled">{label}</span>;
     default:
-      return (
-        <span className="chip chip-upcoming">
-          UPCOMING
-        </span>
-      );
+      return <span className="chip chip-upcoming">{label}</span>;
   }
 }
 

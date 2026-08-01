@@ -88,6 +88,25 @@ const fighterB = {
   knockdowns: 0,
 };
 
+const espnFighter = {
+  significantStrikesLanded: 13,
+  significantStrikesAttempted: 14,
+  totalStrikesLanded: 13,
+  totalStrikesAttempted: 14,
+  takedownsLanded: 0,
+  takedownsAttempted: 0,
+  submissionsAttempted: 0,
+  reversals: 0,
+  controlTimeSeconds: 4,
+  knockdowns: 1,
+  headStrikesLanded: 11,
+  headStrikesAttempted: 11,
+  bodyStrikesLanded: 1,
+  bodyStrikesAttempted: 2,
+  legStrikesLanded: 1,
+  legStrikesAttempted: 1,
+};
+
 function payload(
   round = 1,
   values: Partial<CitoRoundStatsPayload> = {},
@@ -200,6 +219,37 @@ function marketSnapshot(source: MarketSource): MarketSnapshot {
 }
 
 describe("RoundStatsPipeline", () => {
+  it("persists finalized ESPN round stats in the unified round", async () => {
+    const storage = new MemoryStorage();
+    const first = await setup(fetcher([]), { storage });
+    const stats = first.pipeline.observeEspnCumulative({
+      boutId: BOUT_ID,
+      round: 1,
+      fighterA: espnFighter,
+      fighterB: { ...espnFighter, knockdowns: 0 },
+      observedAt: "2026-07-28T00:05:00Z",
+    }, true);
+    await first.pipeline.persistEspnRoundStats(stats);
+    emitConfirmed(first.bus);
+    await first.pipeline.idle();
+
+    expect(first.pipeline.getUnifiedRound(BOUT_ID, 1)).toMatchObject({
+      provisional: false,
+      espnStats: {
+        finalized: true,
+        fighterA: { significantStrikesLanded: 13, knockdowns: 1 },
+      },
+    });
+    await first.pipeline.close();
+
+    const restored = await setup(fetcher([]), { storage });
+    expect(restored.pipeline.getUnifiedRound(BOUT_ID, 1)?.espnStats).toMatchObject({
+      finalized: true,
+      fighterB: { knockdowns: 0 },
+    });
+    await restored.pipeline.close();
+  });
+
   it("produces provisional then confirmed records in a normal round flow", async () => {
     const cito = fetcher([payload()]);
     const { bus, storage, time, pipeline } = await setup(cito);
