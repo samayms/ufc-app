@@ -145,6 +145,7 @@ import {
 } from "./tickStore.ts";
 import { TheOddsApiRoundJob } from "./theOddsApiJob.ts";
 import { isEventCalendarDay } from "./espnPollingSchedule.ts";
+import { serveStaticSpa } from "./staticSpa.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
 export const COLLECTOR_HEALTH_STREAM = SOURCE_HEALTH_STORAGE_STREAM;
@@ -1469,6 +1470,14 @@ export async function createCollector(
         mapping,
       });
       sendJson(response, 200, { mapping }, secrets);
+      return;
+    }
+
+    if (
+      request.method === "GET" &&
+      !url.pathname.startsWith("/api/") &&
+      await serveStaticSpa({ pathname: url.pathname, response })
+    ) {
       return;
     }
 
