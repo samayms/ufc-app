@@ -10,6 +10,7 @@ import {
 } from "./collector.ts";
 import { KalshiFixtureTransport } from "./kalshiTransport.ts";
 import { PolymarketFixtureTransport } from "./polymarketTransport.ts";
+import type { MarketTransport } from "./marketTransport.ts";
 import { MemoryStorage } from "./storage.ts";
 
 const collectors: Collector[] = [];
@@ -90,6 +91,56 @@ describe("collector market transport wiring", () => {
     await expect(
       collector.tickStore.getTickHistory("bout-4", "odds-api-io"),
     ).resolves.toHaveLength(4);
+  });
+
+  it("pins rebuilt Kalshi ticks that arrive after the sportsbook refresh, not the stale pre-rebuild book", async () => {
+    let collector: Collector | undefined;
+    const transport: MarketTransport = {
+      source: "kalshi",
+      subscriptions: [
+        { source: "kalshi", boutId: "bout-4", externalId: "red", marketType: "fight-winner", outcome: "red" },
+        { source: "kalshi", boutId: "bout-4", externalId: "blue", marketType: "fight-winner", outcome: "blue" },
+      ],
+      async connect() {},
+      async disconnect() {},
+      async idle() {},
+      setSubscriptions() {},
+      on() { return () => undefined; },
+      async waitUntilReady() {
+        if (collector === undefined) return false;
+        await collector.tickStore.ingest({
+          source: "kalshi", boutId: "bout-4", marketType: "fight-winner", outcome: "red",
+          bid: 79, ask: 81, receivedAt: "2099-01-01T00:00:02.000Z", stale: false,
+        });
+        await collector.tickStore.ingest({
+          source: "kalshi", boutId: "bout-4", marketType: "fight-winner", outcome: "blue",
+          bid: 19, ask: 21, receivedAt: "2099-01-01T00:00:02.000Z", stale: false,
+        });
+        return true;
+      },
+    };
+    collector = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage: new MemoryStorage(),
+      market: { transports: [transport] },
+    });
+    collectors.push(collector);
+    await collector.tickStore.ingest({
+      source: "kalshi", boutId: "bout-4", marketType: "fight-winner", outcome: "red",
+      bid: 19, ask: 21, receivedAt: "2026-07-28T01:14:00.000Z", stale: true,
+    });
+
+    collector.eventBus.emit({ type: "FIGHT_ENDED", boutId: "bout-5", round: 3, detectedAt: "2026-07-28T01:15:00.000Z" });
+    await collector.oddsApiIoPoller.idle();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await collector.tickStore.idle();
+
+    expect(collector.tickStore.getSnapshots("bout-4")).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        source: "kalshi", boundaryType: "pre-fight",
+        outcomes: expect.arrayContaining([expect.objectContaining({ outcome: "red", midpoint: 80, stale: false })]),
+      }),
+    ]));
   });
 
   it("does not restart live market streams for an already completed card", async () => {

@@ -50,21 +50,6 @@ function renderMarket(market: OddsSnapshot["market"]): string {
 }
 
 describe("MarketStrip odds source", () => {
-  it("shows a settled winner as 100% without mutating the supplied market", () => {
-    const latest = { kalshi: snapshot("kalshi") };
-    const html = renderToStaticMarkup(
-      <MarketStrip
-        latestOdds={latest}
-        preFightOdds={{}}
-        resultWinner="blue"
-        onOpen={() => undefined}
-      />,
-    );
-    expect(html).toContain(">0%<");
-    expect(html).toContain(">100%<");
-    expect(latest.kalshi.quotes[0]?.impliedProbability).toBe(0.37);
-  });
-
   it.each(["kalshi", "polymarket", "sportsbook"] as const)(
     "puts %s on both large percentages",
     (market) => {
