@@ -212,7 +212,7 @@ describe("dashboard state surfaces", () => {
       />,
     );
 
-    expect(scorecards).toContain("Reyes controlled the round behind clean counters.");
+    expect(scorecards).not.toContain("Reyes controlled the round behind clean counters.");
     expect(scorecards).not.toContain("Measured exchanges.");
     expect(scorecards).toContain("10-9");
     expect(scorecards).toContain("Sherdog");
