@@ -262,6 +262,8 @@ describe("dashboard state surfaces", () => {
     expect(scorecards).not.toContain("Measured exchanges.");
     expect(scorecards).not.toContain("Future round");
     expect(scorecards).not.toContain("delivery-freshness");
+    expect(scorecards).not.toContain("Sherdog · Round");
+    expect(scorecards).not.toContain("received");
     expect(scorecards).toContain('class="media-scorecard-avatar"');
     expect(scorecards).toContain('alt=""');
     expect(scorecards).toContain('aria-label="Sherdog round 1 scorecards"');

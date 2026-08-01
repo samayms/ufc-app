@@ -422,7 +422,6 @@ export default function App() {
                         dashboard.collector?.unifiedRounds ?? []
                       }
                       round={selectedRound}
-                      collector={dashboard.collector}
                     />
                   </>
                 )}

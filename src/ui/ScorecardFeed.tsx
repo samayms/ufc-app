@@ -3,7 +3,6 @@ import type { BoutView, SherdogScorerCard, SherdogScorerProfile } from "../schem
 import defaultScorerAvatar from "../assets/sherdog-default-avatar.svg";
 import {
   collectorBaseUrl,
-  type CollectorSnapshot,
   type CollectorUnifiedRound,
 } from "../store/collectorClient.ts";
 
@@ -83,7 +82,6 @@ export function ScorecardFeed({
   view: BoutView;
   records?: readonly CollectorUnifiedRound[];
   round?: number;
-  collector?: CollectorSnapshot;
 }) {
   const scorerProfiles = useSherdogScorerProfiles();
   const record = records
@@ -110,7 +108,7 @@ export function ScorecardFeed({
             <span className="media-scorecard-id">
               <strong className="media-scorecard-name">{card.scorer}</strong>
               <span className="media-scorecard-handle">
-                Sherdog · Round {sherdog.round}
+                Round {sherdog.round}
               </span>
             </span>
             <span className="media-scorecard-score">
