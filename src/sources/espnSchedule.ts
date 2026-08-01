@@ -338,12 +338,10 @@ const ESPN_FIGHTCENTER_BASE_URL =
 const ESPN_ATHLETE_BIO_BASE_URL =
   "https://site.web.api.espn.com/apis/common/v3/sports/mma/ufc/athletes";
 /**
- * Returns every division's rankings (plus both pound-for-pound lists) in a
- * single response — no query params needed or honored (verified live
- * 2026-07-28: `?rankingId=6` made no difference). CORS-open, unauthenticated
- * "site API" surface, same class of endpoint as the rest of this file.
+ * Legacy ESPN ranking payload parser. The live endpoint is intentionally not
+ * used for display because it can retain fighters long after the official UFC
+ * rankings have removed them; this remains exported for its parser contract.
  */
-const ESPN_RANKINGS_URL = "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/rankings";
 
 function formatUtcYyyyMmDd(date: Date): string {
   const year = date.getUTCFullYear();
@@ -1058,14 +1056,6 @@ const FIGHTCENTER_REQUEST_TIMEOUT_MS = 8_000;
 const FIGHTCENTER_MAX_RESPONSE_BYTES = 4_000_000;
 const ATHLETE_BIO_REQUEST_TIMEOUT_MS = 8_000;
 const ATHLETE_BIO_MAX_RESPONSE_BYTES = 4_000_000;
-const RANKINGS_REQUEST_TIMEOUT_MS = 8_000;
-const RANKINGS_MAX_RESPONSE_BYTES = 4_000_000;
-/**
- * Rankings move at most weekly, nothing like the minute-to-minute data the
- * rest of this file caches — a noticeably longer TTL than `DEFAULT_TTL_MS`
- * keeps this from being re-fetched on every card load.
- */
-const RANKINGS_TTL_MS = 45 * 60_000;
 
 type AthleteBio = ReturnType<typeof parseEspnAthleteBio>;
 
@@ -1114,14 +1104,6 @@ export function createEspnScheduleSource(options?: {
   // "failure is never cached — the next call retries" convention.
   const athleteBioCache = new Map<string, CacheEntry<AthleteBio>>();
   const athleteBioInFlight = new Map<string, Promise<AthleteBio>>();
-
-  // Single-entry cache for the rankings lookup (one GET returns every
-  // division), independent of the caches above and on its own longer TTL.
-  // A failed fetch is never cached, same "next call retries" convention as
-  // the rest of this file — enrichCardWithRankings is the one that swallows
-  // the failure so it never blocks or fails card loading.
-  let rankingsEntry: CacheEntry<Map<string, string>> | undefined;
-  let rankingsInFlight: Promise<Map<string, string>> | undefined;
 
   async function fetchEventList(): Promise<EspnScheduledEventSummary[]> {
     const current = now();
@@ -1185,43 +1167,6 @@ export function createEspnScheduleSource(options?: {
     return promise;
   }
 
-  async function fetchRankings(): Promise<Map<string, string>> {
-    try {
-      const payload = await fetchJsonWithLimits(ESPN_RANKINGS_URL, {
-        timeoutMs: RANKINGS_REQUEST_TIMEOUT_MS,
-        maxBytes: RANKINGS_MAX_RESPONSE_BYTES,
-        fetchImpl,
-      });
-      return parseEspnRankings(payload);
-    } catch (error) {
-      throw new Error(
-        `Failed to load ESPN UFC rankings: ${messageOf(error)}`,
-        { cause: error },
-      );
-    }
-  }
-
-  function getRankingsMap(): Promise<Map<string, string>> {
-    const nowMs = now().getTime();
-    if (rankingsEntry !== undefined && rankingsEntry.expiresAt > nowMs) {
-      return Promise.resolve(rankingsEntry.value);
-    }
-    if (rankingsInFlight !== undefined) {
-      return rankingsInFlight;
-    }
-
-    const promise = fetchRankings()
-      .then((value) => {
-        rankingsEntry = { expiresAt: now().getTime() + RANKINGS_TTL_MS, value };
-        return value;
-      })
-      .finally(() => {
-        rankingsInFlight = undefined;
-      });
-    rankingsInFlight = promise;
-    return promise;
-  }
-
   /**
    * Merges each fighter's nickname/recent-fight-history bio onto an
    * already-built card. Every athlete's bio is fetched independently
@@ -1277,34 +1222,15 @@ export function createEspnScheduleSource(options?: {
   /**
    * Merges each fighter's divisional ranking onto an already-built card.
    *
-   * The official-UFC overlay wins wherever it names the fighter. ESPN's own
-   * rankings endpoint is years out of date (probed 2026-07-29: Ngannou still
-   * heavyweight champion) and is kept only as the fallback for fighters the
-   * overlay does not list — dropping it entirely would lose ranked fighters
-   * whose spelling the overlay and ESPN disagree on.
-   *
-   * The ESPN fetch is a single shared lookup (not per-athlete), so a failure
-   * there costs the fallback for the whole card rather than a per-fighter gap.
-   * Exactly like the bio enrichment above, that failure is swallowed rather
-   * than propagated: a rankings outage must never fail or block card loading,
-   * and the overlay still applies.
+   * The official UFC snapshot is the only display authority. ESPN's endpoint
+   * can retain a fighter after the official list has removed them, so an
+   * absent official entry deliberately produces no badge.
    */
   async function enrichCardWithRankings(
     card: EspnScheduledCard,
   ): Promise<EspnScheduledCard> {
-    let espnRankings: Map<string, string>;
-    try {
-      espnRankings = await getRankingsMap();
-    } catch {
-      espnRankings = new Map();
-    }
-
     const enrichFighter = (fighter: EspnScheduledFighter): EspnScheduledFighter => {
-      const ranking =
-        officialUfcRanking(fighter.name) ??
-        (fighter.athleteId !== undefined
-          ? espnRankings.get(fighter.athleteId)
-          : undefined);
+      const ranking = officialUfcRanking(fighter.name);
       return ranking === undefined ? fighter : { ...fighter, ranking };
     };
 

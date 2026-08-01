@@ -894,7 +894,7 @@ describe("createEspnScheduleSource", () => {
     expect(garry?.ranking).toBe("#1 Welterweight");
   });
 
-  it("falls back to ESPN for a fighter the official overlay does not name", async () => {
+  it("does not show an ESPN-only ranking when the official UFC overlay omits the fighter", async () => {
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.includes("/rankings")) {
         return jsonResponse({
@@ -922,7 +922,7 @@ describe("createEspnScheduleSource", () => {
       .flatMap((fight) => [fight.red, fight.blue])
       .find((fighter) => fighter.athleteId === "4685871");
 
-    expect(ranked?.ranking).toBe("#1 Middleweight");
+    expect(ranked?.ranking).toBeUndefined();
   });
 
   it("keeps the card intact when the rankings fetch fails, without failing or blocking card loading", async () => {
@@ -945,20 +945,9 @@ describe("createEspnScheduleSource", () => {
     expect(garry?.ranking).toBe("#1 Welterweight");
   });
 
-  it("caches the rankings lookup across multiple getCard calls (single-entry, independent of the per-event card cache)", async () => {
+  it("does not fetch ESPN's stale rankings endpoint while loading cards", async () => {
     let currentTime = new Date("2026-07-28T00:00:00Z");
     const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes("/rankings")) {
-        return jsonResponse({
-          rankings: [
-            {
-              type: "lightweight-champions",
-              weightClass: { text: "Lightweight" },
-              ranks: [{ current: 1, athlete: { id: "3332412" } }],
-            },
-          ],
-        });
-      }
       if (url.includes("/athletes/")) return jsonResponse({});
       const eventId = url.split("/").pop();
       return jsonResponse(eventId === "600059185" ? ufc330Fixture : sparseFixture);
@@ -974,18 +963,10 @@ describe("createEspnScheduleSource", () => {
     }
 
     await source.getCard("600059185");
-    expect(rankingsFetchCount()).toBe(1);
-
-    // A second event's card, well within the short card ttlMs, still reuses
-    // the single cached rankings lookup rather than re-fetching it.
     await source.getCard("600060773");
-    expect(rankingsFetchCount()).toBe(1);
-
-    // Even once the (short) card cache has expired, the (much longer)
-    // rankings cache is still live.
     currentTime = new Date(currentTime.getTime() + 61_000);
     await source.getCard("600059185");
-    expect(rankingsFetchCount()).toBe(1);
+    expect(rankingsFetchCount()).toBe(0);
   });
 
   it("keeps the rest of a fighter's data when their bio fetch fails, without failing the whole card", async () => {

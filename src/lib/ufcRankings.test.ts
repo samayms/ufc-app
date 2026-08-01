@@ -35,6 +35,8 @@ describe("official UFC ranking overlay", () => {
 
   it("returns undefined for an unranked fighter rather than a label", () => {
     expect(officialUfcRanking("Someone Entirely Unranked")).toBeUndefined();
+    expect(officialUfcRanking("Marcin Tybura")).toBeUndefined();
+    expect(officialUfcRanking("Aleksandar Rakic")).toBeUndefined();
   });
 
   it("prefers the champion label over a numbered entry in the same division", () => {
