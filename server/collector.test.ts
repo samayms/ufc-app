@@ -943,4 +943,73 @@ describe("fixture collector loading", () => {
     );
   });
 
+  it("starts production Sherdog discovery, restores previews, and uses its live-blog URL", async () => {
+    if (!localhostAvailable) return;
+    const liveEnv = Object.fromEntries(
+      CREDENTIAL_ENV_NAMES.map((name) => [name, `secret-${name}`]),
+    );
+    const liveTime = new ManualRoundTime();
+    const startDiscovery = vi.fn();
+    const closeDiscovery = vi.fn(async () => undefined);
+    const discovery = {
+      getLiveBlogUrl: () => "/news/news/discovered-live-card",
+      getOutlooks: () => ({
+        "bout-main": "Persisted Gemini fight preview.",
+      }),
+      start: startDiscovery,
+      close: closeDiscovery,
+      idle: vi.fn(async () => undefined),
+    };
+    const liveFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        "<article><h3>Round 1</h3><p>Discovered live commentary.</p><p>Sherdog scores the round 10-9 Reyes.</p></article>",
+        { status: 200 },
+      ),
+    );
+    const collector = await createCollector({
+      env: {
+        ...liveEnv,
+        DATA_MODE: "live",
+        COLLECTOR_PORT: "0",
+        SHERDOG_PERMISSION_SCOPE: "sherdog-read",
+        LIFECYCLE_DRIVER_ENABLED: "false",
+        PRE_EVENT_POLL_ENABLED: "false",
+      },
+      storage: new MemoryStorage(),
+      stateLoader: loadFixtureState,
+      market: { transports: [] },
+      roundStats: { clock: liveTime, timer: liveTime },
+      sherdog: {
+        eventDiscovery: discovery,
+        fetchImpl: liveFetch,
+        baseUrl: "https://sherdog.example.invalid",
+      },
+    });
+    collectors.push(collector);
+
+    expect(
+      collector.getBootstrap().state?.boutViews["bout-main"]?.bout.outlook,
+    ).toBe("Persisted Gemini fight preview.");
+    await collector.start();
+    expect(startDiscovery).toHaveBeenCalledTimes(1);
+
+    collector.eventBus.emit({
+      type: "FIGHT_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: "2026-07-28T00:00:00Z",
+    });
+    await collector.sherdogJobs.idle();
+    liveTime.advance(10_000);
+    await collector.sherdogJobs.idle();
+
+    expect(liveFetch).toHaveBeenCalledWith(
+      "https://sherdog.example.invalid/news/news/discovered-live-card",
+      expect.any(Object),
+    );
+    await collector.close();
+    collectors.splice(collectors.indexOf(collector), 1);
+    expect(closeDiscovery).toHaveBeenCalledTimes(1);
+  });
+
 });

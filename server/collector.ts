@@ -121,6 +121,15 @@ import {
   type SherdogFetcher,
 } from "./sherdogJobs.ts";
 import {
+  SherdogEventDiscovery,
+  type SherdogEventDiscoveryController,
+} from "./sherdogEventDiscovery.ts";
+import {
+  createDisabledFightOutlookSummarizer,
+  createLiveFightOutlookSummarizer,
+  type FightOutlookSummarizer,
+} from "./sherdogOutlookSummarizer.ts";
+import {
   JsonlStorage,
   type Storage,
 } from "./storage.ts";
@@ -227,6 +236,8 @@ export interface CollectorSportsbookOptions {
 export interface CollectorSherdogOptions {
   fetcher?: SherdogFetcher;
   summarizer?: RoundSummarizer;
+  fightOutlookSummarizer?: FightOutlookSummarizer;
+  eventDiscovery?: SherdogEventDiscoveryController;
   requestTimeoutMs?: number;
   fetchImpl?: typeof fetch;
   baseUrl?: string;
@@ -292,6 +303,7 @@ export interface Collector {
   readonly theOddsApiJob: TheOddsApiRoundJob;
   readonly theOddsApiActivePoller: TheOddsApiActivePoller;
   readonly sherdogJobs: SherdogRoundJobs;
+  readonly sherdogDiscovery?: SherdogEventDiscoveryController;
   readonly lifecycle: FightLifecycleMachine;
   readonly lifecycleDriver: LifecycleDriver;
   readonly preEventPoller: PreEventPoller;
@@ -1005,6 +1017,57 @@ export async function createCollector(
     options.sportsbook?.timer ?? options.roundStats?.timer;
   const findBout = (boutId: string) =>
     loaded.event.bouts.find((bout) => bout.id === boutId);
+  const geminiKey = config.credentials.GEMINI_API_KEY;
+  const fightOutlookSummarizer =
+    options.sherdog?.fightOutlookSummarizer ??
+    (config.roundSummary.enabled && geminiKey !== undefined
+      ? createLiveFightOutlookSummarizer({
+          apiKey: geminiKey,
+          model: config.roundSummary.model,
+          timeoutMs: 30_000,
+        })
+      : createDisabledFightOutlookSummarizer());
+  const applyDiscoveredOutlooks = (
+    outlooks: Readonly<Record<string, string>>,
+  ): void => {
+    for (const bout of loaded.event.bouts) {
+      const outlook = outlooks[bout.id];
+      if (outlook === undefined) continue;
+      bout.outlook = outlook;
+      const view = loaded.boutViews[bout.id];
+      if (view !== undefined) view.bout.outlook = outlook;
+    }
+  };
+  const initializedSherdogDiscovery =
+    options.sherdog?.eventDiscovery ??
+    (config.dataMode === "live" && options.sherdog?.fetcher === undefined
+      ? await SherdogEventDiscovery.create({
+          event: loaded.event,
+          storage,
+          permissionScope: config.sherdog.permissionScope,
+          baseUrl: options.sherdog?.baseUrl ?? config.sherdog.baseUrl,
+          summarizer: fightOutlookSummarizer,
+          ...(config.sherdog.liveBlogUrl === undefined
+            ? {}
+            : { initialLiveBlogUrl: config.sherdog.liveBlogUrl }),
+          onChanged: async (discovered) => {
+            applyDiscoveredOutlooks(discovered.outlooks);
+            state = loaded;
+            await storage.append(COLLECTOR_STATE_STREAM, {
+              version: 1,
+              state: loaded,
+            } satisfies PersistedCollectorState);
+            await push.publish("bootstrap", getBootstrap());
+          },
+          onError: (stage, error) => {
+            console.warn(
+              `Sherdog ${stage} discovery failed:`,
+              error instanceof Error ? error.message : error,
+            );
+          },
+        })
+      : undefined);
+  applyDiscoveredOutlooks(initializedSherdogDiscovery?.getOutlooks() ?? {});
   let defaultSherdogFetcher: SherdogFetcher;
   if (config.dataMode === "fixture") {
     defaultSherdogFetcher = createFixtureSherdogFetcher();
@@ -1018,6 +1081,7 @@ export async function createCollector(
           initializedBoutMappings
             .getExternalRefs(boutId)
             .find((ref) => ref.source === "sherdog")?.id ??
+          initializedSherdogDiscovery?.getLiveBlogUrl() ??
           config.sherdog.liveBlogUrl,
         baseUrl: options.sherdog?.baseUrl ?? config.sherdog.baseUrl,
         ...(options.sherdog?.fetchImpl === undefined
@@ -1043,7 +1107,6 @@ export async function createCollector(
   // Gated on the switch and the key, not on live mode: the fixture simulator
   // runs real captured commentary, so summarizing it there is how the box gets
   // reviewed before a card. Without a key, rounds keep their raw commentary.
-  const geminiKey = config.credentials.GEMINI_API_KEY;
   const summarizer =
     options.sherdog?.summarizer ??
     (config.roundSummary.enabled && geminiKey !== undefined
@@ -1391,6 +1454,9 @@ export async function createCollector(
     theOddsApiJob: initializedTheOddsApiJob,
     theOddsApiActivePoller: initializedTheOddsApiActivePoller,
     sherdogJobs: initializedSherdogJobs,
+    ...(initializedSherdogDiscovery === undefined
+      ? {}
+      : { sherdogDiscovery: initializedSherdogDiscovery }),
     lifecycle,
     lifecycleDriver,
     preEventPoller,
@@ -1411,6 +1477,7 @@ export async function createCollector(
         await preEventPoller.start();
       }
       if (config.dataMode === "live") {
+        initializedSherdogDiscovery?.start();
         await Promise.all(
           marketTransports.map((transport) => transport.connect()),
         );
@@ -1435,6 +1502,7 @@ export async function createCollector(
     },
     async close() {
       for (const unsubscribe of unsubscribers) unsubscribe();
+      await initializedSherdogDiscovery?.close();
       await preEventPoller.close();
       await lifecycleDriver.close();
       await initializedOddsApiIoPoller.close();

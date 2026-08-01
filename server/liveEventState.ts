@@ -34,7 +34,6 @@ import {
   type EspnScheduledFight,
   type EspnScheduledFighter,
 } from "../src/sources/espnSchedule.ts";
-import { loadFightOutlookFixture } from "./fightOutlookFixture.ts";
 
 /** ESPN's free-text weight-class labels, mapped onto the schema's enum. */
 const WEIGHT_CLASS_BY_LABEL: Record<string, WeightClass> = {
@@ -164,8 +163,8 @@ function emptyBoutView(bout: Bout): BoutView {
 export function espnCardToDashboardState(
   card: EspnScheduledCard,
   fetchedAt: string,
-  /** Injectable for tests; defaults to the real fixture in production. */
-  outlookByBoutId: ReadonlyMap<string, string> = loadFightOutlookFixture(),
+  /** Injectable for fixtures; production outlooks are restored by discovery. */
+  outlookByBoutId: ReadonlyMap<string, string> = new Map(),
 ): DashboardState {
   const bouts: Bout[] = [];
   for (const section of card.sections) {

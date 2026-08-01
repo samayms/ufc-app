@@ -13,7 +13,6 @@ primary_region = "ewr"
 [env]
   DB_PATH = "/data/ufc.db"
   DATA_MODE = "live"
-  SHERDOG_LIVE_BLOG_URL = "https://www.sherdog.com/news/news/UFC-Belgrade-Medic-vs-Rodriguez-playbyplay-results-round-scoring-202171"
   SHERDOG_REQUEST_INTERVAL_MS = "10000"
 
 [[mounts]]

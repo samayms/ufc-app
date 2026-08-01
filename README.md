@@ -98,24 +98,26 @@ Sherdog. The transport remains fail-closed without both.
 
 A card's play-by-play lives at one page per event, of the form
 `/news/news/<slug>-playbyplay-results-round-scoring-<id>`, with every bout on
-it. Point `SHERDOG_LIVE_BLOG_URL` at that page for the event being watched;
-the parser picks each bout's rounds out of it by fighter name, so no per-bout
-mapping is needed. A bout that does carry its own `sherdog` external ref uses
-that instead.
+it. In live mode, the collector searches Sherdog's official news feed at
+T-2h, T-1h, T-30m, and event start, persists the discovered URL under `/data`,
+and immediately makes it available to every bout's round jobs. The parser
+picks each bout's rounds out of the shared page by fighter name, so no
+per-bout mapping is needed. A bout-level `sherdog` external ref still wins,
+and `SHERDOG_LIVE_BLOG_URL` remains an optional emergency override.
 
-Once Sherdog publishes the article, `npm run sherdog:find` discovers it from
-Sherdog's official news RSS feed by matching the nearest ESPN card's two
-main-event fighters. It prints the `SHERDOG_LIVE_BLOG_URL` assignment without
-modifying `.env`. Pass `--event`, `--red`, and `--blue` to bypass the ESPN
-lookup and search for an explicitly named matchup.
+`npm run sherdog:find` runs the same live-blog matcher manually for diagnostics.
+It prints the `SHERDOG_LIVE_BLOG_URL` assignment without modifying `.env`.
+Pass `--event`, `--red`, and `--blue` to bypass the ESPN lookup and search for
+an explicitly named matchup.
 
 Sherdog also publishes a fight-outlook ("Preview") article ahead of the
-live blog. `npm run sherdog:outlook:find` finds it the same way and prints
-`SHERDOG_FIGHT_OUTLOOK_URL`. `npm run sherdog:outlook:watch` automates the
-lookup: it sleeps until 3 days before the event, then checks twice daily
-until the article is found (or the event starts without one ever appearing),
-caching the result in `data/sherdog-outlook-state.json` so restarts don't
-re-fetch.
+live blog. The production collector opens discovery three days before the
+event and checks twice daily for the main-card and prelims articles. It fetches
+each article's bout pages, reuses the established Gemini fight-outlook prompt,
+persists each summarized bout outlook under `/data`, and pushes the updated
+card to connected clients. Restarts restore both article URLs and completed
+summaries without paying Gemini twice. `npm run sherdog:outlook:find` and
+`npm run sherdog:outlook:watch` remain manual diagnostic tools.
 
 Each Sherdog round is condensed by Gemini into the summary the dashboard
 shows. The raw play-by-play runs two to three thousand characters and the
