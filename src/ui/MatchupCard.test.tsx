@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { MatchupCard } from "./MatchupCard.tsx";
+import { MatchupCard, MatchupFighter } from "./MatchupCard.tsx";
 
 const RED = { name: "Danilo Reyes" };
 const BLUE = { name: "Marco Silva" };
@@ -60,5 +60,23 @@ describe("MatchupCard winner arrow", () => {
     expect(blueWon.indexOf("tot-winner-arrow-blue")).toBeGreaterThan(
       blueWon.indexOf(">SUB<"),
     );
+  });
+});
+
+describe("MatchupFighter winner tint", () => {
+  it("tints only the winning corner's block, leaving the loser plain", () => {
+    const redWon = renderToStaticMarkup(
+      <MatchupFighter fighter={RED} corner="red" isWinner />,
+    );
+    const redLost = renderToStaticMarkup(
+      <MatchupFighter fighter={RED} corner="red" isWinner={false} />,
+    );
+    const blueWon = renderToStaticMarkup(
+      <MatchupFighter fighter={BLUE} corner="blue" isWinner />,
+    );
+
+    expect(redWon).toContain('class="event-card-fighter is-winner"');
+    expect(redLost).not.toContain("is-winner");
+    expect(blueWon).toContain('class="event-card-fighter is-blue is-winner"');
   });
 });

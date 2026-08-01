@@ -147,10 +147,14 @@ export function MatchupFighter({
   fighter,
   corner,
   isLoser,
+  isWinner,
 }: {
   fighter: MatchupFighterEntry | undefined;
   corner: "red" | "blue";
   isLoser?: boolean;
+  /** Tints the block with a subtle corner-colored gradient, same signal as
+   *  the winner arrow. */
+  isWinner?: boolean;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const blueSuffix = corner === "blue" ? " is-blue" : "";
@@ -160,8 +164,9 @@ export function MatchupFighter({
   const showImg = fighter.photoUrl && !imgFailed;
   const { first, last } = splitName(fighter.name);
   const loserSuffix = isLoser ? " is-loser" : "";
+  const winnerSuffix = isWinner ? " is-winner" : "";
   return (
-    <div className={`event-card-fighter${blueSuffix}`}>
+    <div className={`event-card-fighter${blueSuffix}${winnerSuffix}`}>
       <span
         className={`event-card-fighter-photo fighter-photo-${corner}`}
         aria-hidden={showImg ? undefined : "true"}
@@ -232,7 +237,12 @@ export function MatchupCard({
     >
       {header && <div className="event-card-header">{header}</div>}
       <div className="event-card-matchup">
-        <MatchupFighter fighter={red} corner="red" isLoser={redIsLoser} />
+        <MatchupFighter
+          fighter={red}
+          corner="red"
+          isLoser={redIsLoser}
+          isWinner={winnerCorner === "red"}
+        />
         <span className="event-card-center">
           <span className="event-card-center-result">
             <span className="event-card-arrow-slot event-card-arrow-slot-left">
@@ -257,7 +267,12 @@ export function MatchupCard({
           </span>
           {centerDetail}
         </span>
-        <MatchupFighter fighter={blue} corner="blue" isLoser={blueIsLoser} />
+        <MatchupFighter
+          fighter={blue}
+          corner="blue"
+          isLoser={blueIsLoser}
+          isWinner={winnerCorner === "blue"}
+        />
       </div>
     </button>
   );

@@ -98,6 +98,21 @@
   text-align: right;
 }
 
+/* A subtle corner-colored wash on the winner's side, same signal as the
+ * winner arrow — low enough opacity (the existing --*-corner-dim tokens,
+ * already used for other low-emphasis corner tints) that the name text
+ * sitting on top, already colored and bold, stays clearly legible. Fades
+ * from the card's outer edge toward the center so it reads as a corner
+ * marker rather than a full block fill. */
+.event-card-fighter.is-winner {
+  border-radius: var(--radius);
+  background: linear-gradient(to right, var(--red-corner-dim), transparent);
+}
+
+.event-card-fighter.is-blue.is-winner {
+  background: linear-gradient(to left, var(--blue-corner-dim), transparent);
+}
+
 .event-card-fighter-photo {
   width: 38px;
   height: 38px;
