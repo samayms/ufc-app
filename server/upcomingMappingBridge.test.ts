@@ -38,10 +38,9 @@ describe("importCurrentEventUpcomingMappings", () => {
 
     expect(
       registry.findInternalBoutId("polymarket", "new-polymarket-condition"),
-    ).toBe("bout-main");
+    ).toBeUndefined();
     expect(registry.getExternalRefs("bout-main")).toEqual(
       expect.arrayContaining([
-        { source: "polymarket", id: "new-polymarket-condition" },
         // The provider listed blue first; cornersReversed restores canonical
         // red, blue order for resolveMarketSubscriptions.
         { source: "polymarket", id: "new-token-red" },
@@ -53,7 +52,7 @@ describe("importCurrentEventUpcomingMappings", () => {
       manuallyVerified: false,
     });
     await expect(storage.read(BOUT_MAPPING_OVERRIDE_STREAM)).resolves.toEqual([]);
-    await expect(storage.read(BOUT_MAPPING_STREAM)).resolves.toHaveLength(8);
+    await expect(storage.read(BOUT_MAPPING_STREAM)).resolves.toHaveLength(7);
   });
 
   it("rejects malformed, other-event, stale-bout, and conflicting references", async () => {
@@ -94,7 +93,7 @@ describe("importCurrentEventUpcomingMappings", () => {
     await expect(
       importCurrentEventUpcomingMappings({ event, registry: restored, storage }),
     ).resolves.toEqual({ imported: 0, alreadyPresent: 1, rejected: 0 });
-    await expect(storage.read(BOUT_MAPPING_STREAM)).resolves.toHaveLength(8);
+    await expect(storage.read(BOUT_MAPPING_STREAM)).resolves.toHaveLength(7);
   });
 
   it("imports Kalshi fighter tickers but never its non-streamable event ticker", async () => {

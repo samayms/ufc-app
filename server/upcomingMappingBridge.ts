@@ -113,19 +113,14 @@ export async function importCurrentEventUpcomingMappings(options: {
     }
 
     const source = record.provider as SourceId;
-    // Kalshi's externalId identifies a fight event, not a streamable fighter
-    // market. Polymarket's condition id is useful for non-stream reads but
-    // its two outcome tokens are the ids the WebSocket accepts.
+    // Kalshi's externalId identifies a fight event, and Polymarket's identifies
+    // a condition. Neither is a streamable fighter market: both transports
+    // subscribe exclusively to their ordered per-outcome ids.
     const refs =
       source === "kalshi"
         ? orderedStreamIds(record)
         : source === "polymarket"
-          ? (() => {
-              const streamIds = orderedStreamIds(record);
-              return streamIds === undefined
-                ? []
-                : [record.externalId, ...streamIds];
-            })()
+          ? orderedStreamIds(record)
           : [record.externalId];
     if (refs === undefined || refs.length === 0) {
       summary.rejected += 1;
