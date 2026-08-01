@@ -590,35 +590,6 @@
       overflow-wrap: anywhere;
     }
 
-    .results {
-      margin-top: 32px;
-      border-top: 1px solid var(--border);
-      padding-top: 28px;
-    }
-
-    .results[hidden] { display: none; }
-
-    .result-heading {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 16px;
-      margin-bottom: 16px;
-    }
-
-    .result-heading h2 {
-      margin: 0;
-      font-family: "Asap Condensed", "Arial Narrow", sans-serif;
-      font-size: 1.5rem;
-      letter-spacing: -0.02em;
-    }
-
-    .received {
-      color: var(--green);
-      font-size: 0.8125rem;
-      font-variant-numeric: tabular-nums;
-    }
-
     .stats {
       overflow: hidden;
       background: var(--surface);
@@ -755,8 +726,6 @@
       .stats-badges { justify-content: flex-start; margin-top: 10px; }
       .stats-metrics { grid-template-columns: 1fr 1fr; }
       .core-meta-grid { grid-template-columns: 1fr; }
-      .result-heading { display: block; }
-      .received { display: block; margin-top: 3px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -861,18 +830,6 @@
             </div>
             <button id="stop-espn" class="source-stop" type="button" disabled>Stop ESPN polling</button>
           </article>
-          <article class="source-item" data-source="cito">
-            <div class="source-head">
-              <span class="source-name">CITO</span>
-              <span id="cito-status" class="source-status">Ready</span>
-            </div>
-            <p id="cito-detail" class="source-detail">Waiting for the horn.</p>
-            <div class="source-meta">
-              <span id="cito-checks">0 checks</span>
-              <span id="cito-latency">—</span>
-            </div>
-            <button id="stop-cito" class="source-stop" type="button" disabled>Stop CITO polling</button>
-          </article>
           <article class="source-item" data-source="cito-live">
             <div class="source-head">
               <span class="source-name">CITO Live</span>
@@ -883,6 +840,7 @@
               <span id="cito-live-checks">0 checks</span>
               <span id="cito-live-latency">—</span>
             </div>
+            <button id="stop-cito" class="source-stop" type="button" disabled>Stop CITO Live polling</button>
           </article>
           <article class="source-item" data-source="kalshi">
             <div class="source-head">
@@ -941,13 +899,6 @@
       </details>
     </section>
 
-    <section id="results" class="results" aria-labelledby="result-title" hidden>
-      <div class="result-heading">
-        <h2 id="result-title">Round stats</h2>
-        <span id="received-at" class="received"></span>
-      </div>
-      <div id="stats" class="stats"></div>
-    </section>
     <details id="source-json" hidden>
       <summary>View raw source JSON</summary>
       <div class="json-tools">
@@ -973,21 +924,6 @@
       starting: false,
       rawJson: "",
     };
-
-    const STAT_FIELDS = [
-      ["knockdowns", "Knockdowns"],
-      ["significantStrikes", "Significant strikes"],
-      ["totalStrikes", "Total strikes"],
-      ["takedowns", "Takedowns"],
-      ["submissionAttempts", "Submission attempts"],
-      ["controlTime", "Control time"],
-      ["head", "Head"],
-      ["body", "Body"],
-      ["leg", "Leg"],
-      ["distance", "Distance"],
-      ["clinch", "Clinch"],
-      ["ground", "Ground"],
-    ];
 
     const ESPN_FEATURED_STATS = new Set([
       "knockdowns",
@@ -1104,7 +1040,7 @@
         Boolean(pollerFor("espn") && pollerFor("espn").active) ||
         Boolean(pollerFor("espn-stats") && pollerFor("espn-stats").active);
       const citoActive = Boolean(
-        pollerFor("cito") && pollerFor("cito").active,
+        pollerFor("cito-live") && pollerFor("cito-live").active,
       );
       $("stop-espn").disabled =
         !watching ||
@@ -1152,13 +1088,13 @@
     }
 
     function allCaptured() {
-      const cito = sourceEntry("cito");
+      const citoLive = sourceEntry("cito-live");
       const espn = sourceEntry("espn");
       const kalshi = sourceEntry("kalshi");
       return Boolean(
         state.session &&
         state.session.mode === "round" &&
-        cito &&
+        citoLive &&
         state.session.sources.espn &&
         kalshi,
       );
@@ -1361,26 +1297,12 @@
       }
       if (
         state.session.mode === "fight" &&
-        (name === "cito" || name === "cito-live" || name === "kalshi")
+        (name === "cito-live" || name === "kalshi")
       ) {
         status.textContent = "Standby";
         detail.textContent = "Starts only when you press the round-ended button.";
         checks.textContent = "0 checks";
         latency.textContent = "—";
-        return;
-      }
-      if (name === "cito" && entry) {
-        status.textContent = "Stats received";
-        status.classList.add("is-complete");
-        const rows = entry.detail && Array.isArray(entry.detail.rows)
-          ? entry.detail.rows.length
-          : 0;
-        detail.textContent = `${rows} fighter stat rows received from CITO.`;
-        return;
-      }
-      if (poller && poller.active === false && name === "cito") {
-        status.textContent = "Stopped";
-        detail.textContent = "CITO retries stopped before round stats were received.";
         return;
       }
       if (name === "cito-live" && entry) {
@@ -1419,8 +1341,6 @@
         detail.textContent = "Polling every 2.5 seconds for ESPN’s clock, round, state, and completion flag.";
       } else if (name === "espn-stats") {
         detail.textContent = "Fetching both fighters’ fight-cumulative core stats every 2.5 seconds.";
-      } else if (name === "cito") {
-        detail.textContent = "The first check fired at the horn; pending stats retry every 5 seconds.";
       } else if (name === "cito-live") {
         detail.textContent = "Watching Cito's live worker for a method — much faster than round-stat enrichment.";
       } else {
@@ -1439,7 +1359,7 @@
         elapsed = formatElapsed(
           (state.session.completedAtMs || Date.now()) - state.session.startedAtMs,
         );
-        const hasError = ["espn", "espn-stats", "cito", "cito-live", "kalshi"].some((name) => {
+        const hasError = ["espn", "espn-stats", "cito-live", "kalshi"].some((name) => {
           const poller = pollerFor(name);
           return poller && poller.lastError && !sourceEntry(name);
         });
@@ -1490,18 +1410,9 @@
       renderEspnClock();
       renderSource("espn");
       renderSource("espn-stats");
-      renderSource("cito");
       renderSource("cito-live");
       renderSource("kalshi");
       syncControls();
-    }
-
-    function rowForCorner(rows, fight, corner) {
-      const fighter = fight[corner];
-      return rows.find((row) =>
-        (fighter.slug && row.fighterSlug === fighter.slug) ||
-        row.fighterName === fighter.name
-      );
     }
 
     function statCell(className, value) {
@@ -1690,53 +1601,10 @@
       $("espn-stats-panel").hidden = false;
     }
 
-    function renderResult(entry) {
-      const fight = state.session && state.session.fight;
-      const rows = entry.detail && Array.isArray(entry.detail.rows)
-        ? entry.detail.rows
-        : [];
-      if (!fight || rows.length === 0) return;
-
-      const red = rowForCorner(rows, fight, "red");
-      const blue = rowForCorner(rows, fight, "blue");
-      const host = $("stats");
-      host.replaceChildren();
-
-      const fighterRow = document.createElement("div");
-      fighterRow.className = "stats-row fighter-row";
-      const redName = statCell("fighter fighter-red", fight.red.name);
-      const redCorner = document.createElement("small");
-      redCorner.textContent = "Red corner";
-      redName.append(redCorner);
-      const roundLabel = statCell("round-label", `Round ${state.session.round}`);
-      const blueName = statCell("fighter fighter-blue", fight.blue.name);
-      const blueCorner = document.createElement("small");
-      blueCorner.textContent = "Blue corner";
-      blueName.append(blueCorner);
-      fighterRow.append(redName, roundLabel, blueName);
-      host.append(fighterRow);
-
-      STAT_FIELDS.forEach(([field, label]) => {
-        const row = document.createElement("div");
-        row.className = "stats-row";
-        row.append(
-          statCell("stat-value", red && red[field]),
-          statCell("stat-name", label),
-          statCell("stat-value", blue && blue[field]),
-        );
-        host.append(row);
-      });
-
-      $("result-title").textContent = `${fight.red.name} vs ${fight.blue.name} · Round ${state.session.round}`;
-      $("received-at").textContent = `Received +${formatLatency(entry.deltaMs)} · ${new Date(entry.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
-      $("results").hidden = false;
-      $("results").scrollIntoView({ block: "start" });
-    }
-
     function renderRawJson() {
       if (!state.session) return;
       const sources = {};
-      ["espn", "espn-stats", "cito", "kalshi"].forEach((name) => {
+      ["espn", "espn-stats", "cito-live", "kalshi"].forEach((name) => {
         const entry = sourceEntry(name);
         if (entry) {
           sources[name] = {
@@ -1809,7 +1677,7 @@
       if (
         !state.session ||
         entry.kind !== "observation" ||
-        !["espn", "espn-stats", "cito", "cito-live", "kalshi"].includes(entry.source) ||
+        !["espn", "espn-stats", "cito-live", "kalshi"].includes(entry.source) ||
         entry.boutId !== state.session.boutId ||
         Number(entry.seq) <= state.session.markerSeq
       ) {
@@ -1850,16 +1718,6 @@
         Number(entry.round) !== state.session.round
       ) {
         return;
-      } else if (entry.source === "cito") {
-        if (
-          !entry.detail ||
-          !Array.isArray(entry.detail.rows) ||
-          entry.detail.rows.length === 0
-        ) {
-          return;
-        }
-        state.session.sources.cito = entry;
-        renderResult(entry);
       } else if (entry.source === "cito-live") {
         state.session.sources["cito-live"] = entry;
       } else {
@@ -1935,7 +1793,6 @@
         continuingFight
           ? state.session.espnStatsFirstNonzeroAt
           : null;
-      $("results").hidden = true;
       if (!continuingFight) $("espn-stats-panel").hidden = true;
       state.rawJson = "";
       state.session = {
@@ -1963,7 +1820,6 @@
         espnStatsFirstNonzeroAt,
         sources: {
           espn: null,
-          cito: null,
           "cito-live": null,
           kalshi: null,
         },
@@ -1998,7 +1854,6 @@
       const fight = selectedFight();
       if (!fight || !state.card) return;
 
-      $("results").hidden = true;
       $("espn-stats-panel").hidden = true;
       $("source-json").hidden = true;
       state.rawJson = "";
@@ -2021,7 +1876,6 @@
         espnStatsFirstNonzeroAt: null,
         sources: {
           espn: null,
-          cito: null,
           "cito-live": null,
           kalshi: null,
         },
