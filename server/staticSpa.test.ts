@@ -35,6 +35,15 @@ describe("serveStaticSpa", () => {
     expect(response.status).toBe(200);
     expect(response.headers?.["Content-Type"]).toBe("text/javascript; charset=utf-8");
     expect(response.headers?.["X-Content-Type-Options"]).toBe("nosniff");
+
+    const imageResponse = new Response();
+    await serveStaticSpa({
+      pathname: "/assets/book.png",
+      response: imageResponse,
+      distDirectory: ROOT,
+      read: reader({ "/app/dist/assets/book.png": "image" }),
+    });
+    expect(imageResponse.headers?.["Content-Type"]).toBe("image/png");
   });
 
   it("serves index.html for root and safe extensionless SPA routes", async () => {
