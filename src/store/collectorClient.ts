@@ -1293,6 +1293,37 @@ function applyCollectorRound(
   };
 }
 
+function applyEspnLiveRound(
+  dashboard: DashboardState,
+  value: Record<string, unknown>,
+): DashboardState {
+  const boutId = value.boutId;
+  const round = value.round;
+  const observedAt = value.observedAt;
+  if (typeof boutId !== "string" || !Number.isSafeInteger(round) ||
+    !isTimestamp(observedAt) || !isRecord(value.fighterA) || !isRecord(value.fighterB)) return dashboard;
+  const fighter = (source: Record<string, unknown>): RoundStats | null => {
+    const result: RoundStats = {};
+    for (const [key, stat] of Object.entries(source)) {
+      if (typeof stat !== "number" || !Number.isFinite(stat) || stat < 0) return null;
+      result[key as keyof RoundStats] = stat;
+    }
+    return result;
+  };
+  const red = fighter(value.fighterA);
+  const blue = fighter(value.fighterB);
+  if (red === null || blue === null) return dashboard;
+  const view = dashboard.boutViews[boutId];
+  if (view === undefined) return dashboard;
+  const update: RoundUpdate = {
+    boutId, round: round as number, stats: { red, blue },
+    provenance: { source: "espn", fetchedAt: observedAt, synthetic: dashboard.event.provenance.synthetic },
+  };
+  return { ...dashboard, boutViews: { ...dashboard.boutViews, [boutId]: {
+    ...view, rounds: { ...view.rounds, espn: [...(view.rounds.espn ?? []).filter((entry) => entry.round !== round), update] },
+  } } };
+}
+
 function applyCollectorRounds(
   dashboard: DashboardState | null,
   records: readonly CollectorUnifiedRound[],
@@ -1526,6 +1557,18 @@ export function createCollectorClient(
             ? null
             : applyCollectorRound(snapshot.dashboard, record),
         unifiedRounds,
+        lastReceivedAt: receivedAt,
+      });
+      return;
+    }
+
+    if (value.kind === "espn-round-live" && isRecord(value.stats)) {
+      publish({
+        ...snapshot,
+        connection: "connected",
+        dashboard: snapshot.dashboard === null
+          ? null
+          : applyEspnLiveRound(snapshot.dashboard, value.stats),
         lastReceivedAt: receivedAt,
       });
       return;
