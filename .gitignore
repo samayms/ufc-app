@@ -47,6 +47,7 @@ __pycache__/
 /*RUNBOOK*.md
 /CLAUDE_*.md
 /docs/superpowers/specs/
+/docs/superpowers/plans/
 
 # Local agent run logs
 /claude-*.log
