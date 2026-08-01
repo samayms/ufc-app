@@ -70,9 +70,30 @@ export function LiveOddsSection({
   );
 }
 
+// Orders every screen along a single forward/backward axis so the slide
+// transition's direction is always correct, including for back navigation
+// (swipe or button) landing on a screen that a naive two-bucket depth would
+// tie with its own destination. The three bottom-nav tabs are ordered
+// event < fight < data to match their left-to-right position in the nav bar,
+// with generous spacing between tiers so a tab can still hold its own
+// internal drill levels (e.g. the Event tab's list vs. drilled-in screen)
+// without colliding with the next tab's tier.
+// Matches SectionTabs.tsx's own default tab order (Fight, Stats, Odds,
+// Tale) so the section content slides in the same left-to-right direction
+// the tab strip itself implies, regardless of which subset of tabs a given
+// bout status actually renders (e.g. a final bout drops the Odds tab).
+const SECTION_ORDER: FightSection[] = ["summary", "stats", "odds", "tale"];
+
+function sectionDepth(key: string): number {
+  return SECTION_ORDER.indexOf(key as FightSection);
+}
+
 function screenDepth(key: string): number {
-  if (key === "event:list" || key === "data") return 0;
-  return 1;
+  if (key === "event:list") return 0;
+  if (key.startsWith("event:drilled:")) return 1;
+  if (key.startsWith("fight:")) return 100;
+  if (key === "data") return 200;
+  return 0;
 }
 
 export default function App() {
@@ -185,6 +206,16 @@ export default function App() {
   useEffect(() => {
     previousScreenKeyRef.current = screenKey;
   }, [screenKey]);
+
+  const previousSectionRef = useRef<string | null>(null);
+  const sectionDirection = directionBetween(
+    previousSectionRef.current,
+    section,
+    sectionDepth,
+  );
+  useEffect(() => {
+    previousSectionRef.current = section;
+  }, [section]);
 
   if (dashboard.status === "loading") {
     return <LoadingSplash />;
@@ -445,50 +476,52 @@ export default function App() {
                       : undefined
                   }
                 />
-                {section === "summary" && (
-                  <RoundSelector
-                    view={view}
-                    value={round}
-                    onChange={setRound}
-                  />
-                )}
-                {section === "summary" && (
-                  <>
-                    <FightSummary
-                      view={view}
-                      eventStartsAt={state?.event.startsAt ?? ""}
-                      selection={round}
-                      collectorRounds={dashboard.collector?.unifiedRounds}
-                    />
-                    <ScorecardFeed
-                      view={view}
-                      records={
-                        dashboard.collector?.unifiedRounds ?? []
-                      }
-                      round={selectedRound}
-                    />
-                  </>
-                )}
-                {section === "stats" && (
-                  <>
+                <ScreenTransition screenKey={section} direction={sectionDirection}>
+                  {section === "summary" && (
                     <RoundSelector
                       view={view}
                       value={round}
                       onChange={setRound}
                     />
-                    <LiveStatsPanel view={view} selection={round} />
-                  </>
-                )}
-                {section === "odds" && view.bout.status !== "final" && (
-                  <UpcomingOddsSection
-                    fight={boutToScheduledFight(view.bout)}
-                    upcoming={upcomingOdds}
-                    liveView={view}
-                  />
-                )}
-                {section === "tale" && (
-                  <UpcomingTaleSection fighters={view.bout.fighters} />
-                )}
+                  )}
+                  {section === "summary" && (
+                    <>
+                      <FightSummary
+                        view={view}
+                        eventStartsAt={state?.event.startsAt ?? ""}
+                        selection={round}
+                        collectorRounds={dashboard.collector?.unifiedRounds}
+                      />
+                      <ScorecardFeed
+                        view={view}
+                        records={
+                          dashboard.collector?.unifiedRounds ?? []
+                        }
+                        round={selectedRound}
+                      />
+                    </>
+                  )}
+                  {section === "stats" && (
+                    <>
+                      <RoundSelector
+                        view={view}
+                        value={round}
+                        onChange={setRound}
+                      />
+                      <LiveStatsPanel view={view} selection={round} />
+                    </>
+                  )}
+                  {section === "odds" && view.bout.status !== "final" && (
+                    <UpcomingOddsSection
+                      fight={boutToScheduledFight(view.bout)}
+                      upcoming={upcomingOdds}
+                      liveView={view}
+                    />
+                  )}
+                  {section === "tale" && (
+                    <UpcomingTaleSection fighters={view.bout.fighters} />
+                  )}
+                </ScreenTransition>
                 </div>
               )
             ) : (

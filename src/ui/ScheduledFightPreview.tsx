@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { EspnScheduledFight, EspnScheduledFighter } from "../sources/espnSchedule.ts";
 import type {
@@ -24,10 +24,16 @@ import { RecentForm } from "./RecentForm.tsx";
 import { SkeletonRows } from "./Skeleton.tsx";
 import { UpcomingOddsPanel } from "./UpcomingOddsPanel.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
+import { directionBetween } from "../lib/screenTransition.ts";
+import { ScreenTransition } from "./ScreenTransition.tsx";
 import { WEIGHT_LABEL, fmtRecord } from "./format.ts";
 import "./newComponents.css";
 
 const PREVIEW_SECTIONS: FightSection[] = ["tale", "odds"];
+
+function previewSectionDepth(key: string): number {
+  return PREVIEW_SECTIONS.indexOf(key as FightSection);
+}
 
 function boutFighterToScheduledFighter(fighter: Fighter): EspnScheduledFighter {
   const athleteId = fighter.externalRefs.find((ref) => ref.source === "espn")?.id;
@@ -330,6 +336,15 @@ export function ScheduledFightPreview({
   photosByCorner?: Partial<Record<Corner, string>>;
 }) {
   const [active, setActive] = useState<FightSection>("tale");
+  const previousActiveRef = useRef<string | null>(null);
+  const activeDirection = directionBetween(
+    previousActiveRef.current,
+    active,
+    previewSectionDepth,
+  );
+  useEffect(() => {
+    previousActiveRef.current = active;
+  }, [active]);
 
   // ESPN's fightcenter payload has no explicit scheduled-rounds field for
   // future fights; inferred from modern UFC convention (title fights and
@@ -363,8 +378,10 @@ export function ScheduledFightPreview({
 
       <SectionTabs active={active} onChange={setActive} sections={PREVIEW_SECTIONS} />
 
-      {active === "odds" && <UpcomingOddsSection fight={fight} upcoming={upcoming} />}
-      {active === "tale" && <TaleSection fight={fight} />}
+      <ScreenTransition screenKey={active} direction={activeDirection}>
+        {active === "odds" && <UpcomingOddsSection fight={fight} upcoming={upcoming} />}
+        {active === "tale" && <TaleSection fight={fight} />}
+      </ScreenTransition>
     </div>
   );
 }
