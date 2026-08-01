@@ -5,9 +5,13 @@
  * the fight. At a horn, the round marker arms the latency measurement and the
  * other sources race to be the first to answer:
  *
- *   ESPN     — every reported clock/period, plus the round-end transition
- *   Cito     — when do that round's per-fighter stats actually exist?
- *   Sherdog  — when does the round's commentary and scoring appear?
+ *   ESPN      — every reported clock/period, plus the round-end transition
+ *   Cito Live — Cito's live-state endpoint: method/round/winner within
+ *               seconds of a fight ending. The per-round strike-stats
+ *               endpoint is deliberately NOT polled here — it is
+ *               enrichment-delayed by hours, which in a Lab session just
+ *               looks like "still checking" forever with nothing to show.
+ *   Sherdog   — when does the round's commentary and scoring appear?
  *
  * Design rules, learned from the collector:
  *   - **First appearance only.** A round's stats appearing is recorded once.
@@ -26,7 +30,6 @@ import {
   parseEspnScoreboardLifecycle,
   type EspnLifecycleEntry,
 } from "../../src/sources/espn.ts";
-import { buildCitoRoundStatsUrl } from "../../src/sources/cito.ts";
 import { matchFighterPair } from "../../src/lib/boutMatch.ts";
 import {
   buildKalshiUpcomingUrl,
@@ -136,18 +139,16 @@ export class LabWatcher {
 
   private espnStatsSampleNumber = 0;
 
-  /** (bout,round) keys already recorded as found — never recorded twice. */
-  private readonly foundCito = new Set<string>();
-
   private readonly foundSherdog = new Set<string>();
 
   private kalshiComplete = false;
 
   private citoLiveComplete = false;
 
-  private citoPending: PendingRound[] = [];
-
   private sherdogPending: PendingRound[] = [];
+
+  /** Poll bodies by name, so quota backoff can reschedule any of them. */
+  private readonly pollerBodies = new Map<string, () => Promise<void>>();
 
   constructor(options: LabWatcherOptions) {
     this.timeline = options.timeline;
@@ -158,17 +159,13 @@ export class LabWatcher {
 
   /**
    * A marker for a finished round is what makes a round *interesting*: from
-   * then on, all three sources are asked whether they have it yet. The server
-   * calls this when the owner presses the button.
+   * then on, the remaining sources are asked whether they have it yet. The
+   * server calls this when the owner presses the button.
    */
   markRoundEnded(round: number, boutId?: string): void {
     if (!Number.isSafeInteger(round) || round < 1) return;
     const labBoutId =
       boutId ?? this.target?.boutId ?? this.target?.citoBoutIds?.[0];
-    const cito = labBoutId ?? this.target?.citoBoutIds?.[0];
-    if (cito !== undefined && !this.foundCito.has(`${cito}:${round}`)) {
-      this.addPending(this.citoPending, cito, round);
-    }
     const espnBoutId = this.target?.espnBoutId;
     if (labBoutId !== undefined && espnBoutId !== undefined) {
       this.espnPending = { labBoutId, espnBoutId, round };
@@ -204,11 +201,9 @@ export class LabWatcher {
     this.espnPending = undefined;
     this.espnStatsLast = previousEspnStats;
     if (!sameEspnStatsFight) this.espnStatsSampleNumber = 0;
-    this.foundCito.clear();
     this.foundSherdog.clear();
     this.kalshiComplete = false;
     this.citoLiveComplete = false;
-    this.citoPending = [];
     this.sherdogPending = [];
     if (target.round !== undefined) {
       this.markRoundEnded(target.round, target.boutId);
@@ -246,17 +241,11 @@ export class LabWatcher {
       );
     }
     if ((target.citoBoutIds ?? []).length > 0) {
-      this.schedule(
-        "cito",
-        Math.max(MIN_INTERVAL_MS, target.citoIntervalMs ?? DEFAULT_CITO_INTERVAL_MS),
-        () => this.pollCito(),
-      );
-      // Cito's per-round strike stats can lag the actual result by hours
-      // (ufcstats-enrichment based), but the live-state endpoint knows a
-      // fight's method/round/winner within seconds of it happening. Without
-      // this, a fast finish (e.g. a first-round TKO) never appears on the
-      // timeline at all — the round-stats poller just quietly retries for
-      // ten minutes and gives up.
+      // Only the live-state endpoint is polled — it knows a fight's
+      // method/round/winner within seconds. The per-round strike-stats
+      // endpoint is enrichment-delayed by hours and was deliberately dropped
+      // from the Lab: it just sat there "still checking" with nothing to
+      // show for the entire length of any real session.
       this.schedule(
         "cito-live",
         Math.max(MIN_INTERVAL_MS, target.citoIntervalMs ?? DEFAULT_CITO_INTERVAL_MS),
@@ -310,8 +299,7 @@ export class LabWatcher {
   }
 
   stopSource(source: "espn" | "cito"): WatchStatus {
-    const names =
-      source === "espn" ? ["espn", "espn-stats"] : ["cito", "cito-live"];
+    const names = source === "espn" ? ["espn", "espn-stats"] : ["cito-live"];
     const active = names.some(
       (name) => this.pollers.get(name)?.timer !== undefined,
     );
@@ -367,6 +355,7 @@ export class LabWatcher {
     };
     state.intervalMs = intervalMs;
     this.pollers.set(name, state);
+    this.pollerBodies.set(name, body);
 
     const tick = (): void => {
       const startedMs = this.now();
@@ -622,76 +611,11 @@ export class LabWatcher {
   // -- Cito -----------------------------------------------------------------
 
   /**
-   * Asks only about rounds nobody has answered yet, and records the first
-   * moment a round's stats exist. `availability` is reported as well, because
-   * "HTTP 200 with an empty array" is Cito's way of saying "not yet" and it is
-   * indistinguishable from a parse failure unless you look.
-   */
-  private async pollCito(): Promise<void> {
-    if (this.citoPending.length === 0) return;
-
-    const base = this.env.CITO_API_BASE_URL?.trim() ?? "";
-    const apiKey = this.env.CITO_API_KEY?.trim() ?? "";
-    if (base.length === 0 || apiKey.length === 0) {
-      throw new Error("CITO_API_BASE_URL and CITO_API_KEY must be set");
-    }
-
-    // One pending question per tick keeps the cadence honest: the latency we
-    // report is the latency of a single request, not of a queue.
-    const pending = this.citoPending[0];
-    if (pending === undefined) return;
-    pending.polls += 1;
-
-    const { json, remaining } = await this.getJson(
-      buildCitoRoundStatsUrl(base, pending.boutId, pending.round),
-      { "x-api-key": apiKey },
-    );
-    const observedAt = new Date(this.now()).toISOString();
-
-    const data = (json as { data?: unknown }).data;
-    const rows = Array.isArray((data as { roundStats?: unknown })?.roundStats)
-      ? ((data as { roundStats: unknown[] }).roundStats)
-      : [];
-    const availability = (data as { availability?: unknown })?.availability;
-
-    if (rows.length > 0) {
-      this.foundCito.add(`${pending.boutId}:${pending.round}`);
-      this.citoPending = this.citoPending.filter((entry) => entry !== pending);
-      this.timeline.record({
-        kind: "observation",
-        source: "cito",
-        at: observedAt,
-        boutId: pending.boutId,
-        round: pending.round,
-        label: `round ${pending.round} stats published (${rows.length} rows, ${pending.polls} polls)`,
-        detail: { availability, rows },
-      });
-      this.pausePoller("cito");
-      return;
-    }
-
-    if (pending.polls >= MAX_PENDING_POLLS) {
-      this.citoPending = this.citoPending.filter((entry) => entry !== pending);
-      this.timeline.record({
-        kind: "note",
-        source: "cito",
-        at: observedAt,
-        boutId: pending.boutId,
-        round: pending.round,
-        label: `gave up on round ${pending.round} after ${pending.polls} polls (availability: ${String(availability)})`,
-      });
-      return;
-    }
-
-    this.applyQuotaBackoff("cito", remaining);
-  }
-
-  /**
-   * The fast path: `ufc/live/{boutId}/state` knows a fight's method, ending
-   * round, and winner as soon as Cito's live worker sees it — independent of
-   * (and much faster than) the per-round strike-stats enrichment `pollCito`
-   * waits on. Stops itself the moment a method is reported, or once the bout
-   * id has no live row at all.
+   * `ufc/live/{boutId}/state` knows a fight's method, ending round, and
+   * winner within seconds of it happening. The full response is recorded on
+   * the timeline (not just method/round/winner) so the raw-JSON view shows
+   * everything Cito actually returned. Stops itself the moment a method is
+   * reported, or after giving up.
    */
   private async pollCitoLive(): Promise<void> {
     if (this.citoLiveComplete) return;
@@ -711,10 +635,10 @@ export class LabWatcher {
     const { json, remaining } = await this.getJson(url, { "x-api-key": apiKey });
     const observedAt = new Date(this.now()).toISOString();
     const data = (json as { data?: unknown }).data;
-    const method = (data as { method?: unknown } | null)?.method;
-    const winner = (data as { winnerFighterSlug?: unknown } | null)
-      ?.winnerFighterSlug;
-    const round = (data as { currentRound?: unknown } | null)?.currentRound;
+    const record = isRecord(data) ? data : undefined;
+    const method = record?.method;
+    const winner = record?.winnerFighterSlug;
+    const round = record?.currentRound;
 
     if (typeof method === "string") {
       this.citoLiveComplete = true;
@@ -725,7 +649,7 @@ export class LabWatcher {
         boutId,
         ...(typeof round === "number" ? { round } : {}),
         label: `live state: ${method}${typeof winner === "string" ? `, ${winner} wins` : ""}${typeof round === "number" ? ` (round ${round})` : ""}`,
-        detail: { method, winnerFighterSlug: winner, currentRound: round },
+        detail: record ?? { method, winnerFighterSlug: winner, currentRound: round },
       });
       this.pausePoller("cito-live");
       return;
@@ -906,6 +830,9 @@ export class LabWatcher {
     const state = this.pollers.get(name);
     if (state === undefined || state.intervalMs >= QUOTA_BACKOFF_MS) return;
 
+    const body = this.pollerBodies.get(name);
+    if (body === undefined) return;
+
     this.timeline.record({
       kind: "note",
       source: name,
@@ -913,10 +840,12 @@ export class LabWatcher {
     });
     if (state.timer !== undefined) clearInterval(state.timer);
     state.timer = undefined;
-    this.schedule(name, QUOTA_BACKOFF_MS, async () => {
-      if (name === "cito") await this.pollCito();
-    });
+    this.schedule(name, QUOTA_BACKOFF_MS, body);
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function espnFingerprint(entry: EspnLifecycleEntry): string {
