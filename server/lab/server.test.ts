@@ -32,6 +32,13 @@ describe("buildLabCard", () => {
         espnAthleteId: "4426312",
       },
     });
+    expect(
+      card.fights.find((fight) => fight.blue.name === "Mark Vologdin"),
+    ).toMatchObject({
+      id: "12995",
+      red: { name: "Borislav Nikolić" },
+      blue: { name: "Mark Vologdin" },
+    });
   });
 
   it("drops malformed fights instead of exposing incomplete options", () => {

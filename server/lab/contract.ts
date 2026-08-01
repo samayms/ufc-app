@@ -125,7 +125,7 @@ export interface WatchTarget {
   espnRedAthleteId?: string;
   espnBlueAthleteId?: string;
   citoEventSlug?: string;
-  /** Cito bout ids to chase round stats for; empty means "the whole card". */
+  /** Selected Cito bout id to capture once at the horn. */
   citoBoutIds?: string[];
   redFighter?: string;
   blueFighter?: string;
@@ -134,7 +134,6 @@ export interface WatchTarget {
   continuousEspn?: boolean;
   espnIntervalMs?: number;
   espnStatsIntervalMs?: number;
-  citoIntervalMs?: number;
   kalshiIntervalMs?: number;
   sherdogIntervalMs?: number;
 }

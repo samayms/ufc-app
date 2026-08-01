@@ -291,9 +291,6 @@ function watchTargetField(source: unknown): WatchTarget {
             "espnStatsIntervalMs",
           ) as number,
         }),
-    ...(numberField(source, "citoIntervalMs") === undefined
-      ? {}
-      : { citoIntervalMs: numberField(source, "citoIntervalMs") as number }),
     ...(numberField(source, "sherdogIntervalMs") === undefined
       ? {}
       : {
@@ -506,7 +503,6 @@ export function createLabServer(options: LabServerOptions = {}) {
         espnIntervalMs: LAB_ESPN_INTERVAL_MS,
         espnStatsIntervalMs: LAB_ESPN_INTERVAL_MS,
         citoBoutIds: [boutId],
-        citoIntervalMs: LAB_CITO_INTERVAL_MS,
         redFighter: fight.red.name,
         blueFighter: fight.blue.name,
         kalshiIntervalMs: LAB_KALSHI_INTERVAL_MS,

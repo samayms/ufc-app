@@ -6,11 +6,10 @@
  * other sources race to be the first to answer:
  *
  *   ESPN      — every reported clock/period, plus the round-end transition
- *   Cito Live — Cito's live-state endpoint: method/round/winner within
- *               seconds of a fight ending. The per-round strike-stats
- *               endpoint is deliberately NOT polled here — it is
- *               enrichment-delayed by hours, which in a Lab session just
- *               looks like "still checking" forever with nothing to show.
+ *   Cito Live — one snapshot of Cito's selected-bout endpoint at the horn.
+ *               This is intentionally a single request per button press: the
+ *               lab records what Cito knew at that exact moment and does not
+ *               spend quota retrying for a later answer.
  *   Sherdog   — when does the round's commentary and scoring appear?
  *
  * Design rules, learned from the collector:
@@ -18,9 +17,8 @@
  *     Re-recording every poll would bury the one timestamp that matters.
  *   - **Poll only what is pending.** A (bout, round) pair leaves the pending
  *     set the moment it is found, so quota is spent on unanswered questions.
- *   - **Quota is finite and shared with the collector.** Every poller reads the
- *     vendor's own rate-limit header and backs off when it runs low, and says
- *     so on the timeline rather than dying quietly.
+ *   - **Quota is finite and shared with the collector.** Metered horn captures
+ *     run once and preserve the vendor's remaining-request header.
  *   - **A poller may never throw into the interval.** A failing source
  *     increments a counter and keeps going; it must not stop the other two.
  */
@@ -47,17 +45,12 @@ import {
 import type { LabTimeline } from "./timeline.ts";
 
 const DEFAULT_ESPN_INTERVAL_MS = 2_500;
-const DEFAULT_CITO_INTERVAL_MS = 5_000;
 const DEFAULT_KALSHI_INTERVAL_MS = 5_000;
 const DEFAULT_SHERDOG_INTERVAL_MS = 20_000;
 
 /** Sherdog is a courtesy read of someone else's page. Never poll it harder. */
 const MIN_SHERDOG_INTERVAL_MS = 15_000;
 const MIN_INTERVAL_MS = 1_000;
-
-/** Below this many remaining vendor requests, slow down and say so. */
-const QUOTA_FLOOR = 25;
-const QUOTA_BACKOFF_MS = 30_000;
 
 /**
  * How many polls to keep chasing one (bout, round) before giving up. At a 5s
@@ -70,6 +63,7 @@ const REQUEST_TIMEOUT_MS = 12_000;
 
 interface PollerState {
   name: string;
+  active: boolean;
   polls: number;
   failures: number;
   lastAt?: string;
@@ -143,15 +137,7 @@ export class LabWatcher {
 
   private kalshiComplete = false;
 
-  private citoLiveComplete = false;
-
-  /** Last recorded live-state snapshot, so unchanged polls stay quiet. */
-  private citoLiveFingerprint?: string;
-
   private sherdogPending: PendingRound[] = [];
-
-  /** Poll bodies by name, so quota backoff can reschedule any of them. */
-  private readonly pollerBodies = new Map<string, () => Promise<void>>();
 
   constructor(options: LabWatcherOptions) {
     this.timeline = options.timeline;
@@ -206,8 +192,6 @@ export class LabWatcher {
     if (!sameEspnStatsFight) this.espnStatsSampleNumber = 0;
     this.foundSherdog.clear();
     this.kalshiComplete = false;
-    this.citoLiveComplete = false;
-    this.citoLiveFingerprint = undefined;
     this.sherdogPending = [];
     if (target.round !== undefined) {
       this.markRoundEnded(target.round, target.boutId);
@@ -245,16 +229,7 @@ export class LabWatcher {
       );
     }
     if ((target.citoBoutIds ?? []).length > 0) {
-      // Only the live-state endpoint is polled — it knows a fight's
-      // method/round/winner within seconds. The per-round strike-stats
-      // endpoint is enrichment-delayed by hours and was deliberately dropped
-      // from the Lab: it just sat there "still checking" with nothing to
-      // show for the entire length of any real session.
-      this.schedule(
-        "cito-live",
-        Math.max(MIN_INTERVAL_MS, target.citoIntervalMs ?? DEFAULT_CITO_INTERVAL_MS),
-        () => this.pollCitoLive(),
-      );
+      this.runOnce("cito-live", () => this.captureCitoLive());
     }
     if (
       (target.redFighter ?? "").trim().length > 0 &&
@@ -287,6 +262,7 @@ export class LabWatcher {
     for (const poller of this.pollers.values()) {
       if (poller.timer !== undefined) clearInterval(poller.timer);
       poller.timer = undefined;
+      poller.active = false;
       poller.nextAtMs = undefined;
     }
     if (this.running) {
@@ -305,7 +281,7 @@ export class LabWatcher {
   stopSource(source: "espn" | "cito"): WatchStatus {
     const names = source === "espn" ? ["espn", "espn-stats"] : ["cito-live"];
     const active = names.some(
-      (name) => this.pollers.get(name)?.timer !== undefined,
+      (name) => this.pollers.get(name)?.active === true,
     );
     for (const name of names) this.pausePoller(name);
     if (active) {
@@ -329,7 +305,7 @@ export class LabWatcher {
       ...(this.target === undefined ? {} : { target: this.target }),
       pollers: [...this.pollers.values()].map((poller) => ({
         name: poller.name,
-        active: poller.timer !== undefined,
+        active: poller.active,
         polls: poller.polls,
         failures: poller.failures,
         ...(poller.lastAt === undefined ? {} : { lastAt: poller.lastAt }),
@@ -353,14 +329,14 @@ export class LabWatcher {
   ): void {
     const state: PollerState = this.pollers.get(name) ?? {
       name,
+      active: true,
       polls: 0,
       failures: 0,
       intervalMs,
     };
+    state.active = true;
     state.intervalMs = intervalMs;
     this.pollers.set(name, state);
-    this.pollerBodies.set(name, body);
-
     const tick = (): void => {
       const startedMs = this.now();
       state.nextAtMs = startedMs + state.intervalMs;
@@ -394,11 +370,47 @@ export class LabWatcher {
     tick();
   }
 
+  /** Runs a metered source exactly once and exposes its in-flight state. */
+  private runOnce(name: string, body: () => Promise<void>): void {
+    const state: PollerState = {
+      name,
+      active: true,
+      polls: 0,
+      failures: 0,
+      intervalMs: 0,
+    };
+    this.pollers.set(name, state);
+    const startedMs = this.now();
+    void body()
+      .then(() => {
+        state.polls = 1;
+        state.lastAt = new Date(startedMs).toISOString();
+        state.lastMs = this.now() - startedMs;
+      })
+      .catch((error: unknown) => {
+        state.polls = 1;
+        state.failures = 1;
+        state.lastAt = new Date(startedMs).toISOString();
+        state.lastMs = this.now() - startedMs;
+        const message = error instanceof Error ? error.message : String(error);
+        state.lastError = redactSecrets(message);
+        this.timeline.record({
+          kind: "note",
+          source: name,
+          label: `capture failed: ${redactSecrets(message)}`,
+        });
+      })
+      .finally(() => {
+        state.active = false;
+      });
+  }
+
   private pausePoller(name: string): void {
     const state = this.pollers.get(name);
     if (state?.timer !== undefined) clearInterval(state.timer);
     if (state !== undefined) {
       state.timer = undefined;
+      state.active = false;
       state.nextAtMs = undefined;
     }
   }
@@ -614,25 +626,8 @@ export class LabWatcher {
 
   // -- Cito -----------------------------------------------------------------
 
-  /**
-   * `ufc/live/{boutId}/state` knows a fight's status, round, clock, and
-   * per-fighter live stats throughout the fight, and its method/winner within
-   * seconds of it ending. Cito's payload shape for this endpoint has proven
-   * inconsistent bout to bout — sometimes `winnerFighterSlug` is null on a
-   * decided fight, sometimes `liveStats` is absent — so this treats every
-   * field as optional rather than assuming one specific shape.
-   *
-   * The bout id in the URL must be `ufc-{boutId}` — that is the id format
-   * Cito's own responses use (`"boutId": "ufc-12995"`), and the bare numeric
-   * id was observed hitting a flakier upstream path (occasional 502s from
-   * the live-scrape gateway) instead of Cito's own canonical lookup.
-   *
-   * Bounded, not continuous: this only runs per round-ended action (armed by
-   * `citoBoutIds`) and gives up after `MAX_PENDING_POLLS`, same as the other
-   * pollers — every poll is metered quota, so nothing here polls forever.
-   */
-  private async pollCitoLive(): Promise<void> {
-    if (this.citoLiveComplete) return;
+  /** Captures the selected bout once at `ufc/live/ufc-{boutId}`. */
+  private async captureCitoLive(): Promise<void> {
     const boutId = this.target?.citoBoutIds?.[0];
     if (boutId === undefined) return;
 
@@ -644,15 +639,18 @@ export class LabWatcher {
 
     const liveBoutId = boutId.startsWith("ufc-") ? boutId : `ufc-${boutId}`;
     const url = new URL(
-      `ufc/live/${encodeURIComponent(liveBoutId)}/state`,
+      `ufc/live/${encodeURIComponent(liveBoutId)}`,
       base.endsWith("/") ? base : `${base}/`,
     ).toString();
     const { json, remaining } = await this.getJson(url, { "x-api-key": apiKey });
     const observedAt = new Date(this.now()).toISOString();
-    const data = (json as { data?: unknown }).data;
-    const record = isRecord(data) ? data : undefined;
+    const envelope = isRecord(json) ? json : undefined;
+    const data = envelope?.data;
+    const record = isRecord(data) ? data : envelope;
     const method = record?.method;
-    const round = typeof record?.currentRound === "number" ? record.currentRound : undefined;
+    const reportedRound =
+      typeof record?.currentRound === "number" ? record.currentRound : undefined;
+    const selectedRound = this.target?.round;
     const clock = typeof record?.currentTime === "string" ? record.currentTime : undefined;
     const status = typeof record?.status === "string" ? record.status : undefined;
     // `winnerFighterSlug` is sometimes null even on a decided fight (seen on
@@ -671,60 +669,33 @@ export class LabWatcher {
           ? winnerCorner.fighterName
           : undefined;
 
-    if (typeof method === "string") {
-      this.citoLiveComplete = true;
-      this.citoLiveFingerprint = undefined;
-      this.timeline.record({
-        kind: "observation",
-        source: "cito-live",
-        at: observedAt,
-        boutId,
-        ...(round === undefined ? {} : { round }),
-        label: `live state: ${method}${winner === undefined ? "" : `, ${winner} wins`}${round === undefined ? "" : ` (round ${round})`}`,
-        detail: record ?? { method, winnerFighterSlug: winnerSlug, currentRound: round },
-      });
-      this.pausePoller("cito-live");
-      return;
-    }
+    const bits = [
+      status,
+      reportedRound === undefined ? undefined : `round ${reportedRound}`,
+      clock,
+    ].filter((bit): bit is string => bit !== undefined);
+    const label =
+      typeof method === "string"
+        ? `snapshot: ${method}${winner === undefined ? "" : `, ${winner} wins`}${reportedRound === undefined ? "" : ` (round ${reportedRound})`}`
+        : `snapshot: ${bits.length > 0 ? bits.join(" · ") : "response received"}`;
 
-    // Not decided yet. Report a snapshot only when something about it
-    // changed, so a steady stream of identical "still round 2" polls doesn't
-    // bury the moments that actually moved (a new round, a knockdown, etc).
-    // Deliberately excludes bookkeeping fields that change on every single
-    // poll regardless (lagSeconds, pollCount, lastPolledAt, capturedAt) —
-    // fingerprinting the whole record would never repeat and this dedup
-    // would do nothing.
-    const fingerprint = JSON.stringify({ status, round, clock, liveStats: record?.liveStats });
-    if (fingerprint !== this.citoLiveFingerprint) {
-      this.citoLiveFingerprint = fingerprint;
-      const bits = [status, round === undefined ? undefined : `round ${round}`, clock]
-        .filter((bit): bit is string => bit !== undefined);
-      this.timeline.record({
-        kind: "observation",
-        source: "cito-live",
-        at: observedAt,
-        boutId,
-        ...(round === undefined ? {} : { round }),
-        label: `live: ${bits.length > 0 ? bits.join(" · ") : "no live state yet"}`,
-        detail: record ?? {},
-      });
-    }
-
-    const polls = this.pollers.get("cito-live")?.polls ?? 0;
-    if (polls + 1 >= MAX_PENDING_POLLS) {
-      this.citoLiveComplete = true;
-      this.timeline.record({
-        kind: "note",
-        source: "cito-live",
-        at: observedAt,
-        boutId,
-        label: `gave up waiting for a method after ${polls + 1} polls — stopped to protect quota`,
-      });
-      this.pausePoller("cito-live");
-      return;
-    }
-
-    this.applyQuotaBackoff("cito-live", remaining);
+    this.timeline.record({
+      kind: "observation",
+      source: "cito-live",
+      at: observedAt,
+      boutId,
+      ...(selectedRound === undefined ? {} : { round: selectedRound }),
+      label,
+      detail: {
+        ...(record ?? {}),
+        rawResponse: json,
+        capture: {
+          url,
+          receivedAt: observedAt,
+          ...(remaining === undefined ? {} : { quotaRemaining: remaining }),
+        },
+      },
+    });
   }
 
   // -- Kalshi ---------------------------------------------------------------
@@ -875,28 +846,6 @@ export class LabWatcher {
     }
   }
 
-  /**
-   * Slows a poller down when the vendor says the allowance is nearly gone.
-   * Announced on the timeline, because a silently slower poller would corrupt
-   * every latency measured after it.
-   */
-  private applyQuotaBackoff(name: string, remaining: number | undefined): void {
-    if (remaining === undefined || remaining > QUOTA_FLOOR) return;
-    const state = this.pollers.get(name);
-    if (state === undefined || state.intervalMs >= QUOTA_BACKOFF_MS) return;
-
-    const body = this.pollerBodies.get(name);
-    if (body === undefined) return;
-
-    this.timeline.record({
-      kind: "note",
-      source: name,
-      label: `quota low (${remaining} left) — slowing polls to ${QUOTA_BACKOFF_MS / 1000}s; latencies after this are coarser`,
-    });
-    if (state.timer !== undefined) clearInterval(state.timer);
-    state.timer = undefined;
-    this.schedule(name, QUOTA_BACKOFF_MS, body);
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
