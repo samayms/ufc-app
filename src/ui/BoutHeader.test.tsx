@@ -101,4 +101,44 @@ describe("BoutHeader live clock", () => {
     expect(markup).toContain('aria-label="Danilo Reyes won"');
     expect(markup).not.toContain("Reyes wins");
   });
+
+  it("puts the winner arrow inline beside the method, in a fixed slot", () => {
+    const bout = loadFixtureEvent().bouts[0]!;
+    const redWon = renderToStaticMarkup(
+      <BoutHeader
+        weightClassLabel="Welterweight"
+        titleFight={false}
+        scheduledRounds={3}
+        fighters={bout.fighters}
+        status="final"
+        result={{ winner: "red", method: "submission", round: 2, time: "3:41" }}
+      />,
+    );
+    const blueWon = renderToStaticMarkup(
+      <BoutHeader
+        weightClassLabel="Welterweight"
+        titleFight={false}
+        scheduledRounds={3}
+        fighters={bout.fighters}
+        status="final"
+        result={{ winner: "blue", method: "ko-tko", round: 1, time: "1:02" }}
+      />,
+    );
+
+    // Red wins: arrow slot comes before the method text.
+    expect(redWon.indexOf("tot-method-arrow-slot")).toBeLessThan(
+      redWon.indexOf(">SUB<"),
+    );
+    expect(redWon).toContain("tot-winner-arrow-red");
+
+    // Blue wins: arrow slot comes after the method text.
+    expect(blueWon.indexOf(">KO/TKO<")).toBeLessThan(
+      blueWon.indexOf("tot-method-arrow-slot"),
+    );
+    expect(blueWon).toContain("tot-winner-arrow-blue");
+
+    // Round/time substate is unaffected either way.
+    expect(redWon).toContain("Round 2 · 3:41");
+    expect(blueWon).toContain("Round 1 · 1:02");
+  });
 });
