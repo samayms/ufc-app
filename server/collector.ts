@@ -19,6 +19,7 @@ import {
 } from "../src/sources/cito.ts";
 import type { SourceConfig } from "../src/sources/contract.ts";
 import { createEspnSource } from "../src/sources/espn.ts";
+import { fetchEspnCoreCumulativeStats } from "../src/sources/espnCoreStats.ts";
 import { createKalshiSource } from "../src/sources/kalshi.ts";
 import {
   createOddsApiSource,
@@ -871,12 +872,26 @@ export async function createCollector(
           observation.boutId,
           observation,
         );
-        if (observation.cumulativeStats !== undefined && observation.period >= 1) {
+        const bout = loaded.event.bouts.find((candidate) => candidate.id === observation.boutId);
+        const eventId = loaded.event.externalRefs.find((ref) => ref.source === "espn")?.id;
+        const competitionId = bout?.externalRefs.find((ref) => ref.source === "espn")?.id;
+        const redAthleteId = bout?.fighters.red.externalRefs.find((ref) => ref.source === "espn")?.id;
+        const blueAthleteId = bout?.fighters.blue.externalRefs.find((ref) => ref.source === "espn")?.id;
+        // Core has the current cumulative total; scoreboard inline statistics
+        // are only a fallback because they are commonly absent in live MMA.
+        const coreStats = config.dataMode === "live" && observation.state === "in" &&
+          observation.period >= 1 && eventId && competitionId && redAthleteId && blueAthleteId
+          ? await Promise.all([
+              fetchEspnCoreCumulativeStats({ eventId, competitionId, athleteId: redAthleteId }),
+              fetchEspnCoreCumulativeStats({ eventId, competitionId, athleteId: blueAthleteId }),
+            ]).then(([fighterA, fighterB]) => ({ fighterA, fighterB })).catch(() => observation.cumulativeStats)
+          : observation.cumulativeStats;
+        if (coreStats !== undefined && observation.period >= 1) {
           const stats = initializedRoundStats.observeEspnCumulative({
             boutId: observation.boutId,
             round: observation.period,
-            fighterA: observation.cumulativeStats.fighterA,
-            fighterB: observation.cumulativeStats.fighterB,
+            fighterA: coreStats.fighterA,
+            fighterB: coreStats.fighterB,
             observedAt: observation.receivedAt,
           });
           await push.publish("update", { kind: "espn-round-live", stats });
