@@ -61,6 +61,8 @@ export interface PreEventPollerOptions {
   clock?: PreEventPollClock;
   timer?: PreEventPollTimer;
   runSync?: () => Promise<RunSyncResult | void>;
+  /** Promotes a successful sync into any live runtime registries/subscriptions. */
+  onSuccess?: (result: RunSyncResult | void) => Promise<void> | void;
   /** Reads the atomic upcoming document after restore and after a sync. */
   readDocument?: () => Promise<UpcomingOddsDocument | null>;
   /** Used by the default document reader when the collector owns the path. */
@@ -262,6 +264,7 @@ export class PreEventPoller {
   private readonly readDocument:
     | (() => Promise<UpcomingOddsDocument | null>)
     | undefined;
+  private readonly onSuccess: PreEventPollerOptions["onSuccess"];
   private readonly storageStream: string;
   private readonly enabled: boolean;
   private readonly nonEventDayIntervalMs: number;
@@ -288,6 +291,7 @@ export class PreEventPoller {
     this.clock = options.clock ?? defaultClock();
     this.timer = options.timer ?? defaultTimer();
     this.runSync = options.runSync ?? (() => runUpcomingSync());
+    this.onSuccess = options.onSuccess;
     this.readDocument =
       options.readDocument ??
       (options.persistencePath === undefined
@@ -501,6 +505,7 @@ export class PreEventPoller {
         const document = await readUpcomingOddsDocument(dirname(result.path));
         this.eventStartTimes = eventStartTimes(document);
       }
+      await this.onSuccess?.(result);
 
       const completedAt = this.clock.now();
       const completedInterval = this.intervalFor(completedAt);

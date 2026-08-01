@@ -52,6 +52,8 @@ export class EventRotationSupervisor {
   private readonly stream: string;
   private readonly onError: ((error: unknown) => void) | undefined;
 
+  private readonly initialEventId: string | undefined;
+
   private currentEventId: string | undefined;
   private timerHandle: unknown;
   private started = false;
@@ -70,6 +72,7 @@ export class EventRotationSupervisor {
     this.timer = options.timer ?? defaultTimer;
     this.stream = options.storageStream ?? EVENT_ROTATION_STORAGE_STREAM;
     this.onError = options.onError;
+    this.initialEventId = options.initialEventId;
   }
 
   getCurrentEventId(): string | undefined {
@@ -82,9 +85,12 @@ export class EventRotationSupervisor {
 
   async start(): Promise<void> {
     if (this.started || this.closed) return;
-    this.currentEventId = (await this.storage.read<unknown>(this.stream))
+    const persistedEventId = (await this.storage.read<unknown>(this.stream))
       .filter(isPersistedEventRotation)
       .at(-1)?.eventId;
+    // The collector loaded for this process is authoritative. Persisted state
+    // is only a fallback for callers that do not already own a live runtime.
+    this.currentEventId = this.initialEventId ?? persistedEventId;
     this.started = true;
     await this.enqueue(() => this.pollOnce());
   }
@@ -160,4 +166,6 @@ export interface EventRotationSupervisorOptions {
   timer?: EventRotationTimer;
   storageStream?: string;
   onError?: (error: unknown) => void;
+  /** Event currently loaded by the runtime at process start. */
+  initialEventId?: string;
 }

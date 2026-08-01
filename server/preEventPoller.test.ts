@@ -159,15 +159,20 @@ describe("PreEventPoller", () => {
   it("runs immediately when never run, persists success, and re-arms on the new interval", async () => {
     const time = new ManualTime();
     let calls = 0;
+    let promotions = 0;
     const options = pollerOptions(time, undefined, {
       runSync: async () => {
         calls += 1;
+      },
+      onSuccess: async () => {
+        promotions += 1;
       },
     });
     const poller = new PreEventPoller(options);
 
     await poller.start();
     expect(calls).toBe(1);
+    expect(promotions).toBe(1);
     await expect(options.storage.read(PRE_EVENT_POLL_STORAGE_STREAM)).resolves
       .toEqual([
         {
@@ -184,6 +189,7 @@ describe("PreEventPoller", () => {
     time.advance(1);
     await poller.idle();
     expect(calls).toBe(2);
+    expect(promotions).toBe(2);
     await poller.close();
   });
 

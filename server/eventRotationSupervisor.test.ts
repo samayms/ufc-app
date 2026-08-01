@@ -80,6 +80,29 @@ describe("EventRotationSupervisor", () => {
     await supervisor.close();
   });
 
+  it("uses the running collector id over stale persisted rotation state", async () => {
+    const time = new ManualTime();
+    const storage = new MemoryStorage();
+    await storage.replace("event-rotation-supervisor", [{
+      version: 1, eventId: "event-old", rotatedAt: new Date(time.now()).toISOString(),
+    }]);
+    const rotate = vi.fn(async () => undefined);
+    const supervisor = new EventRotationSupervisor({
+      storage,
+      initialEventId: "event-running",
+      resolveEventId: async () => "event-new",
+      rotate,
+      intervalMs: 1_000,
+      clock: time,
+      timer: time,
+    });
+
+    await supervisor.start();
+    expect(rotate).toHaveBeenCalledExactlyOnceWith("event-new");
+    expect(supervisor.getCurrentEventId()).toBe("event-new");
+    await supervisor.close();
+  });
+
   it("keeps polling after a resolver or rotation failure and stops when closed", async () => {
     const time = new ManualTime();
     const storage = new MemoryStorage();

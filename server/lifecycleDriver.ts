@@ -232,7 +232,7 @@ export interface LifecycleDriverOptions {
   /**
    * When set, ESPN's own polling interval switches to a tiered schedule
    * (6a/6p ET on non-event days, 60s on the event's calendar day before it
-   * goes live, 5s once any bout is in progress, stopped once every bout is
+   * goes live, 2.5s once any bout is in progress, stopped once every bout is
    * completed) instead of the flat `espnPollingMs` above. The Cito fallback
    * path is unaffected — it always uses `citoPollingMs`. Omit to keep the
    * flat-interval behavior (e.g. for fixture mode, where there's no real

@@ -7,7 +7,7 @@
  *      does this from the JSONL append log; SQLite-backed hydration slots
  *      in here as tables gain writers)
  *   3. start the HTTP API + SSE server (createCollector's own server)
- *   4. start the upcoming-sync scheduler (catch-up, then 6a/6p America/New_York)
+ *   4. in live mode, supervise ESPN event changes and rebuild the collector
  *
  * The collector itself already runs in-process (see server/collector.ts) —
  * there is no second Node process to spawn.
@@ -16,15 +16,23 @@
 import { pathToFileURL } from "node:url";
 
 import { createCollector } from "./collector.ts";
+import { loadConfig } from "./config.ts";
 import { closeDb } from "./db/client.ts";
 import { runMigrations } from "./db/migrate.ts";
+import { EventRotationSupervisor } from "./eventRotationSupervisor.ts";
 import { materializeKalshiPrivateKey } from "./kalshiKeyMaterializer.ts";
-import { UpcomingScheduler } from "./scheduler.ts";
+import { loadLiveEventState } from "./liveEventState.ts";
+import { JsonlStorage } from "./storage.ts";
+import { createEspnScheduleSource } from "../src/sources/espnSchedule.ts";
+
+export const EVENT_ROTATION_INTERVAL_MS = 15 * 60 * 1_000;
 
 export async function startApp(): Promise<{
   stop: () => Promise<void>;
 }> {
   materializeKalshiPrivateKey();
+  const config = loadConfig(process.env);
+  const storage = new JsonlStorage(config.persistencePath);
 
   console.log("Running database migrations…");
   runMigrations();
@@ -32,26 +40,67 @@ export async function startApp(): Promise<{
   console.log("Starting collector (API + SSE + collector)…");
   // Bind every interface in production so Fly's proxy can reach the
   // Machine; local dev tooling still gets collector.ts's 127.0.0.1 default.
-  const collector = await createCollector({
+  const collectorOptions = {
     host: process.env.HOST ?? "0.0.0.0",
-  });
+    storage,
+  } as const;
+  let collector = await createCollector(collectorOptions);
   const port = await collector.start();
   console.log(`UFC app listening on http://127.0.0.1:${port}`);
 
-  const scheduler = new UpcomingScheduler();
-  await scheduler.catchUpIfNeeded().catch((error: unknown) => {
-    console.error(
-      "Startup catch-up sync failed:",
-      error instanceof Error ? error.message : error,
-    );
-  });
-  scheduler.start();
+  let activeEventId = collector.getBootstrap().state?.event.id;
+  const scheduleSource = createEspnScheduleSource();
+  const rotation =
+    config.dataMode === "live"
+      ? new EventRotationSupervisor({
+          storage,
+          ...(activeEventId === undefined
+            ? {}
+            : { initialEventId: activeEventId }),
+          intervalMs: EVENT_ROTATION_INTERVAL_MS,
+          resolveEventId: async () =>
+            (await scheduleSource.listUpcomingEvents())[0]?.eventId,
+          rotate: async (eventId) => {
+            if (eventId === activeEventId) return;
+            console.log(`ESPN event changed to ${eventId}; rotating collector…`);
+            const nextState = await loadLiveEventState({});
+            if (nextState.event.id !== eventId) {
+              throw new Error(
+                `ESPN event changed during rotation (${eventId} -> ${nextState.event.id})`,
+              );
+            }
+            const nextCollector = await createCollector({
+              ...collectorOptions,
+              stateLoader: async () => nextState,
+            });
+            await collector.close();
+            try {
+              const nextPort = await nextCollector.start();
+              collector = nextCollector;
+              activeEventId = eventId;
+              console.log(
+                `Collector rotated to ${eventId} on http://127.0.0.1:${nextPort}`,
+              );
+            } catch (error) {
+              await nextCollector.close().catch(() => undefined);
+              throw error;
+            }
+          },
+          onError: (error) => {
+            console.error(
+              "Event rotation check failed:",
+              error instanceof Error ? error.message : error,
+            );
+          },
+        })
+      : undefined;
+  await rotation?.start();
 
   let stopped = false;
   const stop = async (): Promise<void> => {
     if (stopped) return;
     stopped = true;
-    scheduler.stop();
+    await rotation?.close();
     await collector.close();
     closeDb();
   };

@@ -134,6 +134,7 @@ import {
   type Storage,
 } from "./storage.ts";
 import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
+import { importCurrentEventUpcomingMappings } from "./upcomingMappingBridge.ts";
 import { loadLiveEventState } from "./liveEventState.ts";
 import { TheOddsApiActivePoller } from "./theOddsApiActivePoller.ts";
 import {
@@ -837,6 +838,13 @@ export async function createCollector(
     metrics: healthRegistry,
     manualOverrides: options.manualBoutMappingOverrides,
   });
+  if (config.dataMode === "live") {
+    await importCurrentEventUpcomingMappings({
+      event: loaded.event,
+      registry: initializedBoutMappings,
+      storage,
+    });
+  }
   boutMappings = initializedBoutMappings;
   const sourceConfig: SourceConfig = {
     mode: config.dataMode,
@@ -844,6 +852,7 @@ export async function createCollector(
   };
 
   const lifecycleGetBouts = () => loaded.event.bouts;
+  const finalizedEspnStatsBouts = new Set<string>();
   const requiredEventExternalId = (source: "espn"): string => {
     const id = loaded.event.externalRefs.find(
       (ref) => ref.source === source,
@@ -871,7 +880,10 @@ export async function createCollector(
   const lifecycleDriver = new LifecycleDriver({
     machine: lifecycle,
     espnProvider: lifecycleEspnProvider,
-    espnPollingMs: 2_500,
+    espnPollingMs: config.pollingMs.espn,
+    ...(config.dataMode === "live"
+      ? { eventStartsAt: loaded.event.startsAt }
+      : {}),
     ...(options.lifecycle?.clock === undefined
       ? {}
       : { clock: options.lifecycle.clock }),
@@ -891,13 +903,31 @@ export async function createCollector(
         const blueAthleteId = bout?.fighters.blue.externalRefs.find((ref) => ref.source === "espn")?.id;
         // Core has the current cumulative total; scoreboard inline statistics
         // are only a fallback because they are commonly absent in live MMA.
-        const coreStats = config.dataMode === "live" &&
-          (observation.state === "in" || observation.completed) &&
-          observation.period >= 1 && eventId && competitionId && redAthleteId && blueAthleteId
+        const shouldFetchCore =
+          config.dataMode === "live" &&
+          (observation.state === "in" ||
+            (observation.completed &&
+              !finalizedEspnStatsBouts.has(observation.boutId))) &&
+          observation.period >= 1 &&
+          eventId !== undefined &&
+          competitionId !== undefined &&
+          redAthleteId !== undefined &&
+          blueAthleteId !== undefined;
+        const coreStats = shouldFetchCore
           ? await Promise.all([
-              fetchEspnCoreCumulativeStats({ eventId, competitionId, athleteId: redAthleteId }),
-              fetchEspnCoreCumulativeStats({ eventId, competitionId, athleteId: blueAthleteId }),
-            ]).then(([fighterA, fighterB]) => ({ fighterA, fighterB })).catch(() => observation.cumulativeStats)
+              fetchEspnCoreCumulativeStats({
+                eventId,
+                competitionId,
+                athleteId: redAthleteId,
+              }),
+              fetchEspnCoreCumulativeStats({
+                eventId,
+                competitionId,
+                athleteId: blueAthleteId,
+              }),
+            ])
+              .then(([fighterA, fighterB]) => ({ fighterA, fighterB }))
+              .catch(() => observation.cumulativeStats)
           : observation.cumulativeStats;
         if (coreStats !== undefined && observation.period >= 1) {
           const stats = initializedRoundStats.observeEspnCumulative(
@@ -910,6 +940,9 @@ export async function createCollector(
             },
             observation.completed,
           );
+          if (observation.completed) {
+            finalizedEspnStatsBouts.add(observation.boutId);
+          }
           await push.publish("update", { kind: "espn-round-live", stats });
         }
       }
@@ -921,6 +954,7 @@ export async function createCollector(
     metrics: healthRegistry,
   });
 
+  let promoteUpcomingMappings = async (): Promise<void> => undefined;
   const preEventPoller = new PreEventPoller({
     storage,
     eventBus,
@@ -928,6 +962,7 @@ export async function createCollector(
     enabled:
       options.preEventPoll?.enabled ?? config.preEventPollEnabled,
     runSync: options.preEventPoll?.runSync,
+    onSuccess: () => promoteUpcomingMappings(),
     readDocument:
       options.preEventPoll?.readDocument ??
       (() => readUpcomingOddsDocument(config.persistencePath)),
@@ -1280,14 +1315,37 @@ export async function createCollector(
     }
   };
 
+  const refreshDiscoveredSubscriptions = (): void => {
+    relevantMarketBouts.clear();
+    for (const transport of marketTransports) {
+      const all = resolveMarketSubscriptions(
+        initializedBoutMappings.getAll(),
+        transport.source,
+      );
+      allMarketSubscriptions.set(transport, all);
+      for (const subscription of all) {
+        relevantMarketBouts.add(subscription.boutId);
+      }
+    }
+    applyActiveSubscriptions();
+  };
+  promoteUpcomingMappings = async () => {
+    await importCurrentEventUpcomingMappings({
+      event: loaded.event,
+      registry: initializedBoutMappings,
+      storage,
+    });
+    refreshDiscoveredSubscriptions();
+  };
+
   unsubscribers.push(
     eventBus.subscribe("FIGHT_STARTED", () => {
       applyActiveSubscriptions();
     }),
     eventBus.subscribe("FIGHT_ENDED", (event) => {
       applyActiveSubscriptions();
-      if (!relevantMarketBouts.has(event.boutId)) return;
       endedMarketBouts.add(event.boutId);
+      if (!relevantMarketBouts.has(event.boutId)) return;
       if (
         relevantMarketBouts.size > 0 &&
         [...relevantMarketBouts].every((boutId) =>
