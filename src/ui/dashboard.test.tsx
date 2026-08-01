@@ -195,19 +195,19 @@ describe("dashboard state surfaces", () => {
     expect(sources).toContain("Fixture data");
   });
 
-  it("shows an honest expert-score empty state without invented posts", async () => {
+  it("omits the Sherdog scorecard panel when no round score exists", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];
     expect(view).toBeDefined();
     if (!view) return;
 
     const scorecards = renderToStaticMarkup(<ScorecardFeed view={view} />);
-    expect(scorecards).toContain("No Sherdog scorecard for this round.");
+    expect(scorecards).toBe("");
     expect(scorecards).not.toContain('class="media-scorecard"');
     expect(scorecards).not.toContain("10–9");
   });
 
-  it("renders collector-delivered Sherdog values with provenance", async () => {
+  it("omits unscored Sherdog placeholders and renders stored scorer-card photos", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];
     expect(view).toBeDefined();
@@ -229,6 +229,7 @@ describe("dashboard state surfaces", () => {
               commentary: "Measured exchanges.",
               aiSummary: "Reyes controlled the round behind clean counters.",
               scorerCards: [
+                { scorer: "Future round" },
                 {
                   scorer: "Sherdog",
                   winner: "Reyes",
@@ -260,6 +261,11 @@ describe("dashboard state surfaces", () => {
 
     expect(scorecards).not.toContain("Reyes controlled the round behind clean counters.");
     expect(scorecards).not.toContain("Measured exchanges.");
+    expect(scorecards).not.toContain("Future round");
+    expect(scorecards).not.toContain("delivery-freshness");
+    expect(scorecards).toContain('class="media-scorecard-avatar"');
+    expect(scorecards).toContain('alt=""');
+    expect(scorecards).toContain('aria-label="Sherdog round 1 scorecards"');
     expect(scorecards).toContain("10-9");
     expect(scorecards).toContain("Sherdog");
   });

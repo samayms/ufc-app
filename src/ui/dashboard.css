@@ -1109,26 +1109,26 @@
 .media-scorecard-grid {
   list-style: none;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   margin: 0;
   padding: 0;
 }
 
 .media-scorecard {
   min-width: 0;
-  min-height: 50px;
+  min-height: 58px;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 11px;
+  padding: 9px 11px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-3);
 }
 
 .expert-source-group .media-scorecard {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
 }
 
 .expert-score-link,
@@ -1165,17 +1165,13 @@
 }
 
 .media-scorecard-avatar {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   flex: none;
-  display: grid;
-  place-items: center;
   border-radius: 50%;
+  border: 1px solid var(--border);
   background: var(--surface-2);
-  color: var(--text-faint);
-  font-family: var(--font-data);
-  font-size: 0.6rem;
-  font-weight: 600;
+  object-fit: cover;
 }
 
 .media-scorecard-id {
@@ -1188,7 +1184,7 @@
 .media-scorecard-name {
   overflow: hidden;
   font-family: var(--font-display);
-  font-size: 0.86rem;
+  font-size: 0.94rem;
   font-weight: 600;
   line-height: 1;
   text-overflow: ellipsis;
@@ -1198,26 +1194,41 @@
 .media-scorecard-handle {
   overflow: hidden;
   color: var(--text-faint);
-  font-size: 0.68rem;
+  font-size: 0.64rem;
+  letter-spacing: 0.02em;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .media-scorecard-score {
+  min-width: 0;
   display: flex;
-  align-items: baseline;
-  gap: 5px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
   font-family: var(--font-display);
-  font-size: 0.98rem;
+  font-size: 1.08rem;
   font-weight: 600;
-  line-height: 1;
+  line-height: 0.95;
   white-space: nowrap;
+}
+
+.media-scorecard-winner {
+  max-width: 14ch;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.67rem;
+  font-weight: 500;
+  line-height: 1;
+  text-overflow: ellipsis;
 }
 
 .media-scorecard-total {
   color: var(--text-faint);
-  font-size: 0.76rem;
+  font-family: var(--font-data);
+  font-size: 0.66rem;
   font-weight: 500;
 }
 
@@ -2124,7 +2135,7 @@
 
   .media-scorecard {
     min-height: 42px;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
     gap: 8px;
     padding: 6px 10px;
   }
@@ -2132,7 +2143,6 @@
   .media-scorecard-avatar {
     width: 28px;
     height: 28px;
-    font-size: 0.54rem;
   }
 
   .media-scorecard-name {
