@@ -33,25 +33,11 @@ export const DEFAULT_ESPN_FRESHNESS_MS = 30_000;
 export const DEFAULT_LIFECYCLE_STORAGE_STREAM = "fight-lifecycle";
 
 /**
- * A UFC round is five minutes, and ESPN's scoreboard clock counts *up* toward
- * that mark rather than down toward zero.
- *
- * Verified 2026-07-30 against site.api.espn.com/.../mma/ufc/scoreboard for
- * three completed cards: every bout that went to a decision terminates at
- * exactly `displayClock: "5:00"` / `clock: 300.0`, while finishes carry
- * partial elapsed times ("2:19", "0:52", "4:44"). A round therefore *ends* at
- * `clockSeconds >= 300`; `clockSeconds === 0` is a round *starting*.
- *
- * This inverts the original assumption. Reading a boundary at zero fired
- * PROVISIONAL_ROUND_ENDED at the top of every round, one round early, which
- * would have triggered the whole downstream round-jobs pipeline against a
- * round that had not been fought yet.
- *
- * Still unconfirmed by live observation: whether the clock behaves the same
- * way *during* a round as it does in these terminal values. Missing the 300
- * reading is safe — `periodAdvanced` below confirms the round independently
- * when the period increments — so a polling gap costs detection latency, not
- * correctness. See LIVE_CARD_VALIDATION.md.
+ * ESPN supplies a five-minute countdown: 300 starts a round and 0:00 marks
+ * its provisional end. A zero can be stale/transient, so only a period
+ * advance or fight completion confirms the boundary. If a positive clock
+ * subsequently arrives for that same live period, the provisional boundary
+ * is superseded and can be emitted again if ESPN returns to zero.
  */
 export const ROUND_LENGTH_SECONDS = 300;
 
@@ -377,7 +363,7 @@ function transition(
     previousState.completed === observation.completed &&
     observation.state === "in" &&
     observation.clockSeconds !== undefined &&
-    observation.clockSeconds < ROUND_LENGTH_SECONDS;
+    observation.clockSeconds > 0;
 
   if (clockResumed && next.activeProvisional !== undefined) {
     supersession = {
@@ -394,7 +380,7 @@ function transition(
   const reachedProvisionalBoundary =
     observation.state === "in" &&
     observation.clockSeconds !== undefined &&
-    observation.clockSeconds >= ROUND_LENGTH_SECONDS &&
+    observation.clockSeconds === 0 &&
     !observation.completed &&
     observation.period > 0 &&
     !next.confirmedRounds.includes(observation.period) &&
