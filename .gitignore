@@ -34,12 +34,19 @@ __pycache__/
 /PRODUCT.md
 /PROGRESS.md
 /ufc-live-data-architecture.md
+/ufc-live-data-implementation-spec.md
+/LIVE_CARD_VALIDATION.md
+/WEEKEND_RUNBOOK.md
+/cito-live-round-stats-weekend-test.md
 /*PLAN*.md
 /*HANDOFF*.md
 /*NOTES*.md
 /*RESEARCH*.md
 /*ARCHITECTURE*.md
+/*VALIDATION*.md
+/*RUNBOOK*.md
 /CLAUDE_*.md
+/docs/superpowers/specs/
 
 # Local agent run logs
 /claude-*.log
