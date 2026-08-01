@@ -1164,6 +1164,47 @@
       );
     }
 
+    /**
+     * ESPN's reported clock only actually changes every so often, far less
+     * often than we poll it. Replacing the stored "latest" entry on every
+     * poll regardless would reset the local countdown's interpolation
+     * anchor each time, making it visibly jump back up to the same stale
+     * number instead of smoothly ticking down between real ESPN updates.
+     *
+     * A new entry is adopted as the fresh anchor only when it reports the
+     * round/fight over in some capacity (state changed away from "in",
+     * `completed` flipped true, or the round number advanced — always
+     * authoritative) or its clock is at or behind what the local countdown
+     * already projects for this moment. It's rejected only when ESPN
+     * reports a clock ahead of where we've already counted down to — the
+     * same stale value repeated across polls.
+     */
+    function shouldAdoptEspnClockEntry(existingEntry, candidateEntry) {
+      if (!existingEntry) return true;
+      const existing = existingEntry.detail && existingEntry.detail.lifecycle;
+      const candidate = candidateEntry.detail && candidateEntry.detail.lifecycle;
+      if (!candidate) return false;
+      if (!existing) return true;
+      if (
+        candidate.state !== "in" ||
+        candidate.completed === true ||
+        candidate.period !== existing.period
+      ) {
+        return true;
+      }
+      if (!Number.isFinite(Number(candidate.clockSeconds))) return false;
+      if (!Number.isFinite(Number(existing.clockSeconds))) return true;
+
+      const existingAtMs = Date.parse(existingEntry.at);
+      const candidateAtMs = Date.parse(candidateEntry.at);
+      const elapsedSeconds =
+        Number.isFinite(existingAtMs) && Number.isFinite(candidateAtMs)
+          ? Math.max(0, (candidateAtMs - existingAtMs) / 1000)
+          : 0;
+      const projected = Math.max(0, Number(existing.clockSeconds) - elapsedSeconds);
+      return Number(candidate.clockSeconds) <= projected;
+    }
+
     function formatFightClock(value) {
       if (!Number.isFinite(Number(value))) return "-:--";
       const seconds = Math.max(0, Math.ceil(Number(value)));
@@ -1171,7 +1212,7 @@
     }
 
     function renderEspnClock() {
-      const entry = state.session && state.session.espnLatest;
+      const entry = state.session && state.session.espnClockAnchor;
       const lifecycle = entry && entry.detail && entry.detail.lifecycle;
       const reported = Number(lifecycle && lifecycle.clockSeconds);
       const sampledAtMs = entry ? Date.parse(entry.at) : NaN;
@@ -1375,9 +1416,9 @@
 
       status.textContent = "Checking";
       if (name === "espn") {
-        detail.textContent = "Polling every 5 seconds for ESPN’s clock, round, state, and completion flag.";
+        detail.textContent = "Polling every 2.5 seconds for ESPN’s clock, round, state, and completion flag.";
       } else if (name === "espn-stats") {
-        detail.textContent = "Fetching both fighters’ fight-cumulative core stats every 5 seconds.";
+        detail.textContent = "Fetching both fighters’ fight-cumulative core stats every 2.5 seconds.";
       } else if (name === "cito") {
         detail.textContent = "The first check fired at the horn; pending stats retry every 5 seconds.";
       } else if (name === "cito-live") {
@@ -1777,6 +1818,9 @@
 
       if (entry.source === "espn") {
         state.session.espnLatest = entry;
+        if (shouldAdoptEspnClockEntry(state.session.espnClockAnchor, entry)) {
+          state.session.espnClockAnchor = entry;
+        }
         state.session.espnHistory.push(entry);
         if (entry.detail && entry.detail.transition) {
           state.session.espnLastChange = entry;
@@ -1907,6 +1951,9 @@
         espnLatest: espnHistory.length
           ? espnHistory[espnHistory.length - 1]
           : null,
+        espnClockAnchor: espnHistory.length
+          ? espnHistory[espnHistory.length - 1]
+          : null,
         espnHistory,
         espnLastChange,
         espnStatsLatest: espnStatsHistory.length
@@ -1966,6 +2013,7 @@
         polling: true,
         measurementComplete: false,
         espnLatest: null,
+        espnClockAnchor: null,
         espnHistory: [],
         espnLastChange: null,
         espnStatsLatest: null,
