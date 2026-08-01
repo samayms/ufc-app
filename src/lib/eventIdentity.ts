@@ -1,3 +1,5 @@
+import type { BoutStatus } from "../schema.ts";
+
 const EVENT_STOP_WORDS = new Set([
   "ufc",
   "fight",
@@ -46,6 +48,21 @@ export function hasEventStarted(
 ): boolean {
   const startsAtMs = Date.parse(startsAt);
   return Number.isFinite(startsAtMs) && now >= startsAtMs;
+}
+
+const TERMINAL_BOUT_STATUSES = new Set<BoutStatus>([
+  "final",
+  "canceled",
+  "postponed",
+]);
+
+/** A card is complete only when ESPN has resolved every scheduled bout. */
+export function hasEventCompleted(
+  bouts: readonly { status: BoutStatus }[],
+): boolean {
+  return bouts.length > 0 && bouts.every((bout) =>
+    TERMINAL_BOUT_STATUSES.has(bout.status)
+  );
 }
 
 /** True when `startsAt` falls on the same calendar day as `now`, in the

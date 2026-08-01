@@ -29,7 +29,11 @@ import {
 import { SourceStatus } from "./ui/SourceStatus.tsx";
 import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
 import { WEIGHT_LABEL } from "./ui/format.ts";
-import { hasEventStarted, sameEvent } from "./lib/eventIdentity.ts";
+import {
+  hasEventCompleted,
+  hasEventStarted,
+  sameEvent,
+} from "./lib/eventIdentity.ts";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
 import { useUpcomingOdds } from "./store/useUpcomingOdds.ts";
 import {
@@ -202,12 +206,15 @@ export default function App() {
     return athleteId ? currentEventAthletePhotos[athleteId] : undefined;
   };
   const eventStarted = hasEventStarted(event.startsAt);
+  const eventCompleted = hasEventCompleted(event.bouts);
 
   const dashboardEventEntry: EventListEntry = {
     id: event.id,
     name: event.name,
     startsAt: event.startsAt,
+    isComplete: eventCompleted,
     isLive: eventStarted &&
+      !eventCompleted &&
       event.bouts.some(
         (bout) =>
           bout.status === "upcoming" ||
@@ -227,14 +234,15 @@ export default function App() {
         }
       : {}),
   };
-  const currentEventEntry = eventStarted ? dashboardEventEntry : null;
+  const currentEventEntry = eventStarted && !eventCompleted
+    ? dashboardEventEntry
+    : null;
 
-  const upcomingEventEntries: EventListEntry[] = (
+  const scheduleEventEntries: EventListEntry[] = (
     upcomingEspn.status === "ready" ? upcomingEspn.events : []
   )
     .filter(
       (upcomingEvent) =>
-        !eventStarted ||
         !sameEvent(
           { id: event.id, name: event.name },
           { id: upcomingEvent.eventId, name: upcomingEvent.name },
@@ -246,7 +254,10 @@ export default function App() {
         id: upcomingEvent.eventId,
         name: upcomingEvent.name,
         startsAt: upcomingEvent.startsAt,
-        isLive: hasEventStarted(upcomingEvent.startsAt),
+        isComplete: upcomingEvent.status === "completed",
+        isLive: upcomingEvent.status !== "completed" &&
+          (upcomingEvent.status === "live" ||
+            hasEventStarted(upcomingEvent.startsAt)),
         ...(corners?.red
           ? { redFighter: { name: corners.red.name, photoUrl: corners.red.headshotUrl } }
           : {}),
@@ -256,10 +267,10 @@ export default function App() {
       };
     });
   if (
-    !eventStarted &&
-    !upcomingEventEntries.some((entry) => sameEvent(entry, dashboardEventEntry))
+    currentEventEntry === null &&
+    !scheduleEventEntries.some((entry) => sameEvent(entry, dashboardEventEntry))
   ) {
-    upcomingEventEntries.unshift(dashboardEventEntry);
+    scheduleEventEntries.unshift(dashboardEventEntry);
   }
 
   const photosByBoutId: Record<string, { red?: string; blue?: string }> = {};
@@ -293,7 +304,7 @@ export default function App() {
       : scheduleSelection === event.id
         ? event.name
         : espnCard.card?.name ??
-          upcomingEventEntries.find((entry) => entry.id === scheduleSelection)
+          scheduleEventEntries.find((entry) => entry.id === scheduleSelection)
             ?.name;
 
   const subheaderEventName =
@@ -469,7 +480,7 @@ export default function App() {
                 )}
                 <EventList
                   currentEvent={currentEventEntry}
-                  events={upcomingEventEntries}
+                  events={scheduleEventEntries}
                   selectedId=""
                   onSelect={setScheduleSelection}
                 />

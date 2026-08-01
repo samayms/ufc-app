@@ -132,6 +132,32 @@ describe("parseEspnScheduleEvents", () => {
       "live",
       "next",
     ]);
+    expect(events.map((event) => event.status)).toEqual([
+      "completed",
+      "live",
+      "upcoming",
+    ]);
+  });
+
+  it("does not classify an event as completed from its start time alone", () => {
+    const events = parseEspnScheduleEvents({
+      events: [
+        {
+          id: "past-scheduled",
+          date: "2026-08-19T18:00:00Z",
+          name: "UFC Still Unresolved",
+          status: {
+            type: {
+              name: "STATUS_SCHEDULED",
+              state: "pre",
+              completed: false,
+            },
+          },
+        },
+      ],
+    }, new Date("2026-08-20T00:00:00Z"));
+
+    expect(events[0]?.status).toBe("upcoming");
   });
 
   it("de-duplicates by event id", () => {

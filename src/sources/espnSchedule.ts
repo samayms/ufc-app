@@ -22,6 +22,8 @@ export interface EspnScheduledEventSummary {
   name: string;
   shortName?: string;
   startsAt: string;
+  /** ESPN's event-level lifecycle; a past start time alone is not completion. */
+  status: "upcoming" | "live" | "completed";
 }
 
 export interface EspnScheduledFighter {
@@ -110,6 +112,7 @@ interface RawEspnScheduleSeason {
 
 interface RawEspnScheduleStatusType {
   name?: string;
+  state?: string;
   completed?: boolean;
 }
 
@@ -404,6 +407,25 @@ export function eventWithinReviewWindow(
     age <= COMPLETED_EVENT_RETENTION_MS;
 }
 
+function scheduledEventStatus(
+  statusType: RawEspnScheduleStatusType | undefined,
+): EspnScheduledEventSummary["status"] {
+  if (
+    statusType?.completed === true ||
+    statusType?.name === "STATUS_FINAL" ||
+    statusType?.state === "post"
+  ) {
+    return "completed";
+  }
+  if (
+    statusType?.name === "STATUS_IN_PROGRESS" ||
+    statusType?.state === "in"
+  ) {
+    return "live";
+  }
+  return "upcoming";
+}
+
 /**
  * Parses the ESPN scoreboard payload into current/recent/upcoming,
  * non-Contender-Series event summaries. A freshly completed card remains
@@ -435,8 +457,8 @@ export function parseEspnScheduleEvents(
     const eventTime = new Date(date).getTime();
     if (Number.isNaN(eventTime)) continue;
 
-    const statusType = event.status?.type;
-    if (statusType?.name === "STATUS_FINAL" || statusType?.completed === true) {
+    const status = scheduledEventStatus(event.status?.type);
+    if (status === "completed") {
       if (!eventWithinReviewWindow(date, now)) {
         continue;
       }
@@ -456,6 +478,7 @@ export function parseEspnScheduleEvents(
       name,
       ...(shortName === undefined ? {} : { shortName }),
       startsAt: date,
+      status,
     });
   }
 

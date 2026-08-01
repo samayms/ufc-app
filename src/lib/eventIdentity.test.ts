@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { hasEventStarted, isEventDay, sameEvent } from "./eventIdentity.ts";
+import {
+  hasEventCompleted,
+  hasEventStarted,
+  isEventDay,
+  sameEvent,
+} from "./eventIdentity.ts";
 
 describe("sameEvent", () => {
   it("matches the current card when ESPN titles use different fighter detail", () => {
@@ -26,6 +31,22 @@ describe("sameEvent", () => {
   it("uses the scheduled start time to classify an event", () => {
     expect(hasEventStarted("2026-07-29T12:00:00Z", Date.parse("2026-07-29T11:59:59Z"))).toBe(false);
     expect(hasEventStarted("2026-07-29T12:00:00Z", Date.parse("2026-07-29T12:00:00Z"))).toBe(true);
+  });
+});
+
+describe("hasEventCompleted", () => {
+  it("requires every bout to have a terminal fight status", () => {
+    expect(hasEventCompleted([
+      { status: "final" },
+      { status: "canceled" },
+      { status: "postponed" },
+    ])).toBe(true);
+    expect(hasEventCompleted([
+      { status: "final" },
+      { status: "between-rounds" },
+    ])).toBe(false);
+    expect(hasEventCompleted([{ status: "upcoming" }])).toBe(false);
+    expect(hasEventCompleted([])).toBe(false);
   });
 });
 
