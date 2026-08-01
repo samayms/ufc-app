@@ -6,10 +6,7 @@ import type {
 } from "../schema.ts";
 import type {
   CollectorUnifiedRound,
-  CollectorValueDelivery,
 } from "../store/collectorClient.ts";
-import { withoutSportsbookOnEventDay } from "../lib/marketPriority.ts";
-import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
 import type { RoundSelection } from "./RoundSelector.tsx";
 import { RoundOdds } from "./RoundOdds.tsx";
 
@@ -77,15 +74,15 @@ export function FightSummary({
   view,
   eventStartsAt,
   selection,
-  delivery,
   collectorRounds,
 }: {
   view: BoutView;
-  eventStartsAt: string;
+  /** Retained for call-site compatibility; round odds no longer use live prices. */
+  eventStartsAt?: string;
   selection: RoundSelection;
-  delivery?: CollectorValueDelivery;
   collectorRounds?: readonly CollectorUnifiedRound[];
 }) {
+  void eventStartsAt;
   // ESPN is the live source. Keep Cito only as a historical fixture fallback.
   const statSource = (view.rounds.espn ?? []).some((update) => update.stats)
     ? view.rounds.espn ?? []
@@ -108,9 +105,7 @@ export function FightSummary({
       <section className="compact-stats" aria-label={`${selectionLabel} statistics`}>
         <div className="compact-stats-head">
           <span>{selectionLabel}</span>
-          {delivery ? (
-            <DeliveryFreshness delivery={delivery} />
-          ) : !hasStats ? (
+          {!hasStats ? (
             <span className="freshness">awaiting completed-round stats</span>
           ) : null}
         </div>
@@ -175,10 +170,6 @@ export function FightSummary({
           blueName={view.bout.fighters.blue.name}
           selection={selection}
           records={collectorRounds}
-          latestOdds={withoutSportsbookOnEventDay(
-            view.latestOdds,
-            eventStartsAt,
-          )}
         />
       </section>
 
