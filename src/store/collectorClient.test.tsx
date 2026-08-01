@@ -683,10 +683,11 @@ describe("shouldAdoptClockSync", () => {
     ).toBe(true);
   });
 
-  it("ignores a same-round update that is not behind our own countdown", () => {
+  it("ignores a same-round update that is lower than the last poll but ahead of our projected countdown", () => {
     const existing = sync({ clockSeconds: 200, receivedAt: "2026-08-01T00:00:00Z" });
-    // 10s have passed locally, so our countdown reads 190 by now — ESPN
-    // reporting 195 (still ahead of our countdown) means it hasn't ticked.
+    // 10s have passed locally, so our countdown reads 190 by now. ESPN's 195
+    // is lower than its last reading, but is still stale relative to the
+    // visible countdown and must not move it backward.
     const candidate = sync({ clockSeconds: 195, receivedAt: "2026-08-01T00:00:10Z" });
     expect(
       shouldAdoptClockSync(existing, candidate, Date.parse("2026-08-01T00:00:10Z")),
@@ -700,6 +701,14 @@ describe("shouldAdoptClockSync", () => {
     expect(
       shouldAdoptClockSync(existing, candidate, Date.parse("2026-08-01T00:00:10Z")),
     ).toBe(true);
+  });
+
+  it("does not re-adopt an unchanged ESPN clock in the same live round", () => {
+    const existing = sync({ clockSeconds: 200 });
+    const candidate = sync({ clockSeconds: 200 });
+    expect(
+      shouldAdoptClockSync(existing, candidate, Date.parse("2026-08-01T00:00:01Z")),
+    ).toBe(false);
   });
 
   it("always adopts once the round or fight is reported over, regardless of the clock", () => {
@@ -727,5 +736,15 @@ describe("shouldAdoptClockSync", () => {
     expect(
       shouldAdoptClockSync(existing, candidate, Date.parse("2026-08-01T00:00:05Z")),
     ).toBe(true);
+  });
+
+  it("never gives Cito authority over the live clock", () => {
+    const cito = sync({ source: "cito", clockSeconds: 150 });
+    expect(
+      shouldAdoptClockSync(undefined, cito, Date.parse("2026-08-01T00:00:00Z")),
+    ).toBe(false);
+    expect(
+      shouldAdoptClockSync(sync(), cito, Date.parse("2026-08-01T00:00:01Z")),
+    ).toBe(false);
   });
 });

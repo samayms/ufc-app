@@ -761,34 +761,32 @@ export function interpolateClockSeconds(
 }
 
 /**
- * ESPN (and Cito) only actually change their reported round clock every so
- * often — far less often than we poll. Replacing the stored sync on every
- * poll regardless would reset the interpolation baseline each time and make
- * the on-screen countdown visibly stutter back up to the same stale number
- * instead of smoothly ticking down between real updates.
+ * ESPN only changes its reported round clock every so often — far less often
+ * than we poll. Replacing the stored sync on every poll regardless would
+ * reset the interpolation baseline each time and make the on-screen countdown
+ * visibly jump backward instead of smoothly ticking down between real
+ * updates.
  *
  * A new observation is adopted as the fresh sync point only when it reports
- * the round/fight as over in some capacity (state changed away from "in",
- * `completed` flipped true, or the round number advanced — always
- * authoritative) or when its clock is at or behind what our own countdown
- * would show at the moment it arrived (the source has caught up to, or
- * past, where we already are — the normal case when it's ticking in step
- * with real time). It's only rejected when the source reports a clock
- * *ahead* of where we've already counted down to: the same stale value
- * repeated across polls while our own countdown has moved past it.
- * Otherwise the existing sync is kept as-is and the local clock just keeps
- * counting down.
+ * an explicit round end, bout completion, or a later round — those transitions
+ * are always authoritative. During one live round, every subsequent ESPN
+ * clock must be lower than both the last adopted source clock and the locally
+ * projected clock. That prevents a delayed/stale response from moving the
+ * visible countdown backward after the browser has already counted down.
+ * Cito observations are deliberately never a clock authority.
  */
 export function shouldAdoptClockSync(
   existing: CollectorClockSync | undefined,
   candidate: CollectorClockSync,
   candidateReceivedAtMs: number,
 ): boolean {
+  if (candidate.source !== "espn") return false;
   if (existing === undefined) return true;
+  if (existing.source !== "espn") return true;
   if (
-    candidate.state !== "in" ||
+    candidate.state === "post" ||
     candidate.completed ||
-    candidate.period !== existing.period
+    candidate.period > existing.period
   ) {
     return true;
   }
@@ -801,7 +799,8 @@ export function shouldAdoptClockSync(
   );
   return (
     interpolatedExisting === undefined ||
-    candidate.clockSeconds <= interpolatedExisting
+    candidate.clockSeconds < existing.clockSeconds &&
+      candidate.clockSeconds <= interpolatedExisting
   );
 }
 
@@ -813,6 +812,9 @@ function clockSyncs(
   const next = { ...current };
   const receivedAtMs = Date.parse(receivedAt);
   for (const observation of observations) {
+    // Cito can still be present in historical fixture deliveries, but it is
+    // never allowed to seed or replace the browser's live ESPN clock.
+    if (observation.source !== "espn") continue;
     const candidate: CollectorClockSync = {
       boutId: observation.boutId,
       source: observation.source,
