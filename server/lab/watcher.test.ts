@@ -284,6 +284,64 @@ describe("LabWatcher CITO Live polling", () => {
 
     watcher.stop();
   });
+
+  it("falls back to the per-corner outcome when winnerFighterSlug is null", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TIME);
+    // Observed live on the Buzukja/Grad bout: a decided fight can carry a
+    // method with winnerFighterSlug still null, while each fighter's own
+    // outcome names the winner.
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      citoLiveStateResponse({
+        method: "Submission",
+        winnerFighterSlug: null,
+        currentRound: 2,
+        fighters: [
+          {
+            corner: "red",
+            fighterName: "Dennis Buzukja",
+            fighterSlug: null,
+            outcome: "win",
+          },
+          {
+            corner: "blue",
+            fighterName: "Bogdan Grad",
+            fighterSlug: null,
+            outcome: "loss",
+          },
+        ],
+      }),
+    );
+    const timeline = new LabTimeline({ now: () => Date.now() });
+    const watcher = new LabWatcher({
+      timeline,
+      fetchImpl,
+      now: () => Date.now(),
+      env: {
+        CITO_API_BASE_URL: "https://cito.example.test/api/v1",
+        CITO_API_KEY: "test-key",
+      },
+    });
+
+    watcher.start({
+      boutId: "12906",
+      round: 2,
+      citoBoutIds: ["12906"],
+      citoIntervalMs: 5_000,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(timeline.since(0)).toContainEqual(
+      expect.objectContaining({
+        source: "cito-live",
+        boutId: "12906",
+        round: 2,
+        label: "live state: Submission, Dennis Buzukja wins (round 2)",
+      }),
+    );
+
+    watcher.stop();
+  });
 });
 
 describe("LabWatcher synchronized horn checks", () => {

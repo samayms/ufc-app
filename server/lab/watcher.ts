@@ -637,8 +637,22 @@ export class LabWatcher {
     const data = (json as { data?: unknown }).data;
     const record = isRecord(data) ? data : undefined;
     const method = record?.method;
-    const winner = record?.winnerFighterSlug;
     const round = record?.currentRound;
+    // `winnerFighterSlug` is sometimes null even on a decided fight (seen on
+    // the Buzukja/Grad bout); the per-corner `outcome: "win"` still names the
+    // winner in that case, so fall back to it rather than showing no winner.
+    const winnerSlug = record?.winnerFighterSlug;
+    const winnerCorner = Array.isArray(record?.fighters)
+      ? record.fighters.find(
+          (fighter) => isRecord(fighter) && fighter.outcome === "win",
+        )
+      : undefined;
+    const winner =
+      typeof winnerSlug === "string"
+        ? winnerSlug
+        : isRecord(winnerCorner) && typeof winnerCorner.fighterName === "string"
+          ? winnerCorner.fighterName
+          : undefined;
 
     if (typeof method === "string") {
       this.citoLiveComplete = true;
@@ -648,8 +662,8 @@ export class LabWatcher {
         at: observedAt,
         boutId,
         ...(typeof round === "number" ? { round } : {}),
-        label: `live state: ${method}${typeof winner === "string" ? `, ${winner} wins` : ""}${typeof round === "number" ? ` (round ${round})` : ""}`,
-        detail: record ?? { method, winnerFighterSlug: winner, currentRound: round },
+        label: `live state: ${method}${winner === undefined ? "" : `, ${winner} wins`}${typeof round === "number" ? ` (round ${round})` : ""}`,
+        detail: record ?? { method, winnerFighterSlug: winnerSlug, currentRound: round },
       });
       this.pausePoller("cito-live");
       return;
