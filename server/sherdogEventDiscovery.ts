@@ -34,6 +34,7 @@ const MAX_TIMER_DELAY_MS = 2_147_000_000;
 export interface SherdogDiscoveredEventState {
   eventId: string;
   liveBlogUrl?: string;
+  liveBlogAttempts?: number;
   mainOutlookUrl?: string;
   prelimsOutlookUrl?: string;
   outlooks: Readonly<Record<string, string>>;
@@ -98,6 +99,10 @@ function isPersistedState(
     ) &&
     (value.value.liveBlogUrl === undefined ||
       typeof value.value.liveBlogUrl === "string") &&
+    (value.value.liveBlogAttempts === undefined ||
+      (Number.isSafeInteger(value.value.liveBlogAttempts) &&
+        (value.value.liveBlogAttempts as number) >= 0 &&
+        (value.value.liveBlogAttempts as number) <= 4)) &&
     (value.value.mainOutlookUrl === undefined ||
       typeof value.value.mainOutlookUrl === "string") &&
     (value.value.prelimsOutlookUrl === undefined ||
@@ -187,6 +192,19 @@ export class SherdogEventDiscovery
               this.pending.add(task);
               await task;
             },
+            attemptedCount: this.state.liveBlogAttempts ?? 0,
+            onAttempted: async (attemptedCount) => {
+              this.state = {
+                ...this.state,
+                liveBlogAttempts: attemptedCount,
+                updatedAt: new Date(this.clock.now()).toISOString(),
+              };
+              const task = this.persistAndNotify().finally(() => {
+                this.pending.delete(task);
+              });
+              this.pending.add(task);
+              await task;
+            },
             onCheckpointFailed: (error) =>
               options.onError?.("live-blog", error),
             ...(options.discoverLiveBlog === undefined
@@ -219,6 +237,7 @@ export class SherdogEventDiscovery
               ? {}
               : { liveBlogUrl: initialUrl }),
             outlooks: {},
+            liveBlogAttempts: 0,
             updatedAt: new Date(
               options.clock?.now() ?? Date.now(),
             ).toISOString(),
@@ -253,9 +272,11 @@ export class SherdogEventDiscovery
   }
 
   async idle(): Promise<void> {
-    while (this.pending.size > 0) {
+    do {
+      await this.liveBlogWatcher?.idle();
+      if (this.pending.size === 0) break;
       await Promise.allSettled([...this.pending]);
-    }
+    } while (true);
   }
 
   private scheduleOutlook(): void {

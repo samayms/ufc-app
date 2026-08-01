@@ -62,6 +62,8 @@ export interface SherdogLiveBlogWatcherOptions {
   startsAt: string;
   discoverOptions: DiscoverSherdogLiveBlogOptions;
   onFound: (match: SherdogNewsItem) => Promise<void> | void;
+  attemptedCount?: number;
+  onAttempted?: (attemptedCount: number) => Promise<void> | void;
   onCheckpointFailed?: (error: unknown, attemptNumber: number) => void;
   onExhausted?: () => void;
   discover?: (
@@ -100,11 +102,13 @@ export class SherdogLiveBlogWatcher {
 
   private readonly onExhausted: SherdogLiveBlogWatcherOptions["onExhausted"];
 
+  private readonly onAttempted: SherdogLiveBlogWatcherOptions["onAttempted"];
+
   private readonly clock: RoundJobClock;
 
   private readonly timer: RoundJobTimer;
 
-  private attemptedCount = 0;
+  private attemptedCount: number;
 
   private found = false;
 
@@ -112,12 +116,24 @@ export class SherdogLiveBlogWatcher {
 
   private handle: unknown;
 
+  private activeRun: Promise<void> | undefined;
+
   constructor(options: SherdogLiveBlogWatcherOptions) {
     this.target = options.target;
     this.startsAt = options.startsAt;
     this.discoverOptions = options.discoverOptions;
     this.discover = options.discover ?? discoverSherdogLiveBlog;
     this.onFound = options.onFound;
+    const attemptedCount = options.attemptedCount ?? 0;
+    if (
+      !Number.isSafeInteger(attemptedCount) ||
+      attemptedCount < 0 ||
+      attemptedCount > SHERDOG_LIVE_BLOG_CHECKPOINT_OFFSETS_MS.length
+    ) {
+      throw new TypeError("Sherdog attempted checkpoint count must be 0-4");
+    }
+    this.attemptedCount = attemptedCount;
+    this.onAttempted = options.onAttempted;
     this.onCheckpointFailed = options.onCheckpointFailed;
     this.onExhausted = options.onExhausted;
     this.clock = options.clock ?? { now: () => Date.now() };
@@ -151,6 +167,13 @@ export class SherdogLiveBlogWatcher {
     return this.found;
   }
 
+  /** Waits for an in-flight checkpoint, including persistence callbacks. */
+  async idle(): Promise<void> {
+    while (this.activeRun !== undefined) {
+      await this.activeRun;
+    }
+  }
+
   private armNext(): void {
     if (this.stopped || this.found) return;
     const delayMs = msUntilNextSherdogLiveBlogCheckpoint(
@@ -164,13 +187,18 @@ export class SherdogLiveBlogWatcher {
     }
     this.handle = this.timer.setTimeout(() => {
       this.handle = undefined;
-      void this.runCheckpoint();
+      const run = this.runCheckpoint().finally(() => {
+        if (this.activeRun === run) this.activeRun = undefined;
+      });
+      this.activeRun = run;
     }, delayMs);
   }
 
   private async runCheckpoint(): Promise<void> {
     if (this.stopped || this.found) return;
     this.attemptedCount += 1;
+    await this.onAttempted?.(this.attemptedCount);
+    if (this.stopped) return;
 
     let match: SherdogNewsItem | undefined;
     try {
