@@ -510,8 +510,10 @@ const citoLive = jsonProbe({
       `nextArmedBout: ${JSON.stringify(field(data, "nextArmedBout"))}`,
     ];
     for (const bout of liveBouts.slice(0, 6)) {
+      const method = field(bout, "method");
+      const winner = field(bout, "winnerFighterSlug");
       summary.push(
-        `  ${String(field(bout, "boutId") ?? field(bout, "fmid"))}: round ${String(field(bout, "round") ?? field(bout, "roundNumber"))} clock ${String(field(bout, "clock") ?? field(bout, "roundElapsedTime"))} lag ${String(field(bout, "lagSeconds"))}s`,
+        `  ${String(field(bout, "boutId") ?? field(bout, "fmid"))}: round ${String(field(bout, "currentRound"))} clock ${String(field(bout, "currentTime"))} lag ${String(field(bout, "lagSeconds"))}s${typeof method === "string" ? ` — ${method}${typeof winner === "string" ? ` (${winner} wins)` : ""}` : ""}`,
       );
     }
     if (liveBouts.length === 0) {
@@ -574,12 +576,17 @@ const citoLiveBoutState = jsonProbe({
   headers: citoHeaders,
   summarize: ({ json }) => {
     const data = citoData(json);
+    const method = field(data, "method");
+    const winner = field(data, "winnerFighterSlug");
     return {
       summary: [
         `status ${String(field(data, "status"))}`,
-        `round ${String(field(data, "round") ?? field(data, "roundNumber"))}`,
-        `clock ${String(field(data, "clock") ?? field(data, "roundElapsedTime"))}`,
+        `round ${String(field(data, "currentRound"))}`,
+        `clock ${String(field(data, "currentTime"))}`,
         `lag ${String(field(data, "lagSeconds"))}s`,
+        ...(typeof method === "string"
+          ? [`method ${method}${typeof winner === "string" ? `, winner ${winner}` : ""}`]
+          : []),
       ],
       parsed: data,
     };
