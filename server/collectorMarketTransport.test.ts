@@ -4,6 +4,7 @@ import liveOdds from "../src/fixtures/oddsApiIoOddsLive.json" with {
 };
 import {
   createCollector,
+  eventNeedsLiveMarketTransport,
   loadFixtureState,
   type Collector,
 } from "./collector.ts";
@@ -64,6 +65,23 @@ afterEach(async () => {
 });
 
 describe("collector market transport wiring", () => {
+  it("does not restart live market streams for an already completed card", async () => {
+    const state = await loadFixtureState();
+    expect(eventNeedsLiveMarketTransport(state)).toBe(true);
+
+    const completed = {
+      ...state,
+      event: {
+        ...state.event,
+        bouts: state.event.bouts.map((bout) => ({
+          ...bout,
+          status: "final" as const,
+        })),
+      },
+    };
+    expect(eventNeedsLiveMarketTransport(completed)).toBe(false);
+  });
+
   it("installs live sportsbook hooks and keeps fixture mode network-free", async () => {
     const urls: string[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {

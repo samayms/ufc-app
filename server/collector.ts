@@ -338,6 +338,17 @@ function isDashboardState(value: unknown): value is DashboardState {
   );
 }
 
+export function eventNeedsLiveMarketTransport(
+  dashboard: DashboardState,
+): boolean {
+  return dashboard.event.bouts.some(
+    ({ status }) =>
+      status !== "final" &&
+      status !== "canceled" &&
+      status !== "postponed",
+  );
+}
+
 function isPersistedCollectorState(
   value: unknown,
 ): value is PersistedCollectorState {
@@ -1285,6 +1296,19 @@ export async function createCollector(
     ),
   );
   const endedMarketBouts = new Set<string>();
+  const seedEndedMarketBouts = (): void => {
+    for (const bout of loaded.event.bouts) {
+      if (
+        relevantMarketBouts.has(bout.id) &&
+        (bout.status === "final" ||
+          bout.status === "canceled" ||
+          bout.status === "postponed")
+      ) {
+        endedMarketBouts.add(bout.id);
+      }
+    }
+  };
+  seedEndedMarketBouts();
 
   /**
    * Narrows every stream to the bouts ESPN currently says are live.
@@ -1292,9 +1316,10 @@ export async function createCollector(
    * The transports are told what to subscribe to, not merely which ticks to
    * keep: a card has a dozen mapped bouts and only one is ever in progress, so
    * subscribing to all of them would carry eleven idle books and make the one
-   * that matters harder to keep fresh. Before any fight starts, and after the
-   * last one ends, the full mapped set is restored so the streams are already
-   * pointed at the right markets when the next fight opens.
+   * that matters harder to keep fresh. Before any fight starts, and between
+   * mapped fights, the full set remains available for the next opening market.
+   * Once every mapped bout is final, the transports disconnect instead of
+   * subscribing again to settled books.
    *
    * SupervisedMarketTransport treats a new subscription set as stale until a
    * fresh snapshot arrives for it, so narrowing can never leave deltas being
@@ -1329,6 +1354,7 @@ export async function createCollector(
         relevantMarketBouts.add(subscription.boutId);
       }
     }
+    seedEndedMarketBouts();
     applyActiveSubscriptions();
   };
   promoteUpcomingMappings = async () => {
@@ -1345,10 +1371,9 @@ export async function createCollector(
       applyActiveSubscriptions();
     }),
     eventBus.subscribe("FIGHT_ENDED", (event) => {
-      applyActiveSubscriptions();
       endedMarketBouts.add(event.boutId);
-      if (!relevantMarketBouts.has(event.boutId)) return;
       if (
+        relevantMarketBouts.has(event.boutId) &&
         relevantMarketBouts.size > 0 &&
         [...relevantMarketBouts].every((boutId) =>
           endedMarketBouts.has(boutId),
@@ -1359,7 +1384,9 @@ export async function createCollector(
             transport.disconnect(),
           ),
         ).catch(() => undefined);
+        return;
       }
+      applyActiveSubscriptions();
     }),
   );
 
@@ -1546,9 +1573,11 @@ export async function createCollector(
       }
       if (config.dataMode === "live") {
         initializedSherdogDiscovery?.start();
-        await Promise.all(
-          marketTransports.map((transport) => transport.connect()),
-        );
+        if (eventNeedsLiveMarketTransport(loaded)) {
+          await Promise.all(
+            marketTransports.map((transport) => transport.connect()),
+          );
+        }
         for (const lifecycleState of lifecycle.getStates()) {
           if (
             lifecycleState.state === "in" &&
