@@ -1,0 +1,40 @@
+.screen-transition {
+  width: 100%;
+}
+
+.screen-slide-in-forward {
+  animation: screen-slide-in-forward 220ms ease-out;
+}
+
+.screen-slide-in-backward {
+  animation: screen-slide-in-backward 220ms ease-out;
+}
+
+@keyframes screen-slide-in-forward {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes screen-slide-in-backward {
+  from {
+    transform: translateX(-24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-slide-in-forward,
+  .screen-slide-in-backward {
+    animation: none;
+  }
+}

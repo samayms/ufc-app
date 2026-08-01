@@ -11,6 +11,8 @@ import { LiveStatsPanel } from "./ui/LiveStatsPanel.tsx";
 import { LoadingSplash } from "./ui/LoadingSplash.tsx";
 import { withoutSportsbookOnEventDay } from "./lib/marketPriority.ts";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
+import { directionBetween } from "./lib/screenTransition.ts";
+import { ScreenTransition } from "./ui/ScreenTransition.tsx";
 import {
   defaultRoundSelection,
   RoundSelector,
@@ -154,6 +156,35 @@ export default function App() {
         : undefined;
 
   useSwipeBack(mainContentRef, activeBackHandler);
+
+  // Screen key/direction for ScreenTransition's slide animation. Computed
+  // here (above the loading/error early returns, like activeBackHandler
+  // above) so the hooks it feeds — useRef and useEffect below — run
+  // unconditionally on every render. Null-tolerant on selectedFutureFight
+  // and selected so it's safe to compute before `state` has loaded.
+  const screenKey =
+    tab === "event"
+      ? scheduleSelection === null
+        ? "event:list"
+        : `event:drilled:${scheduleSelection}`
+      : tab === "fight"
+        ? `fight:${selectedFutureFight?.competitionId ?? selected ?? "current"}`
+        : "data";
+
+  const screenDepth = (key: string): number => {
+    if (key === "event:list" || key === "data") return 0;
+    return 1;
+  };
+
+  const previousScreenKeyRef = useRef<string | null>(null);
+  const screenDirection = directionBetween(
+    previousScreenKeyRef.current,
+    screenKey,
+    screenDepth,
+  );
+  useEffect(() => {
+    previousScreenKeyRef.current = screenKey;
+  }, [screenKey]);
 
   if (dashboard.status === "loading") {
     return <LoadingSplash />;
@@ -359,6 +390,7 @@ export default function App() {
           </aside>
         )}
         <main className="app-content" id="main-content" ref={mainContentRef}>
+          <ScreenTransition screenKey={screenKey} direction={screenDirection}>
           {tab === "fight" &&
             (selectedFutureFight ? (
               <ScheduledFightPreview
@@ -551,6 +583,7 @@ export default function App() {
               collector={dashboard.collector}
             />
           )}
+          </ScreenTransition>
         </main>
       </div>
       <div className="mobile-nav">
