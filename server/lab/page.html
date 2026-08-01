@@ -842,7 +842,6 @@
               <span id="cito-live-checks">0 checks</span>
               <span id="cito-live-latency">—</span>
             </div>
-            <button id="stop-cito" class="source-stop" type="button" disabled>Stop CITO Live polling</button>
           </article>
           <article class="source-item" data-source="kalshi">
             <div class="source-head">
@@ -904,11 +903,11 @@
     <section id="cito-live-stats-panel" class="cito-live-stats-panel" aria-labelledby="cito-live-stats-title" hidden>
       <div class="stats-heading">
         <div>
-          <h2 id="cito-live-stats-title">CITO Live stats</h2>
-          <p>Direct from Cito's live-state endpoint. Updates when the snapshot changes; stops once a method arrives or the poll budget runs out.</p>
+          <h2 id="cito-live-stats-title">CITO Round End snapshot</h2>
+          <p>One request to the selected fight's <code>/ufc/live/ufc-{boutId}</code> endpoint at the moment you press Round End.</p>
         </div>
         <div class="stats-badges" aria-label="CITO Live stats limitations">
-          <span class="stats-badge">Bounded polling</span>
+          <span class="stats-badge">One request</span>
           <span class="stats-badge is-warning" id="cito-live-stats-source-badge">source unknown</span>
         </div>
       </div>
@@ -931,7 +930,13 @@
         </div>
       </div>
       <div id="cito-live-stats-table" class="stats"></div>
-      <p id="cito-live-stats-empty" class="source-detail" hidden>This payload carried a method but no per-fighter <code>liveStats</code> rows.</p>
+      <p id="cito-live-stats-empty" class="source-detail" hidden>This response did not include per-fighter <code>liveStats</code> rows.</p>
+      <details open>
+        <summary>Complete CITO response</summary>
+        <div class="json-tools">
+          <pre id="cito-live-response"></pre>
+        </div>
+      </details>
     </section>
 
     <details id="source-json" hidden>
@@ -1087,17 +1092,9 @@
       const espnActive =
         Boolean(pollerFor("espn") && pollerFor("espn").active) ||
         Boolean(pollerFor("espn-stats") && pollerFor("espn-stats").active);
-      const citoActive = Boolean(
-        pollerFor("cito-live") && pollerFor("cito-live").active,
-      );
       $("stop-espn").disabled =
         !watching ||
         !espnActive ||
-        state.stopping ||
-        state.stoppingSource !== null;
-      $("stop-cito").disabled =
-        !watching ||
-        !citoActive ||
         state.stopping ||
         state.stoppingSource !== null;
       document.querySelectorAll(".round").forEach((button) => {
@@ -1130,9 +1127,6 @@
       ) {
         return state.session.espnStatsLatest;
       }
-      // CITO Live reports continuously (round/clock/live stats) before it
-      // has a method, so its "latest" entry and its "final result" entry are
-      // different things — the source-status row shows the latest one.
       if (name === "cito-live" && state.session && state.session.citoLiveLatest) {
         return state.session.citoLiveLatest;
       }
@@ -1360,15 +1354,20 @@
         return;
       }
       if (name === "cito-live" && entry) {
-        const final = entry.detail && typeof entry.detail.method === "string";
-        status.textContent = final ? "Result received" : "Live";
-        status.classList.toggle("is-complete", Boolean(final));
-        detail.textContent = entry.label.replace(/^live(?: state)?: /, "");
+        status.textContent = "Snapshot received";
+        status.classList.add("is-complete");
+        detail.textContent = entry.label.replace(/^snapshot: /, "");
+        return;
+      }
+      if (poller && poller.lastError && name === "cito-live") {
+        status.textContent = "Capture failed";
+        status.classList.add("is-error");
+        detail.textContent = `${poller.lastError}. CITO will run again only after the next Round End click.`;
         return;
       }
       if (poller && poller.active === false && name === "cito-live") {
-        status.textContent = "Stopped";
-        detail.textContent = "CITO Live polling stopped before a method was reported.";
+        status.textContent = "No snapshot";
+        detail.textContent = "The one-shot CITO request completed without a captured response.";
         return;
       }
       if (name === "kalshi" && entry) {
@@ -1397,7 +1396,7 @@
       } else if (name === "espn-stats") {
         detail.textContent = "Fetching both fighters’ fight-cumulative core stats every 2.5 seconds.";
       } else if (name === "cito-live") {
-        detail.textContent = "Watching Cito's live worker for round/clock/stats updates and, eventually, a method.";
+        detail.textContent = "Requesting the selected bout from Cito once.";
       } else {
         detail.textContent = "Capturing the matching fight market at the horn.";
       }
@@ -1665,7 +1664,7 @@
       );
     }
 
-    /** Everything Cito's live-state endpoint returned, laid out like the ESPN panel. */
+    /** Everything Cito returned, with common stats highlighted above the raw response. */
     function renderCitoLiveStats(entry) {
       const fight = state.session && state.session.fight;
       const data = (entry && entry.detail) || {};
@@ -1689,6 +1688,11 @@
       $("cito-live-stats-source-badge").textContent = data.source
         ? `source: ${data.source}`
         : "source unknown";
+      $("cito-live-response").textContent = JSON.stringify(
+        data.rawResponse === undefined ? data : data.rawResponse,
+        null,
+        2,
+      );
 
       const liveStats = Array.isArray(data.liveStats) ? data.liveStats : [];
       const host = $("cito-live-stats-table");
@@ -1850,9 +1854,7 @@
         return;
       } else if (entry.source === "cito-live") {
         state.session.citoLiveLatest = entry;
-        if (entry.detail && typeof entry.detail.method === "string") {
-          state.session.sources["cito-live"] = entry;
-        }
+        state.session.sources["cito-live"] = entry;
         renderCitoLiveStats(entry);
       } else {
         state.session.sources.kalshi = entry;
@@ -2066,7 +2068,6 @@
       $("fight-started").addEventListener("click", startFightWatch);
       $("round-ended").addEventListener("click", startRoundWatch);
       $("stop-espn").addEventListener("click", () => stopSource("espn"));
-      $("stop-cito").addEventListener("click", () => stopSource("cito"));
       $("stop-polling").addEventListener("click", () => stopPolling(false));
       $("copy-json").addEventListener("click", copyJson);
       document.addEventListener("keydown", (event) => {
