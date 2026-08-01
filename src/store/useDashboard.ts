@@ -172,8 +172,12 @@ function applyLiveDemo(state: DashboardState): DashboardState {
 export function collectorSnapshotIsStale(
   snapshot: CollectorSnapshot,
 ): boolean {
+  const hasActiveBout = snapshot.dashboard?.event.bouts.some(
+    ({ status }) =>
+      status === "in-round" || status === "between-rounds",
+  );
   return (
-    snapshot.dashboard !== null &&
+    hasActiveBout === true &&
     (snapshot.connection !== "connected" ||
       Object.values(snapshot.health).some((health) => !health.fresh))
   );

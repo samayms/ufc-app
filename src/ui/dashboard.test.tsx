@@ -4,6 +4,7 @@ import type { BoutView } from "../schema.ts";
 import {
   assembleDashboard,
   collectorDisabled,
+  collectorSnapshotIsStale,
   dashboardDemoState,
 } from "../store/useDashboard.ts";
 import { FightSummary } from "./FightSummary.tsx";
@@ -50,6 +51,51 @@ describe("dashboard state surfaces", () => {
     expect(collectorDisabled("?collector=off")).toBe(true);
     expect(collectorDisabled("")).toBe(false);
     expect(collectorDisabled("?collector=on")).toBe(false);
+  });
+
+  it("only raises the reconnecting snapshot warning while a fight is active", async () => {
+    const active = await assembleDashboard();
+    const health = {
+      espn: {
+        source: "espn",
+        status: "stale" as const,
+        fresh: false,
+        checkedAt: "2026-08-01T19:30:00.000Z",
+      },
+    };
+    expect(
+      collectorSnapshotIsStale({
+        connection: "connected",
+        dashboard: active,
+        health,
+        unifiedRounds: [],
+        lifecycle: {},
+        clocks: {},
+        marketDeliveries: {},
+      }),
+    ).toBe(true);
+
+    const completed = {
+      ...active,
+      event: {
+        ...active.event,
+        bouts: active.event.bouts.map((bout) => ({
+          ...bout,
+          status: "final" as const,
+        })),
+      },
+    };
+    expect(
+      collectorSnapshotIsStale({
+        connection: "reconnecting",
+        dashboard: completed,
+        health,
+        unifiedRounds: [],
+        lifecycle: {},
+        clocks: {},
+        marketDeliveries: {},
+      }),
+    ).toBe(false);
   });
 
   it("keeps the fight navigation focused on the remaining views", () => {

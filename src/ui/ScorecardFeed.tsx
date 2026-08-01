@@ -76,10 +76,6 @@ export function ScorecardFeed({
 
   return (
     <section className="panel scorecard-panel" aria-label="Expert scorecards">
-      <div className="panel-head expert-panel-head">
-        <h2>Expert scores</h2>
-      </div>
-
       {sherdog !== undefined ? (
         <div className="expert-source-group">
           <div className="expert-source-head">
