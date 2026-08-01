@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useDashboard } from "./store/useDashboard.ts";
-import {
-  getCollectorRoundDelivery,
-  type CollectorValueDelivery,
-} from "./store/collectorClient.ts";
 import { BackButton } from "./ui/BackButton.tsx";
 import { BottomNav, type AppTab } from "./ui/BottomNav.tsx";
 import { BoutHeader } from "./ui/BoutHeader.tsx";
 import { CardRail } from "./ui/CardRail.tsx";
-import { DeliveryFreshness } from "./ui/DeliveryFreshness.tsx";
 import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
 import { LiveStatsPanel } from "./ui/LiveStatsPanel.tsx";
@@ -42,7 +37,7 @@ import {
   useCurrentEventAthletePhotos,
   useUpcomingEventPhotos,
 } from "./store/useEventPhotos.ts";
-import type { BoutView, OddsSnapshot } from "./schema.ts";
+import type { BoutView } from "./schema.ts";
 import type { EspnScheduledFight } from "./sources/espnSchedule.ts";
 import "./ui/dashboard.css";
 
@@ -53,7 +48,8 @@ export function LiveOddsSection({
 }: {
   view: BoutView;
   upcomingOdds: ReturnType<typeof useUpcomingOdds>;
-  deliveries?: Partial<Record<OddsSnapshot["market"], CollectorValueDelivery>>;
+  /** Compatibility-only: metadata is no longer rendered in this surface. */
+  deliveries?: unknown;
 }) {
   void deliveries;
   return (
@@ -160,27 +156,6 @@ export default function App() {
               .map((record) => record.round) ?? []),
           )
         : round;
-  const roundDelivery =
-    view === undefined || selectedRound === undefined || selectedRound < 1
-      ? undefined
-      : getCollectorRoundDelivery(
-          dashboard.collector,
-          view.bout.id,
-          selectedRound,
-        );
-  const lifecycle = view
-    ? dashboard.collector?.lifecycle[view.bout.id]
-    : undefined;
-  const lifecycleDelivery: CollectorValueDelivery | undefined =
-    lifecycle === undefined
-      ? undefined
-      : {
-          source: lifecycle.source,
-          sourceUpdatedAt: lifecycle.sourceUpdatedAt,
-          receivedAt: lifecycle.receivedAt,
-          stale: dashboard.collector?.connection !== "connected",
-          provisional: lifecycle.provisional,
-        };
   const selectBout = (id: string) => {
     setSelected(id);
     setTab("fight");
@@ -385,11 +360,6 @@ export default function App() {
                   result={view.bout.result}
                   clockSync={dashboard.collector?.clocks[view.bout.id]}
                 />
-                {lifecycleDelivery && (
-                  <div className="delivery-notice" role="status">
-                    <DeliveryFreshness delivery={lifecycleDelivery} />
-                  </div>
-                )}
                 {dashboard.stale && (
                   <div className="state-notice" role="status">
                     <strong>Stale snapshot</strong>
@@ -398,18 +368,28 @@ export default function App() {
                     </span>
                   </div>
                 )}
-                <MarketStrip
-                  latestOdds={withoutSportsbookOnEventDay(
-                    view.latestOdds,
-                    state?.event.startsAt ?? "",
-                  )}
-                  preFightOdds={withoutSportsbookOnEventDay(
-                    view.preFightOdds,
-                    state?.event.startsAt ?? "",
-                  )}
-                  onOpen={() => setSection("odds")}
+                {view.bout.status !== "final" && (
+                  <MarketStrip
+                    latestOdds={withoutSportsbookOnEventDay(
+                      view.latestOdds,
+                      state?.event.startsAt ?? "",
+                    )}
+                    preFightOdds={withoutSportsbookOnEventDay(
+                      view.preFightOdds,
+                      state?.event.startsAt ?? "",
+                    )}
+                    onOpen={() => setSection("odds")}
+                  />
+                )}
+                <SectionTabs
+                  active={section}
+                  onChange={setSection}
+                  sections={
+                    view.bout.status === "final"
+                      ? ["summary", "stats", "tale"]
+                      : undefined
+                  }
                 />
-                <SectionTabs active={section} onChange={setSection} />
                 {section === "summary" && (
                   <RoundSelector
                     view={view}
@@ -423,7 +403,6 @@ export default function App() {
                       view={view}
                       eventStartsAt={state?.event.startsAt ?? ""}
                       selection={round}
-                      delivery={roundDelivery}
                       collectorRounds={dashboard.collector?.unifiedRounds}
                     />
                     <ScorecardFeed
@@ -446,7 +425,7 @@ export default function App() {
                     <LiveStatsPanel view={view} selection={round} />
                   </>
                 )}
-                {section === "odds" && (
+                {section === "odds" && view.bout.status !== "final" && (
                   <UpcomingOddsSection
                     fight={boutToScheduledFight(view.bout)}
                     upcoming={upcomingOdds}
