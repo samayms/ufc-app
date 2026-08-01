@@ -873,6 +873,17 @@
             </div>
             <button id="stop-cito" class="source-stop" type="button" disabled>Stop CITO polling</button>
           </article>
+          <article class="source-item" data-source="cito-live">
+            <div class="source-head">
+              <span class="source-name">CITO Live</span>
+              <span id="cito-live-status" class="source-status">Ready</span>
+            </div>
+            <p id="cito-live-detail" class="source-detail">Waiting for the horn.</p>
+            <div class="source-meta">
+              <span id="cito-live-checks">0 checks</span>
+              <span id="cito-live-latency">—</span>
+            </div>
+          </article>
           <article class="source-item" data-source="kalshi">
             <div class="source-head">
               <span class="source-name">Kalshi</span>
@@ -1309,7 +1320,7 @@
       }
       if (
         state.session.mode === "fight" &&
-        (name === "cito" || name === "kalshi")
+        (name === "cito" || name === "cito-live" || name === "kalshi")
       ) {
         status.textContent = "Standby";
         detail.textContent = "Starts only when you press the round-ended button.";
@@ -1329,6 +1340,17 @@
       if (poller && poller.active === false && name === "cito") {
         status.textContent = "Stopped";
         detail.textContent = "CITO retries stopped before round stats were received.";
+        return;
+      }
+      if (name === "cito-live" && entry) {
+        status.textContent = "Result received";
+        status.classList.add("is-complete");
+        detail.textContent = entry.label.replace(/^live state: /, "");
+        return;
+      }
+      if (poller && poller.active === false && name === "cito-live") {
+        status.textContent = "Stopped";
+        detail.textContent = "CITO live-state polling stopped before a method was reported.";
         return;
       }
       if (name === "kalshi" && entry) {
@@ -1358,6 +1380,8 @@
         detail.textContent = "Fetching both fighters’ fight-cumulative core stats every 5 seconds.";
       } else if (name === "cito") {
         detail.textContent = "The first check fired at the horn; pending stats retry every 5 seconds.";
+      } else if (name === "cito-live") {
+        detail.textContent = "Watching Cito's live worker for a method — much faster than round-stat enrichment.";
       } else {
         detail.textContent = "Capturing the matching fight market at the horn.";
       }
@@ -1374,7 +1398,7 @@
         elapsed = formatElapsed(
           (state.session.completedAtMs || Date.now()) - state.session.startedAtMs,
         );
-        const hasError = ["espn", "espn-stats", "cito", "kalshi"].some((name) => {
+        const hasError = ["espn", "espn-stats", "cito", "cito-live", "kalshi"].some((name) => {
           const poller = pollerFor(name);
           return poller && poller.lastError && !sourceEntry(name);
         });
@@ -1426,6 +1450,7 @@
       renderSource("espn");
       renderSource("espn-stats");
       renderSource("cito");
+      renderSource("cito-live");
       renderSource("kalshi");
       syncControls();
     }
@@ -1743,7 +1768,7 @@
       if (
         !state.session ||
         entry.kind !== "observation" ||
-        !["espn", "espn-stats", "cito", "kalshi"].includes(entry.source) ||
+        !["espn", "espn-stats", "cito", "cito-live", "kalshi"].includes(entry.source) ||
         entry.boutId !== state.session.boutId ||
         Number(entry.seq) <= state.session.markerSeq
       ) {
@@ -1791,6 +1816,8 @@
         }
         state.session.sources.cito = entry;
         renderResult(entry);
+      } else if (entry.source === "cito-live") {
+        state.session.sources["cito-live"] = entry;
       } else {
         state.session.sources.kalshi = entry;
       }
@@ -1890,6 +1917,7 @@
         sources: {
           espn: null,
           cito: null,
+          "cito-live": null,
           kalshi: null,
         },
       };
@@ -1946,6 +1974,7 @@
         sources: {
           espn: null,
           cito: null,
+          "cito-live": null,
           kalshi: null,
         },
       };
