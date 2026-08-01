@@ -120,6 +120,41 @@ export default function App() {
     mainContentRef.current?.scrollTo({ top: 0 });
   }, [tab, scheduleSelection, selected, selectedFutureFight]);
 
+  // Back arrow from the Fight tab: returns to the fight's own event's
+  // drilled bout-order screen. When the fight was reached by drilling in
+  // from the Event tab, scheduleSelection already names that event, so it's
+  // left as-is. When the Fight tab was opened directly (e.g. from the
+  // bottom nav), scheduleSelection may still be null or point elsewhere, so
+  // it's set to the current live event — the only event a directly-opened
+  // fight can belong to. Defined here (above the loading/error early
+  // returns) and reading `state?.event.id` rather than the later-destructured
+  // `event` so the hooks below it — and useSwipeBack itself — run
+  // unconditionally on every render, as React's Rules of Hooks require. It's
+  // only ever invoked once `state` is loaded (both the back button and the
+  // swipe gesture are gated on `activeBackHandler`, which is `undefined`
+  // while `state` is null), so `state` is guaranteed non-null at call time.
+  const backToEventFromFight = () => {
+    setTab("event");
+    setScheduleSelection((prev) => prev ?? state?.event.id ?? prev);
+    setSelectedFutureFight(null);
+  };
+
+  // Back arrow within the Event tab's drilled fight-list screen: returns to
+  // the top-level events list.
+  const backToEventList = () => {
+    setScheduleSelection(null);
+  };
+
+  const activeBackHandler = !state
+    ? undefined
+    : tab === "fight"
+      ? backToEventFromFight
+      : tab === "event" && scheduleSelection !== null
+        ? backToEventList
+        : undefined;
+
+  useSwipeBack(mainContentRef, activeBackHandler);
+
   if (dashboard.status === "loading") {
     return <LoadingSplash />;
   }
@@ -168,34 +203,6 @@ export default function App() {
     setSelectedFutureFight(fight);
     setTab("fight");
   };
-
-  // Back arrow from the Fight tab: returns to the fight's own event's
-  // drilled bout-order screen. When the fight was reached by drilling in
-  // from the Event tab, scheduleSelection already names that event, so it's
-  // left as-is. When the Fight tab was opened directly (e.g. from the
-  // bottom nav), scheduleSelection may still be null or point elsewhere, so
-  // it's set to the current live event — the only event a directly-opened
-  // fight can belong to.
-  const backToEventFromFight = () => {
-    setTab("event");
-    setScheduleSelection((prev) => prev ?? event.id);
-    setSelectedFutureFight(null);
-  };
-
-  // Back arrow within the Event tab's drilled fight-list screen: returns to
-  // the top-level events list.
-  const backToEventList = () => {
-    setScheduleSelection(null);
-  };
-
-  const activeBackHandler =
-    tab === "fight"
-      ? backToEventFromFight
-      : tab === "event" && scheduleSelection !== null
-        ? backToEventList
-        : undefined;
-
-  useSwipeBack(mainContentRef, activeBackHandler);
 
   // Bottom nav is the only "start fresh" entry point — clears any
   // drill-down/back-arrow state left over from the Event tab.
