@@ -251,6 +251,29 @@ describe("SherdogScorerProfileStore (fixture mode)", () => {
   });
 });
 
+describe("SherdogScorerProfileStore (live hub fallback)", () => {
+  afterEach(async () => {
+    await rm(TEST_PHOTO_DIRECTORY, { recursive: true, force: true });
+  });
+
+  it("finds an author through /Article when the homepage has no matching link", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/")) return new Response("<html>no author</html>");
+      if (url.endsWith("/contact.php")) return new Response("<html>no author</html>");
+      if (url.endsWith("/Article")) return new Response("<a href='/authors/Brian-Knapp-1'>Brian Knapp</a>");
+      if (url.includes("Brian-Knapp-1")) return new Response("<img class='profile_image' src='/images/brian.jpg'>");
+      return new Response(new Uint8Array([1, 2]), { headers: { "content-type": "image/jpeg" } });
+    });
+    const fetchImpl = fetchMock as unknown as typeof fetch;
+    const store = createStore({ dataMode: "live", fetchImpl, throttleMs: 0 });
+    const profile = await store.resolveScorerProfile("Brian Knapp");
+    expect(profile.resolved).toBe(true);
+    expect(profile.authorPageUrl).toBe("https://www.sherdog.com/authors/Brian-Knapp-1");
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/Article"))).toBe(true);
+  });
+});
+
 describe("SherdogScorerProfileStore (live mode integration)", () => {
   afterEach(async () => {
     await rm(TEST_PHOTO_DIRECTORY, { recursive: true, force: true });

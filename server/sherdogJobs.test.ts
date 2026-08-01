@@ -22,6 +22,7 @@ import {
   type SherdogFetcher,
 } from "./sherdogJobs.ts";
 import { MemoryStorage } from "./storage.ts";
+import type { SherdogScorerProfileStore } from "./sherdogScorerProfiles.ts";
 
 class ManualTime implements RoundJobClock, RoundJobTimer {
   value = Date.parse("2026-07-28T00:00:00Z");
@@ -119,6 +120,7 @@ async function setup(
     requestIntervalMs?: number;
     storage?: MemoryStorage;
     time?: ManualTime;
+    scorerProfileStore?: Pick<SherdogScorerProfileStore, "resolveScorerProfile">;
   } = {},
 ) {
   const eventBus = new CollectorEventBus();
@@ -143,6 +145,9 @@ async function setup(
     permissionScope: options.permissionScope ?? "none",
     requestIntervalMs: options.requestIntervalMs ?? 0,
     clock: time,
+    ...(options.scorerProfileStore === undefined
+      ? {}
+      : { scorerProfileStore: options.scorerProfileStore as SherdogScorerProfileStore }),
   });
   return { eventBus, storage, time, roundStats, jobs };
 }
@@ -165,6 +170,31 @@ function fightStarted(eventBus: CollectorEventBus): void {
 }
 
 describe("SherdogRoundJobs", () => {
+  it("backfills scorer profiles from persisted observations without delaying restore", async () => {
+    const storage = new MemoryStorage();
+    const first = await setup({ fetchBout: async () => response(html(1, "Round.")) }, { storage });
+    roundEnded(first.eventBus);
+    await first.jobs.idle();
+    first.time.advance(SHERDOG_BOUNDARY_POLL_INTERVAL_MS);
+    await first.jobs.idle();
+
+    const resolveScorerProfile = vi.fn(async (scorerName: string) => ({
+      scorerName,
+      normalizedName: scorerName.toLowerCase(),
+      authorPageUrl: null,
+      photoUrl: "/avatar.svg",
+      resolved: false,
+      createdAt: "2026-07-28T00:00:00Z",
+      updatedAt: "2026-07-28T00:00:00Z",
+    }));
+    const restored = await setup(
+      { fetchBout: async () => response(html(1, "Round.")) },
+      { storage, scorerProfileStore: { resolveScorerProfile } },
+    );
+    await restored.jobs.idle();
+    expect(resolveScorerProfile).toHaveBeenCalledWith("Sherdog");
+  });
+
   it("captures bout-local round baselines at fight start and ignores unchanged placeholders", async () => {
     let body = `<div class="event"><h2>Danilo Reyes vs. Artem Volkov</h2>
       <h3>Round 1</h3><h4>Sherdog Scores</h4>
