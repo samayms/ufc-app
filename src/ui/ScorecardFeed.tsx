@@ -95,8 +95,10 @@ export function ScorecardFeed({
               <DeliveryFreshness delivery={sherdogDelivery} />
             )}
           </div>
-          {sherdog.commentary && (
-            <p className="expert-commentary">{sherdog.commentary}</p>
+          {(sherdog.aiSummary || sherdog.commentary) && (
+            <p className="expert-commentary">
+              {sherdog.aiSummary || sherdog.commentary}
+            </p>
           )}
           {sherdog.scorerCards.length > 0 && (
             <ul className="media-scorecard-grid">

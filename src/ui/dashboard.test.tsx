@@ -181,6 +181,7 @@ describe("dashboard state surfaces", () => {
               boutId: view.bout.id,
               round: 1,
               commentary: "Measured exchanges.",
+              aiSummary: "Reyes controlled the round behind clean counters.",
               scorerCards: [
                 {
                   scorer: "Sherdog",
@@ -211,7 +212,9 @@ describe("dashboard state surfaces", () => {
       />,
     );
 
-    expect(scorecards).toContain("Measured exchanges.");
+    expect(scorecards).toContain("Reyes controlled the round behind clean counters.");
+    expect(scorecards).not.toContain("Measured exchanges.");
+    expect(scorecards).toContain("10-9");
     expect(scorecards).toContain("Sherdog");
   });
 
