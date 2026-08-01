@@ -576,8 +576,11 @@ export class RoundStatsPipeline {
 
   observeEspnCumulative(
     snapshot: EspnCumulativeSnapshot,
+    fightCompleted = false,
   ): EspnDerivedRoundStats {
-    const derived = this.espnAccumulator.observe(snapshot);
+    const derived = fightCompleted
+      ? this.espnAccumulator.finalizeFight(snapshot)
+      : this.espnAccumulator.observe(snapshot);
     this.liveEspnStats.set(roundKey(derived.boutId, derived.round), derived);
     this.metrics.recordPayload("espn", snapshot.observedAt, snapshot.observedAt);
     return this.getLiveEspnRoundStats(derived.boutId, derived.round)!;

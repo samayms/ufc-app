@@ -879,7 +879,8 @@ export async function createCollector(
         const blueAthleteId = bout?.fighters.blue.externalRefs.find((ref) => ref.source === "espn")?.id;
         // Core has the current cumulative total; scoreboard inline statistics
         // are only a fallback because they are commonly absent in live MMA.
-        const coreStats = config.dataMode === "live" && observation.state === "in" &&
+        const coreStats = config.dataMode === "live" &&
+          (observation.state === "in" || observation.completed) &&
           observation.period >= 1 && eventId && competitionId && redAthleteId && blueAthleteId
           ? await Promise.all([
               fetchEspnCoreCumulativeStats({ eventId, competitionId, athleteId: redAthleteId }),
@@ -887,13 +888,16 @@ export async function createCollector(
             ]).then(([fighterA, fighterB]) => ({ fighterA, fighterB })).catch(() => observation.cumulativeStats)
           : observation.cumulativeStats;
         if (coreStats !== undefined && observation.period >= 1) {
-          const stats = initializedRoundStats.observeEspnCumulative({
-            boutId: observation.boutId,
-            round: observation.period,
-            fighterA: coreStats.fighterA,
-            fighterB: coreStats.fighterB,
-            observedAt: observation.receivedAt,
-          });
+          const stats = initializedRoundStats.observeEspnCumulative(
+            {
+              boutId: observation.boutId,
+              round: observation.period,
+              fighterA: coreStats.fighterA,
+              fighterB: coreStats.fighterB,
+              observedAt: observation.receivedAt,
+            },
+            observation.completed,
+          );
           await push.publish("update", { kind: "espn-round-live", stats });
         }
       }
