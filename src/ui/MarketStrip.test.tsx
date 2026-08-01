@@ -50,6 +50,20 @@ function renderMarket(market: OddsSnapshot["market"]): string {
 }
 
 describe("MarketStrip odds source", () => {
+  it("shows a final winner as 100/0 while retaining prefight context", () => {
+    const html = renderToStaticMarkup(
+      <MarketStrip
+        latestOdds={{ kalshi: snapshot("kalshi") }}
+        preFightOdds={{ kalshi: snapshot("kalshi") }}
+        resultWinner="blue"
+        onOpen={() => undefined}
+      />,
+    );
+    expect(html).toContain(">0%<");
+    expect(html).toContain(">100%<");
+    expect(html.match(/Prefight odds:/g)).toHaveLength(2);
+  });
+
   it.each(["kalshi", "polymarket", "sportsbook"] as const)(
     "puts %s on both large percentages",
     (market) => {

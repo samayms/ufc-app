@@ -379,8 +379,7 @@ export default function App() {
                     </span>
                   </div>
                 )}
-                {view.bout.status !== "final" && (
-                  <MarketStrip
+                <MarketStrip
                     latestOdds={withoutSportsbookOnEventDay(
                       view.latestOdds,
                       state?.event.startsAt ?? "",
@@ -390,8 +389,8 @@ export default function App() {
                       state?.event.startsAt ?? "",
                     )}
                     onOpen={() => setSection("odds")}
-                  />
-                )}
+                    resultWinner={view.bout.status === "final" ? view.bout.result?.winner : undefined}
+                />
                 <SectionTabs
                   active={section}
                   onChange={setSection}
