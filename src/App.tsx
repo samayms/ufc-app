@@ -11,7 +11,7 @@ import { LiveStatsPanel } from "./ui/LiveStatsPanel.tsx";
 import { LoadingSplash } from "./ui/LoadingSplash.tsx";
 import { withoutSportsbookOnEventDay } from "./lib/marketPriority.ts";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
-import { directionBetween } from "./lib/screenTransition.ts";
+import { directionBetween, type TransitionDirection } from "./lib/screenTransition.ts";
 import { ScreenTransition } from "./ui/ScreenTransition.tsx";
 import {
   defaultRoundSelection,
@@ -110,7 +110,18 @@ export default function App() {
   );
   const [selectedFutureFight, setSelectedFutureFight] =
     useState<EspnScheduledFight | null>(null);
+  // Set only by the Fight bottom-nav tab's "jump to the most recently
+  // completed fight" shortcut (tapping Fight while already on the Fight
+  // tab) — names the bout to return to on the next back action. Cleared
+  // once consumed, and by any other navigation that would make it stale.
+  const [previousSelected, setPreviousSelected] = useState<string | null>(
+    null,
+  );
   const mainContentRef = useRef<HTMLElement>(null);
+  // One-shot override for screenDirection, consumed by the next screenKey
+  // change then cleared — see backToPreviousFight, the one navigation whose
+  // correct direction directionBetween's depth model can't infer on its own.
+  const forcedScreenDirectionRef = useRef<TransitionDirection | null>(null);
 
   const upcomingEspn = useUpcomingEspnEvents();
   // Loaded at the app level rather than per preview: one document covers every
@@ -165,6 +176,9 @@ export default function App() {
     setTab("event");
     setScheduleSelection((prev) => prev ?? state?.event.id ?? prev);
     setSelectedFutureFight(null);
+    // Otherwise the bout row you just came from is still shown selected
+    // when you land back on the event's bout list.
+    setSelected(null);
   };
 
   // Back arrow within the Event tab's drilled fight-list screen: returns to
@@ -173,10 +187,22 @@ export default function App() {
     setScheduleSelection(null);
   };
 
+  // Back arrow after the Fight tab's "jump to the most recently completed
+  // fight" shortcut: returns to whichever bout was showing before the jump,
+  // staying on the Fight tab rather than exiting to the Event tab. Both the
+  // jumped-to and the returned-to screen share the same "fight:*" depth
+  // tier, so directionBetween alone can't tell this apart from a forward
+  // pick — force the animation backward for this one transition.
+  const backToPreviousFight = () => {
+    forcedScreenDirectionRef.current = "backward";
+    setSelected(previousSelected);
+    setPreviousSelected(null);
+  };
+
   const activeBackHandler = !state
     ? undefined
     : tab === "fight"
-      ? backToEventFromFight
+      ? (previousSelected !== null ? backToPreviousFight : backToEventFromFight)
       : tab === "event" && scheduleSelection !== null
         ? backToEventList
         : undefined;
@@ -198,13 +224,12 @@ export default function App() {
         : "data";
 
   const previousScreenKeyRef = useRef<string | null>(null);
-  const screenDirection = directionBetween(
-    previousScreenKeyRef.current,
-    screenKey,
-    screenDepth,
-  );
+  const screenDirection =
+    forcedScreenDirectionRef.current ??
+    directionBetween(previousScreenKeyRef.current, screenKey, screenDepth);
   useEffect(() => {
     previousScreenKeyRef.current = screenKey;
+    forcedScreenDirectionRef.current = null;
   }, [screenKey]);
 
   const previousSectionRef = useRef<string | null>(null);
@@ -259,6 +284,9 @@ export default function App() {
     setTab("fight");
     setSection("summary");
     setSelectedFutureFight(null);
+    // A direct pick invalidates any pending "jump back" target from the
+    // Fight tab's most-recently-completed shortcut.
+    setPreviousSelected(null);
   };
 
   const selectFutureFight = (fight: EspnScheduledFight) => {
@@ -267,10 +295,28 @@ export default function App() {
   };
 
   // Bottom nav is the only "start fresh" entry point — clears any
-  // drill-down/back-arrow state left over from the Event tab.
+  // drill-down/back-arrow state left over from the Event tab. Tapping
+  // "Fight" while already on the Fight tab is a shortcut instead: jump to
+  // whichever bout in the current event finished most recently (lowest
+  // cardPosition among final bouts — the card airs from the highest
+  // cardPosition down to the main event, so that's the last one to finish),
+  // remembering where you were so the back action can return to it.
   const handleNavTabChange = (next: AppTab) => {
+    if (next === "fight" && tab === "fight") {
+      const mostRecentCompleted = event.bouts
+        .filter((bout) => bout.status === "final")
+        .sort((a, b) => a.cardPosition - b.cardPosition)[0];
+      if (mostRecentCompleted && mostRecentCompleted.id !== selectedId) {
+        setPreviousSelected(selectedId ?? null);
+        setSelected(mostRecentCompleted.id);
+        setSection("summary");
+      }
+      setSelectedFutureFight(null);
+      return;
+    }
     setTab(next);
     setSelectedFutureFight(null);
+    setPreviousSelected(null);
   };
 
   const mainBout = event.bouts.find((bout) => bout.cardPosition === 1);
