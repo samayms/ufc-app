@@ -108,6 +108,17 @@ describe("dashboard state surfaces", () => {
     expect(tabs).toContain(">Tale</button>");
   });
 
+  it("omits the Odds tab from a completed fight's navigation", () => {
+    const tabs = renderToStaticMarkup(
+      <SectionTabs
+        active="summary"
+        onChange={() => undefined}
+        sections={["summary", "stats", "tale"]}
+      />,
+    );
+    expect(tabs).not.toContain(">Odds</button>");
+  });
+
   it("switches the selected round without enabling future rounds", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];

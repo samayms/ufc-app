@@ -1416,9 +1416,25 @@ export async function createCollector(
           ),
         )
       ).filter((source): source is "kalshi" | "polymarket" => source !== undefined);
+      // Exchange rebuild snapshots can land after the sportsbook response.
+      // Advance the boundary to their newest received timestamp so an
+      // allowlisted fresh Kalshi/Polymarket book is actually in the history
+      // slice used to create the pre-fight snapshot.
+      const exchangeReceivedAt = initializedTickStore
+        .getLatest(boutId)
+        .filter((tick) => readySources.includes(tick.source as "kalshi" | "polymarket"))
+        .map((tick) => Date.parse(tick.receivedAt))
+        .filter(Number.isFinite);
+      const snapshotAt = new Date(
+        Math.max(
+          Date.parse(takenAt),
+          refreshedAt === undefined ? Number.NEGATIVE_INFINITY : Date.parse(refreshedAt),
+          ...exchangeReceivedAt,
+        ),
+      ).toISOString();
       await initializedTickStore.snapshotPreFight(
         boutId,
-        refreshedAt ?? takenAt,
+        snapshotAt,
         relevantStreams.length === 0
           ? undefined
           : ["odds-api-io", "the-odds-api", ...readySources],
