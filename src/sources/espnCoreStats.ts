@@ -19,8 +19,8 @@ const STAT_MAP: Readonly<Record<string, keyof EspnCumulativeStats>> = {
   sigstrikesattempted: "significantStrikesAttempted", significantstrikesattempted: "significantStrikesAttempted",
   totalstrikeslanded: "totalStrikesLanded", totalstrikesattempted: "totalStrikesAttempted",
   takedownslanded: "takedownsLanded", takedownsattempted: "takedownsAttempted",
-  submissionattempts: "submissionsAttempted", submissionsattempted: "submissionsAttempted",
-  reversals: "reversals", controltimeseconds: "controlTimeSeconds", controltime: "controlTimeSeconds",
+  submissionattempts: "submissionsAttempted", submissionsattempted: "submissionsAttempted", submissions: "submissionsAttempted",
+  reversals: "reversals", controltimeseconds: "controlTimeSeconds", controltime: "controlTimeSeconds", timeincontrol: "controlTimeSeconds",
   knockdowns: "knockdowns", headstrikeslanded: "headStrikesLanded", headstrikesattempted: "headStrikesAttempted",
   bodystrikeslanded: "bodyStrikesLanded", bodystrikesattempted: "bodyStrikesAttempted",
   legstrikeslanded: "legStrikesLanded", legstrikesattempted: "legStrikesAttempted",
@@ -29,11 +29,27 @@ const STAT_MAP: Readonly<Record<string, keyof EspnCumulativeStats>> = {
 /** Normalizes ESPN core's category/stat payload without depending on category labels. */
 export function parseEspnCoreCumulativeStats(payload: unknown): EspnCumulativeStats {
   const result = empty();
+  const aggregate = new Set<keyof EspnCumulativeStats>();
+  const components = new Map<keyof EspnCumulativeStats, number>();
   const root = payload as { splits?: { categories?: Array<{ stats?: Array<{ name?: string; value?: unknown }> }> } };
   for (const category of root.splits?.categories ?? []) for (const stat of category.stats ?? []) {
-    const field = STAT_MAP[(stat.name ?? "").replace(/[^a-z]/gi, "").toLowerCase()];
-    if (field !== undefined) result[field] = number(stat.value);
+    const name = (stat.name ?? "").replace(/[^a-z]/gi, "").toLowerCase();
+    const field = STAT_MAP[name];
+    if (field !== undefined) {
+      result[field] = number(stat.value);
+      aggregate.add(field);
+      continue;
+    }
+    // ESPN's core response sometimes splits target totals across distance,
+    // clinch, and ground rather than supplying a Head/Body/Leg aggregate.
+    const component = /^(head|body|leg)strikes(?:(landed|attempted)(distance|clinch|ground)|(distance|clinch|ground)(landed|attempted))$/.exec(name);
+    if (component !== null) {
+      const outcome = component[2] ?? component[5];
+      const target = `${component[1]}Strikes${outcome![0]!.toUpperCase()}${outcome!.slice(1)}` as keyof EspnCumulativeStats;
+      components.set(target, (components.get(target) ?? 0) + number(stat.value));
+    }
   }
+  for (const [field, value] of components) if (!aggregate.has(field)) result[field] = value;
   return result;
 }
 
