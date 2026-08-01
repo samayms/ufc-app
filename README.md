@@ -69,7 +69,7 @@ Configuration is supplied through server environment variables:
 | `ODDS_API_IO_BOOKMAKERS` | `Bet365,DraftKings` |
 | `X_SPEND_CAP_USD` | `0` |
 | `SHERDOG_PERMISSION_SCOPE` | `none` |
-| `SHERDOG_REQUEST_INTERVAL_MS` | `300000` |
+| `SHERDOG_REQUEST_INTERVAL_MS` | `10000` |
 | `SHERDOG_BASE_URL` | `https://www.sherdog.com` |
 | `SHERDOG_LIVE_BLOG_URL` | unset |
 | `ROUND_SUMMARY_ENABLED` | `true` |
@@ -77,7 +77,7 @@ Configuration is supplied through server environment variables:
 
 Staleness settings use `STALE_LIFECYCLE_MS`, `STALE_STATS_MS`,
 `STALE_MARKETS_MS`, and `STALE_COMMENTARY_MS`. Polling settings use
-`POLL_ESPN_MS`, `POLL_CITO_MS`, `POLL_ODDS_API_IO_MS`,
+`POLL_ESPN_MS`, `POLL_ODDS_API_IO_MS`,
 `POLL_THE_ODDS_API_MS`, `POLL_KALSHI_MS`, and `POLL_POLYMARKET_MS`.
 
 The resident collector owns the pre-event market schedule for Kalshi,
@@ -87,10 +87,10 @@ to deduplicate restarts, suspends while a bout is active, and uses the retry
 delay above for transient failures. Set `PRE_EVENT_POLL_ENABLED=false` when a
 separate one-shot scheduler is the intended owner.
 
-Live credentials are server-only: `CITO_API_KEY`, `ODDS_API_IO_KEY`,
-`THE_ODDS_API_KEY`, `KALSHI_API_KEY_ID`, `KALSHI_PRIVATE_KEY_PATH`, and
-`X_BEARER_TOKEN`. Live startup fails when required credentials are missing;
-`X_BEARER_TOKEN` is required only when `X_MODE=api`.
+Live credentials are server-only: `ODDS_API_IO_KEY`, `THE_ODDS_API_KEY`,
+`KALSHI_API_KEY_ID`, and `KALSHI_PRIVATE_KEY_PATH`. Live startup fails when
+any of those required credentials are missing. `GEMINI_API_KEY` is optional;
+without it the raw Sherdog commentary remains available as the summary.
 
 Sherdog live reads require both a permitting `SHERDOG_PERMISSION_SCOPE`
 (`live-blog-read`, `sherdog-read`, or `all`) and actual permission from
@@ -130,11 +130,13 @@ keep their raw commentary. Summaries never gate a Sherdog round job: every
 transport failure yields no summary rather than an error, and an unchanged
 page reuses the previous summary instead of paying for it again.
 
-`SHERDOG_REQUEST_INTERVAL_MS` is a floor on the gap between requests to
-Sherdog, applied across the source rather than per bout. It must be shorter
-than the round-job ladder (T+15s/30s/60s) or later attempts are dropped
-without being sent; the 5-minute default is a fixture-mode value, not a live
-one.
+At fight start, the collector stores a normalized, per-round snapshot of that
+bout's Sherdog block. After every round boundary or fight end, one durable job
+polls at `SHERDOG_REQUEST_INTERVAL_MS` (10 seconds by default) until the target
+round differs from its baseline and contains real commentary or a numeric
+score. Empty pre-rendered round headings and scorer names are not treated as a
+report. Completed timed rounds keep polling until Sherdog's named scorecards
+arrive; finish rounds remain valid with commentary and no 10-9 cards.
 
 Every source behavior that only a real card can confirm is tracked in
 [`LIVE_CARD_VALIDATION.md`](LIVE_CARD_VALIDATION.md). A green test suite proves
@@ -169,16 +171,10 @@ Other lifecycle driver settings:
 | --- | --- |
 | `LIFECYCLE_DRIVER_ENABLED` | `true` in live mode, `false` in fixture mode |
 | `LIFECYCLE_ESPN_FAILURE_THRESHOLD` | `3` |
-| `CITO_API_BASE_URL` | unset (required to construct the live Cito fallback provider) |
 
-After `LIFECYCLE_ESPN_FAILURE_THRESHOLD` consecutive ESPN polling failures,
-the driver falls back to polling Cito (at `POLL_CITO_MS`) until ESPN
-succeeds again. ESPN and Cito live fetchers (`src/sources/espn.ts`,
-`src/sources/cito.ts`) are only constructed under `DATA_MODE=live`, are
-never invoked by tests, and fail closed without `CITO_API_KEY` /
-`CITO_API_BASE_URL`. Their URLs are the vendor-documented ones and the ESPN
-scoreboard path is verified; what remains unverified is the shape of the
-per-round and per-bout response bodies. See
+The real collector uses ESPN exclusively for live lifecycle and fight stats;
+it does not construct or poll a Cito client. ESPN's scoreboard path and core
+competitor-stat paths are covered by captured-shape parser tests. See
 [`LIVE_CARD_VALIDATION.md`](LIVE_CARD_VALIDATION.md) for exactly which
 assumptions a real card still needs to confirm.
 
@@ -208,7 +204,7 @@ npm run lab        # http://localhost:5055
 
 A synchronized fight and round-end timing instrument. Choose a fight and press
 **Fight started — track ESPN** at the opening bell. ESPN is then sampled every
-five seconds for its period, reported clock, state, and completion flag while a
+2.5 seconds for its period, reported clock, state, and completion flag while a
 local clock counts down between samples. Choose the round and press **Round
 ended — fire all sources** at the horn (spacebar also works). That one press
 immediately requests CITO, ESPN, and Kalshi against the same timestamp while

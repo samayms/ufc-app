@@ -13,6 +13,8 @@ primary_region = "ewr"
 [env]
   DB_PATH = "/data/ufc.db"
   DATA_MODE = "live"
+  SHERDOG_LIVE_BLOG_URL = "https://www.sherdog.com/news/news/UFC-Belgrade-Medic-vs-Rodriguez-playbyplay-results-round-scoring-202171"
+  SHERDOG_REQUEST_INTERVAL_MS = "10000"
 
 [[mounts]]
   source = "ufc_data"
@@ -28,6 +30,13 @@ primary_region = "ewr"
   auto_stop_machines = "off"
   auto_start_machines = true
   min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "15s"
+    method = "GET"
+    path = "/api/health"
+    timeout = "5s"
 
 # The container's ENTRYPOINT (see Dockerfile) already runs
 # `litestream replicate -exec "node server/main.ts"` — no [processes]
