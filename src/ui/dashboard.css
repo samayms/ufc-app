@@ -23,6 +23,7 @@
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   padding:
     11px max(15px, env(safe-area-inset-right))
     calc(18px + env(safe-area-inset-bottom))
@@ -1461,16 +1462,6 @@
   color: var(--market-color-sportsbook);
 }
 
-@media (max-width: 767px) {
-  .upcoming-odds-panel {
-    width: calc(100% + 30px);
-    margin-inline: -15px;
-    border-right: 0;
-    border-left: 0;
-    border-radius: 0;
-  }
-}
-
 .market-side {
   min-width: 50px;
   display: flex;
@@ -1814,6 +1805,7 @@
 
 .rail {
   overflow-y: auto;
+  overscroll-behavior-y: contain;
   scrollbar-width: none;
 }
 
