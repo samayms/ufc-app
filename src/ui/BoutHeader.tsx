@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import type { BoutResult, BoutStatus, Corner, Fighter } from "../schema.ts";
-import type { CollectorClockSync } from "../store/collectorClient.ts";
+import {
+  interpolateClockSeconds,
+  type CollectorClockSync,
+} from "../store/collectorClient.ts";
 import { fmtMethod, fmtRecord } from "./format.ts";
 
 /**
@@ -189,18 +192,6 @@ function CenterStatus({
       <span className="tot-substate">not started</span>
     </>
   );
-}
-
-export function interpolateClockSeconds(
-  sync: Pick<CollectorClockSync, "clockSeconds" | "receivedAt">,
-  now: number,
-): number | undefined {
-  if (sync.clockSeconds === undefined) return undefined;
-  const receivedAt = Date.parse(sync.receivedAt);
-  const elapsedSeconds = Number.isFinite(receivedAt)
-    ? Math.max(0, Math.floor((now - receivedAt) / 1_000))
-    : 0;
-  return Math.max(0, Math.floor(sync.clockSeconds) - elapsedSeconds);
 }
 
 export function formatFightClock(seconds: number | undefined): string {
