@@ -6,6 +6,7 @@ import type { UpcomingOddsState } from "../store/useUpcomingOdds.ts";
 import {
   boutToScheduledFight,
   ScheduledFightPreview,
+  UpcomingOddsSection,
   UpcomingTaleSection,
 } from "./ScheduledFightPreview.tsx";
 
@@ -90,5 +91,23 @@ describe("ScheduledFightPreview", () => {
 
     expect(html).not.toContain("Fight outlook");
     expect(html).not.toContain("outlook-panel");
+  });
+});
+
+const LOADING_FIGHT = {
+  competitionId: "c1",
+  red: { name: "Danilo Reyes" },
+  blue: { name: "Marco Silva" },
+} as Parameters<typeof UpcomingOddsSection>[0]["fight"];
+
+describe("UpcomingOddsSection loading state", () => {
+  it("renders skeleton rows instead of a blank panel while odds are loading", () => {
+    const markup = renderToStaticMarkup(
+      <UpcomingOddsSection
+        fight={LOADING_FIGHT}
+        upcoming={{ status: "loading", document: null, stale: false, reload: () => undefined }}
+      />,
+    );
+    expect(markup).toContain("skeleton");
   });
 });

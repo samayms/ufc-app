@@ -21,6 +21,7 @@ import { BoutHeader } from "./BoutHeader.tsx";
 import { FighterProfile } from "./FighterProfile.tsx";
 import { MarketStrip } from "./MarketStrip.tsx";
 import { RecentForm } from "./RecentForm.tsx";
+import { SkeletonRows } from "./Skeleton.tsx";
 import { UpcomingOddsPanel } from "./UpcomingOddsPanel.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
 import { WEIGHT_LABEL, fmtRecord } from "./format.ts";
@@ -184,17 +185,23 @@ export function UpcomingOddsSection({
     ? liveBout
     : upcomingBout;
 
+  if (upcoming.status === "loading") {
+    return (
+      <div className="upcoming-odds-panel upcoming-odds-skeleton">
+        <SkeletonRows count={4} className="upcoming-odds-skeleton-row" />
+      </div>
+    );
+  }
+
   const notice =
-    upcoming.status === "loading"
-      ? undefined
-      : upcoming.status === "error"
-        ? (upcoming.message ??
-          "Live odds are temporarily unavailable. Try again shortly.")
-        : upcoming.document === null
-          ? "Pre-fight odds are not available yet."
-          : bout === undefined
-            ? "Pre-fight odds are not available for this fight yet."
-            : undefined;
+    upcoming.status === "error"
+      ? (upcoming.message ??
+        "Live odds are temporarily unavailable. Try again shortly.")
+      : upcoming.document === null
+        ? "Pre-fight odds are not available yet."
+        : bout === undefined
+          ? "Pre-fight odds are not available for this fight yet."
+          : undefined;
 
   return (
     <UpcomingOddsPanel

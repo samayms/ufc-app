@@ -1383,6 +1383,15 @@
   justify-content: center;
 }
 
+.upcoming-odds-skeleton-row {
+  height: 34px;
+  margin-bottom: 8px;
+}
+
+.upcoming-odds-skeleton-row:last-child {
+  margin-bottom: 0;
+}
+
 .upcoming-odds-panel .market-head {
   justify-content: center;
   margin-bottom: 9px;

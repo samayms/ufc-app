@@ -66,6 +66,13 @@
   border-color: var(--border-strong);
 }
 
+.card-row-skeleton,
+.event-row-skeleton {
+  height: 64px;
+  margin-bottom: 6px;
+  border-radius: 14px;
+}
+
 .event-card.is-live,
 .event-card.is-live:hover,
 .event-card.is-live.is-selected {

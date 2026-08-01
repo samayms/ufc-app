@@ -23,6 +23,7 @@ import {
   ScheduledFightPreview,
 } from "./ui/ScheduledFightPreview.tsx";
 import { ScorecardFeed } from "./ui/ScorecardFeed.tsx";
+import { SkeletonRows } from "./ui/Skeleton.tsx";
 import {
   SectionTabs,
   type FightSection,
@@ -471,6 +472,9 @@ export default function App() {
                     </button>
                   </div>
                 )}
+                {upcomingEspn.status === "loading" && (
+                  <SkeletonRows count={3} className="event-row-skeleton" />
+                )}
                 <EventList
                   currentEvent={currentEventEntry}
                   events={scheduleEventEntries}
@@ -501,10 +505,7 @@ export default function App() {
                     photosByBoutId={photosByBoutId}
                   />
                 ) : espnCard.status === "loading" || espnCard.status === "idle" ? (
-                  <div className="empty-state">
-                    <strong>Loading card…</strong>
-                    <span>Fetching the ESPN fight card.</span>
-                  </div>
+                  <SkeletonRows count={4} className="card-row-skeleton" />
                 ) : espnCard.status === "error" ? (
                   <div className="state-notice" role="status">
                     <strong>Card unavailable</strong>
