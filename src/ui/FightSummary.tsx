@@ -16,11 +16,13 @@ import { RoundOdds } from "./RoundOdds.tsx";
 const STAT_ROWS: {
   key: keyof RoundStats;
   totalKey?: keyof RoundStats;
+  legacyKey?: keyof RoundStats;
+  legacyTotalKey?: keyof RoundStats;
   label: string;
   format?: (value: number) => string;
 }[] = [
-  { key: "significantStrikes", totalKey: "totalStrikes", label: "Sig. strikes" },
-  { key: "takedowns", totalKey: "takedownsAttempted", label: "Takedowns" },
+  { key: "significantStrikesLanded", totalKey: "significantStrikesAttempted", legacyKey: "significantStrikes", legacyTotalKey: "totalStrikes", label: "Sig. strikes" },
+  { key: "takedownsLanded", totalKey: "takedownsAttempted", legacyKey: "takedowns", label: "Takedowns" },
   {
     key: "controlTimeSeconds",
     label: "Control",
@@ -43,10 +45,12 @@ function statTotal(
   updates: RoundUpdate[],
   corner: Corner,
   key: keyof RoundStats,
+  legacyKey?: keyof RoundStats,
 ): number | null {
   let found = false;
   const total = updates.reduce((sum, update) => {
-    const value = update.stats?.[corner]?.[key];
+    const value = update.stats?.[corner]?.[key] ??
+      (legacyKey ? update.stats?.[corner]?.[legacyKey] : undefined);
     if (value == null) return sum;
     found = true;
     return sum + value;
@@ -82,13 +86,17 @@ export function FightSummary({
   delivery?: CollectorValueDelivery;
   collectorRounds?: readonly CollectorUnifiedRound[];
 }) {
-  const stats = updatesForSelection(view.rounds.cito ?? [], selection);
+  // ESPN is the live source. Keep Cito only as a historical fixture fallback.
+  const statSource = (view.rounds.espn ?? []).some((update) => update.stats)
+    ? view.rounds.espn ?? []
+    : view.rounds.cito ?? [];
+  const stats = updatesForSelection(statSource, selection);
   const rows = STAT_ROWS.map((row) => ({
     ...row,
-    red: statTotal(stats, "red", row.key),
-    blue: statTotal(stats, "blue", row.key),
-    redTotal: row.totalKey ? statTotal(stats, "red", row.totalKey) : null,
-    blueTotal: row.totalKey ? statTotal(stats, "blue", row.totalKey) : null,
+    red: statTotal(stats, "red", row.key, row.legacyKey),
+    blue: statTotal(stats, "blue", row.key, row.legacyKey),
+    redTotal: row.totalKey ? statTotal(stats, "red", row.totalKey, row.legacyTotalKey) : null,
+    blueTotal: row.totalKey ? statTotal(stats, "blue", row.totalKey, row.legacyTotalKey) : null,
   }));
   const hasStats = rows.some((row) => row.red != null || row.blue != null);
   const summary = preferredSummary(view, selection);

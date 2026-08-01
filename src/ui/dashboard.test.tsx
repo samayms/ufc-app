@@ -57,9 +57,9 @@ describe("dashboard state surfaces", () => {
       <SectionTabs active="summary" onChange={() => undefined} />,
     );
     expect(tabs).toContain(">Fight</button>");
+    expect(tabs).toContain(">Stats</button>");
     expect(tabs).toContain(">Odds</button>");
     expect(tabs).toContain(">Tale</button>");
-    expect(tabs).not.toContain(">Stats</button>");
   });
 
   it("switches the selected round without enabling future rounds", async () => {

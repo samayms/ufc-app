@@ -1,12 +1,13 @@
-export type FightSection = "summary" | "odds" | "tale";
+export type FightSection = "summary" | "stats" | "odds" | "tale";
 
 const SECTION_LABEL: Record<FightSection, string> = {
   summary: "Fight",
+  stats: "Stats",
   odds: "Odds",
   tale: "Tale",
 };
 
-const DEFAULT_SECTIONS: FightSection[] = ["summary", "odds", "tale"];
+const DEFAULT_SECTIONS: FightSection[] = ["summary", "stats", "odds", "tale"];
 
 export function SectionTabs({
   active,
@@ -15,7 +16,7 @@ export function SectionTabs({
 }: {
   active: FightSection;
   onChange: (section: FightSection) => void;
-  /** Restrict which tabs render, in order. Defaults to all four, preserving prior behavior. */
+  /** Restrict which tabs render, in order. */
   sections?: FightSection[];
 }) {
   return (

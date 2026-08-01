@@ -21,12 +21,6 @@ const SOURCES: {
     cadence: "On dashboard refresh",
   },
   {
-    id: "cito",
-    name: "Cito",
-    detail: "Completed-round statistics",
-    cadence: "On dashboard refresh",
-  },
-  {
     id: "kalshi",
     name: "Kalshi",
     detail: "Prediction market contracts",

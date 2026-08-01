@@ -206,12 +206,30 @@ export interface RoundUpdate {
 }
 
 export interface RoundStats {
+  /** ESPN's explicit landed/attempted pair names. */
+  significantStrikesLanded?: number;
   significantStrikes?: number;
+  significantStrikesAttempted?: number;
+  totalStrikesLanded?: number;
   totalStrikes?: number;
+  totalStrikesAttempted?: number;
+  headStrikesLanded?: number;
+  headStrikes?: number;
+  headStrikesAttempted?: number;
+  bodyStrikesLanded?: number;
+  bodyStrikes?: number;
+  bodyStrikesAttempted?: number;
+  legStrikesLanded?: number;
+  legStrikes?: number;
+  legStrikesAttempted?: number;
+  takedownsLanded?: number;
   takedowns?: number;
   takedownsAttempted?: number;
+  submissionsAttempted?: number;
+  submissionAttempts?: number;
   controlTimeSeconds?: number;
   knockdowns?: number;
+  reversals?: number;
 }
 
 export interface SherdogScorerCard {

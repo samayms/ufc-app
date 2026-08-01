@@ -31,8 +31,8 @@ function totals(
   view: BoutView,
   corner: Corner,
   selection: RoundSelection,
-): Required<RoundStats> {
-  const sums: Required<RoundStats> = {
+): Partial<Record<StatKey, number>> {
+  const sums: Partial<Record<StatKey, number>> = {
     significantStrikes: 0,
     totalStrikes: 0,
     takedowns: 0,
@@ -45,9 +45,9 @@ function totals(
     const s = update.stats?.[corner];
     if (!s) continue;
     for (const row of STAT_ROWS) {
-      sums[row.key] += s[row.key] ?? 0;
+      sums[row.key] = (sums[row.key] ?? 0) + (s[row.key] ?? 0);
       if (row.totalKey) {
-        sums[row.totalKey] += s[row.totalKey] ?? 0;
+        sums[row.totalKey] = (sums[row.totalKey] ?? 0) + (s[row.totalKey] ?? 0);
       }
     }
   }
@@ -111,11 +111,11 @@ export function RoundStatsPanel({
       </div>
       <div className="stats">
         {STAT_ROWS.map(({ key, totalKey, label, fmt }) => {
-          const r = red[key];
-          const b = blue[key];
+          const r = red[key] ?? 0;
+          const b = blue[key] ?? 0;
           const max = Math.max(r, b, 1);
-          const rDisplay = fmt ? fmt(r) : totalKey ? `${r}/${red[totalKey]}` : r;
-          const bDisplay = fmt ? fmt(b) : totalKey ? `${b}/${blue[totalKey]}` : b;
+          const rDisplay = fmt ? fmt(r) : totalKey ? `${r}/${red[totalKey] ?? 0}` : r;
+          const bDisplay = fmt ? fmt(b) : totalKey ? `${b}/${blue[totalKey] ?? 0}` : b;
           return (
             <div key={key} className="stat-row">
               <span className="stat-val num">{rDisplay}</span>

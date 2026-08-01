@@ -11,6 +11,7 @@ import { CardRail } from "./ui/CardRail.tsx";
 import { DeliveryFreshness } from "./ui/DeliveryFreshness.tsx";
 import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
+import { LiveStatsPanel } from "./ui/LiveStatsPanel.tsx";
 import { withoutSportsbookOnEventDay } from "./lib/marketPriority.ts";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
 import {
@@ -433,6 +434,16 @@ export default function App() {
                       round={selectedRound}
                       collector={dashboard.collector}
                     />
+                  </>
+                )}
+                {section === "stats" && (
+                  <>
+                    <RoundSelector
+                      view={view}
+                      value={round}
+                      onChange={setRound}
+                    />
+                    <LiveStatsPanel view={view} selection={round} />
                   </>
                 )}
                 {section === "odds" && (
