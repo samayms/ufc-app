@@ -407,7 +407,6 @@ export function UpcomingOddsPanel({
   bout: UpcomingBoutOdds | undefined;
   redName: string;
   blueName: string;
-  syncedAt?: string;
   notice?: string;
   nowMs?: number;
   allowSynthetic?: boolean;

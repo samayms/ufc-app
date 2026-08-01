@@ -63,7 +63,7 @@ export async function fetchUpcomingOddsDocument(
     headers: { accept: "application/json" },
   });
   if (!response.ok) {
-    throw new Error(`Collector responded ${response.status}`);
+    throw new Error(`Live odds service responded ${response.status}`);
   }
   const payload = (await response.json()) as { document?: unknown };
   return isDocument(payload.document) ? payload.document : null;

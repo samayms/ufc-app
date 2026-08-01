@@ -160,7 +160,7 @@ describe("dashboard state surfaces", () => {
     expect(stale).toContain("completed-round data stays");
   });
 
-  it("uses the fixture market snapshot to preview round odds", async () => {
+  it("does not label fixture live odds as completed-round odds", async () => {
     const state = await assembleDashboard();
     const main = state.boutViews["bout-main"];
     expect(main).toBeDefined();
@@ -169,9 +169,8 @@ describe("dashboard state surfaces", () => {
     const html = renderToStaticMarkup(
       <FightSummary view={main} eventStartsAt={state.event.startsAt} selection={2} />,
     );
-    expect(html).toContain('data-market-accent="kalshi"');
-    expect(html).toContain(">Odds<");
-    expect(html).not.toContain("round-end odds will appear");
+    expect(html).not.toContain('data-market-accent="kalshi"');
+    expect(html).not.toContain(">Odds<");
   });
 
   it("keeps diagnostics in Data and the UFC masthead clear", async () => {

@@ -189,11 +189,11 @@ export function UpcomingOddsSection({
       ? undefined
       : upcoming.status === "error"
         ? (upcoming.message ??
-          "The collector could not be reached. Start it with npm run dev:live.")
+          "Live odds are temporarily unavailable. Try again shortly.")
         : upcoming.document === null
-          ? "No sync has run yet. Run npm run sync:upcoming:live to load provider odds."
+          ? "Pre-fight odds are not available yet."
           : bout === undefined
-            ? "The last sync did not cover this card."
+            ? "Pre-fight odds are not available for this fight yet."
             : undefined;
 
   return (
@@ -201,9 +201,6 @@ export function UpcomingOddsSection({
       bout={bout}
       redName={redName}
       blueName={blueName}
-      {...(upcoming.document === null
-        ? {}
-        : { syncedAt: upcoming.document.generatedAt })}
       {...(notice === undefined ? {} : { notice })}
       {...(liveView === undefined ? {} : { allowSynthetic: true })}
     />
