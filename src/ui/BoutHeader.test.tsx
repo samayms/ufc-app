@@ -47,7 +47,8 @@ describe("BoutHeader live clock", () => {
     expect(markup).toContain('role="timer"');
     expect(markup).toContain("3:17");
     expect(markup).toContain("In round");
-    expect(markup).toContain("Round 2 · ESPN sync");
+    expect(markup).toContain("Round 2");
+    expect(markup).not.toContain("ESPN sync");
   });
 
   it("renders walkouts and end-of-round states without fake round zero copy", () => {
@@ -95,7 +96,9 @@ describe("BoutHeader live clock", () => {
     );
 
     expect(markup).toContain(">SUB<");
-    expect(markup).toContain("Round 2");
-    expect(markup).toContain("wins");
+    expect(markup).toContain("Round 2 · 3:41");
+    expect(markup).toContain("tot-winner-arrow-red");
+    expect(markup).toContain('aria-label="Danilo Reyes won"');
+    expect(markup).not.toContain("Reyes wins");
   });
 });

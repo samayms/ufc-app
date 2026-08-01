@@ -133,24 +133,25 @@ function CenterStatus({
   }
   if (status === "final" && result) {
     const { winner, method, round, time } = result;
-    const name =
-      winner === "draw" || winner === "nc"
-        ? null
-        : fighters[winner as Corner].name.split(" ").at(-1);
-    const outcome =
-      winner === "draw"
-        ? "Draw"
-        : winner === "nc"
-          ? "No contest"
-          : `${name ?? "Winner"} wins`;
+    const winnerCorner =
+      winner === "red" || winner === "blue" ? winner : undefined;
     return (
       <>
-        <span className="tot-live-label">Final</span>
         <span className="tot-round-label">{fmtMethod(method)}</span>
+        {winnerCorner ? (
+          <span
+            className={`tot-winner-arrow tot-winner-arrow-${winnerCorner}`}
+            role="img"
+            aria-label={`${fighters[winnerCorner].name} won`}
+          />
+        ) : (
+          <span className="tot-live-label tot-canceled">
+            {winner === "draw" ? "Draw" : "No contest"}
+          </span>
+        )}
         <span className="tot-substate num">
-          {outcome}
-          {round ? ` · Round ${round}` : ""}
-          {time ? ` ${time}` : ""}
+          {round ? `Round ${round}` : "Round —"}
+          {time ? ` · ${time}` : ""}
         </span>
       </>
     );
@@ -198,8 +199,6 @@ function CenterStatus({
       ? interpolateClockSeconds(clockSync, now)
       : undefined;
     const clockText = formatFightClock(clockSeconds);
-    const sourceLabel =
-      clockSync?.source === "cito" ? "Cito fallback" : "ESPN sync";
     return (
       <>
         <span
@@ -221,8 +220,6 @@ function CenterStatus({
         </span>
         <span className="tot-substate">
           {`Round ${currentRound}`}
-          {" · "}
-          {clockSeconds === undefined ? "waiting for ESPN" : sourceLabel}
         </span>
       </>
     );

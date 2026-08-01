@@ -460,6 +460,23 @@
   text-transform: uppercase;
 }
 
+.tot-winner-arrow {
+  width: 18px;
+  height: 12px;
+  margin: 3px 0 2px;
+  background: currentColor;
+}
+
+.tot-winner-arrow-red {
+  color: var(--red-corner-strong);
+  clip-path: polygon(0 50%, 100% 0, 100% 100%);
+}
+
+.tot-winner-arrow-blue {
+  color: var(--blue-corner-strong);
+  clip-path: polygon(100% 50%, 0 0, 0 100%);
+}
+
 .live-dot {
   width: 5px;
   height: 5px;

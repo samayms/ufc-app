@@ -25,7 +25,8 @@ describe("LiveStatsPanel", () => {
     expect(html).toContain(">12/20<");
     expect(html).toContain("Submission attempts");
     expect(html).toContain("Reversals");
-    expect(html).toContain("ESPN");
+    expect(html).not.toContain("ESPN ·");
+    expect(html).not.toContain("freshness");
   });
 
   it("renders an honest empty state when ESPN has not supplied detailed stats", () => {

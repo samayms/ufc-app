@@ -1,6 +1,5 @@
 import type { BoutView, Corner, RoundStats, RoundUpdate } from "../schema.ts";
 import type { RoundSelection } from "./RoundSelector.tsx";
-import { fmtTime } from "./format.ts";
 
 type StatKey = keyof RoundStats;
 
@@ -73,14 +72,12 @@ export function LiveStatsPanel({ view, selection }: { view: BoutView; selection:
     };
   });
   const hasStats = rows.some((row) => row.red !== undefined || row.blue !== undefined);
-  const latest = updates.at(-1);
   const heading = selection === "total" ? "Fight statistics" : `Round ${selection} statistics`;
 
   return (
     <section className="compact-stats live-stats" aria-label={heading}>
       <div className="compact-stats-head">
         <span>{heading}</span>
-        {latest ? <span className="freshness">{latest.provenance.source.toUpperCase()} · <span className="num">{fmtTime(latest.provenance.fetchedAt)}</span></span> : null}
       </div>
       {hasStats ? (
         <div className="compact-stat-list">
