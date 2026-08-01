@@ -27,7 +27,8 @@
     "dev:live": "DATA_MODE=live node --env-file-if-exists=.env scripts/devLive.mjs",
     "app": "node scripts/weekend.mjs",
     "weekend": "npm run app",
-    "lab": "node --env-file-if-exists=.env server/lab/server.ts"
+    "lab": "node --env-file-if-exists=.env server/lab/server.ts",
+    "lab:check-bout-ids": "node --env-file-if-exists=.env scripts/checkLabBoutIds.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

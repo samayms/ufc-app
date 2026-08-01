@@ -143,6 +143,8 @@ export class LabWatcher {
 
   private kalshiComplete = false;
 
+  private citoLiveComplete = false;
+
   private citoPending: PendingRound[] = [];
 
   private sherdogPending: PendingRound[] = [];
@@ -205,6 +207,7 @@ export class LabWatcher {
     this.foundCito.clear();
     this.foundSherdog.clear();
     this.kalshiComplete = false;
+    this.citoLiveComplete = false;
     this.citoPending = [];
     this.sherdogPending = [];
     if (target.round !== undefined) {
@@ -247,6 +250,17 @@ export class LabWatcher {
         "cito",
         Math.max(MIN_INTERVAL_MS, target.citoIntervalMs ?? DEFAULT_CITO_INTERVAL_MS),
         () => this.pollCito(),
+      );
+      // Cito's per-round strike stats can lag the actual result by hours
+      // (ufcstats-enrichment based), but the live-state endpoint knows a
+      // fight's method/round/winner within seconds of it happening. Without
+      // this, a fast finish (e.g. a first-round TKO) never appears on the
+      // timeline at all — the round-stats poller just quietly retries for
+      // ten minutes and gives up.
+      this.schedule(
+        "cito-live",
+        Math.max(MIN_INTERVAL_MS, target.citoIntervalMs ?? DEFAULT_CITO_INTERVAL_MS),
+        () => this.pollCitoLive(),
       );
     }
     if (
@@ -296,7 +310,8 @@ export class LabWatcher {
   }
 
   stopSource(source: "espn" | "cito"): WatchStatus {
-    const names = source === "espn" ? ["espn", "espn-stats"] : ["cito"];
+    const names =
+      source === "espn" ? ["espn", "espn-stats"] : ["cito", "cito-live"];
     const active = names.some(
       (name) => this.pollers.get(name)?.timer !== undefined,
     );
@@ -669,6 +684,68 @@ export class LabWatcher {
     }
 
     this.applyQuotaBackoff("cito", remaining);
+  }
+
+  /**
+   * The fast path: `ufc/live/{boutId}/state` knows a fight's method, ending
+   * round, and winner as soon as Cito's live worker sees it — independent of
+   * (and much faster than) the per-round strike-stats enrichment `pollCito`
+   * waits on. Stops itself the moment a method is reported, or once the bout
+   * id has no live row at all.
+   */
+  private async pollCitoLive(): Promise<void> {
+    if (this.citoLiveComplete) return;
+    const boutId = this.target?.citoBoutIds?.[0];
+    if (boutId === undefined) return;
+
+    const base = this.env.CITO_API_BASE_URL?.trim() ?? "";
+    const apiKey = this.env.CITO_API_KEY?.trim() ?? "";
+    if (base.length === 0 || apiKey.length === 0) {
+      throw new Error("CITO_API_BASE_URL and CITO_API_KEY must be set");
+    }
+
+    const url = new URL(
+      `ufc/live/${encodeURIComponent(boutId)}/state`,
+      base.endsWith("/") ? base : `${base}/`,
+    ).toString();
+    const { json, remaining } = await this.getJson(url, { "x-api-key": apiKey });
+    const observedAt = new Date(this.now()).toISOString();
+    const data = (json as { data?: unknown }).data;
+    const method = (data as { method?: unknown } | null)?.method;
+    const winner = (data as { winnerFighterSlug?: unknown } | null)
+      ?.winnerFighterSlug;
+    const round = (data as { currentRound?: unknown } | null)?.currentRound;
+
+    if (typeof method === "string") {
+      this.citoLiveComplete = true;
+      this.timeline.record({
+        kind: "observation",
+        source: "cito-live",
+        at: observedAt,
+        boutId,
+        ...(typeof round === "number" ? { round } : {}),
+        label: `live state: ${method}${typeof winner === "string" ? `, ${winner} wins` : ""}${typeof round === "number" ? ` (round ${round})` : ""}`,
+        detail: { method, winnerFighterSlug: winner, currentRound: round },
+      });
+      this.pausePoller("cito-live");
+      return;
+    }
+
+    const polls = this.pollers.get("cito-live")?.polls ?? 0;
+    if (polls + 1 >= MAX_PENDING_POLLS) {
+      this.citoLiveComplete = true;
+      this.timeline.record({
+        kind: "note",
+        source: "cito-live",
+        at: observedAt,
+        boutId,
+        label: `gave up waiting for a live-state method after ${polls + 1} polls`,
+      });
+      this.pausePoller("cito-live");
+      return;
+    }
+
+    this.applyQuotaBackoff("cito-live", remaining);
   }
 
   // -- Kalshi ---------------------------------------------------------------

@@ -21,6 +21,19 @@ function citoResponse(roundStats: unknown[]): Response {
   );
 }
 
+/** No method yet — the live-state poller's "nothing to report" response. */
+function citoLiveStateResponse(
+  overrides: Record<string, unknown> = {},
+): Response {
+  return new Response(
+    JSON.stringify({
+      success: true,
+      data: { method: null, winnerFighterSlug: null, ...overrides },
+    }),
+    { status: 200, headers: { "content-type": "application/json" } },
+  );
+}
+
 function espnResponse(clock: string): Response {
   return new Response(
     JSON.stringify({
@@ -125,15 +138,17 @@ describe("LabWatcher CITO round polling", () => {
   it("checks immediately, then every five seconds until stats arrive", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(BASE_TIME);
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(citoResponse([]))
-      .mockResolvedValueOnce(
-        citoResponse([
-          { fighterSlug: "red-fighter", round: 2, significantStrikes: "12 of 20" },
-          { fighterSlug: "blue-fighter", round: 2, significantStrikes: "9 of 18" },
-        ]),
-      );
+    let statsCalls = 0;
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes("/state")) return citoLiveStateResponse();
+      statsCalls += 1;
+      if (statsCalls === 1) return citoResponse([]);
+      return citoResponse([
+        { fighterSlug: "red-fighter", round: 2, significantStrikes: "12 of 20" },
+        { fighterSlug: "blue-fighter", round: 2, significantStrikes: "9 of 18" },
+      ]);
+    });
     const timeline = new LabTimeline({ now: () => Date.now() });
     const watcher = new LabWatcher({
       timeline,
@@ -159,13 +174,15 @@ describe("LabWatcher CITO round polling", () => {
       citoIntervalMs: 5_000,
     });
 
+    // Each tick fires both the round-stats poller ("cito") and the
+    // fast-finish live-state poller ("cito-live") on the same cadence.
     await vi.advanceTimersByTimeAsync(0);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(4_999);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
     expect(timeline.since(0)).toContainEqual(
       expect.objectContaining({
         source: "cito",
@@ -179,8 +196,63 @@ describe("LabWatcher CITO round polling", () => {
       }),
     );
 
+    // "cito" found its stats and paused; "cito-live" has no method yet and
+    // keeps polling every 5s (fires at +10_000 and +15_000 here).
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    watcher.stop();
+  });
+
+  it("reports a fast finish from the live-state endpoint even while round stats are still pending", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TIME);
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.includes("/state")) {
+        return citoLiveStateResponse({
+          method: "KO/TKO",
+          winnerFighterSlug: "nina-milosevic",
+          currentRound: 1,
+        });
+      }
+      return citoResponse([]);
+    });
+    const timeline = new LabTimeline({ now: () => Date.now() });
+    const watcher = new LabWatcher({
+      timeline,
+      fetchImpl,
+      now: () => Date.now(),
+      env: {
+        CITO_API_BASE_URL: "https://cito.example.test/api/v1",
+        CITO_API_KEY: "test-key",
+      },
+    });
+
+    watcher.start({
+      boutId: "12927",
+      round: 1,
+      citoBoutIds: ["12927"],
+      citoIntervalMs: 5_000,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(timeline.since(0)).toContainEqual(
+      expect.objectContaining({
+        source: "cito-live",
+        boutId: "12927",
+        round: 1,
+        label: "live state: KO/TKO, nina-milosevic wins (round 1)",
+      }),
+    );
+    expect(watcher.status()).toMatchObject({
+      pollers: expect.arrayContaining([
+        expect.objectContaining({ name: "cito-live", active: false }),
+      ]),
+    });
+
+    // The round-stats poller keeps waiting on Cito's slower enrichment
+    // pipeline — a fast finish being reported doesn't short-circuit it.
+    await vi.advanceTimersByTimeAsync(10_000);
     watcher.stop();
   });
 
@@ -218,12 +290,19 @@ describe("LabWatcher CITO round polling", () => {
     const status = watcher.stopSource("cito");
     await vi.advanceTimersByTimeAsync(10_000);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    // stopSource("cito") stops both the round-stats poller and the
+    // fast-finish live-state poller.
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(status).toMatchObject({
       running: true,
-      pollers: [
+      pollers: expect.arrayContaining([
         expect.objectContaining({ name: "cito", active: false, polls: 1 }),
-      ],
+        expect.objectContaining({
+          name: "cito-live",
+          active: false,
+          polls: 1,
+        }),
+      ]),
     });
     expect(timeline.since(0)).toContainEqual(
       expect.objectContaining({
@@ -294,7 +373,8 @@ describe("LabWatcher synchronized horn checks", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    // espn + cito + cito-live + kalshi, all firing immediately.
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
     expect(timeline.since(0)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -325,7 +405,7 @@ describe("LabWatcher synchronized horn checks", () => {
     );
 
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
     expect(timeline.since(0)).toContainEqual(
       expect.objectContaining({
         source: "espn",
@@ -339,8 +419,10 @@ describe("LabWatcher synchronized horn checks", () => {
       }),
     );
 
+    // espn and kalshi are done; cito-live keeps polling every 5s since this
+    // mock's response never carries a method.
     await vi.advanceTimersByTimeAsync(10_000);
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(7);
     watcher.stop();
   });
 });
