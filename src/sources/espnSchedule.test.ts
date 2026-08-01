@@ -116,16 +116,17 @@ describe("parseEspnScheduleEvents", () => {
     expect(events.some((event) => event.name === "Noche UFC")).toBe(true);
   });
 
-  it("drops events before now", () => {
+  it("keeps a non-final card after its scheduled start but drops completed cards", () => {
     const now = new Date("2026-08-20T00:00:00Z");
-    const events = parseEspnScheduleEvents(scoreboardFixture, now);
+    const events = parseEspnScheduleEvents({
+      events: [
+        { id: "live", date: "2026-08-19T23:00:00Z", name: "UFC Live", status: { type: { name: "STATUS_IN_PROGRESS", completed: false } } },
+        { id: "final", date: "2026-08-19T23:00:00Z", name: "UFC Final", status: { type: { name: "STATUS_FINAL", completed: true } } },
+        { id: "next", date: "2026-08-27T23:00:00Z", name: "UFC Next" },
+      ],
+    }, now);
 
-    expect(events.every((event) => new Date(event.startsAt) >= now)).toBe(
-      true,
-    );
-    expect(events.some((event) => event.eventId === "600059185")).toBe(
-      false,
-    );
+    expect(events.map((event) => event.eventId)).toEqual(["live", "next"]);
   });
 
   it("de-duplicates by event id", () => {
@@ -677,7 +678,7 @@ describe("createEspnScheduleSource", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it("requests the now -> now+365d window with limit=1000", async () => {
+  it("requests a one-day lookback while preserving the 365-day future window", async () => {
     const currentTime = new Date("2026-07-28T00:00:00Z");
     const fetchImpl = vi.fn(async () => jsonResponse(scoreboardFixture));
     const source = createEspnScheduleSource({
@@ -688,7 +689,7 @@ describe("createEspnScheduleSource", () => {
     await source.listUpcomingEvents();
 
     const expectedUrl = buildEspnScheduleUrl(
-      currentTime,
+      new Date(currentTime.getTime() - 24 * 60 * 60 * 1_000),
       new Date(currentTime.getTime() + 365 * 24 * 60 * 60 * 1000),
     );
     expect(fetchImpl).toHaveBeenCalledWith(expectedUrl, expect.anything());

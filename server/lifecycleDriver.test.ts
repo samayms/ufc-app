@@ -48,6 +48,10 @@ class ManualDriverTime implements LifecycleDriverClock, LifecycleDriverTimer {
     this.timers.delete(handle as number);
   }
 
+  pendingTimerCount(): number {
+    return this.timers.size;
+  }
+
   advance(milliseconds: number): void {
     this.value += milliseconds;
     while (true) {
@@ -186,6 +190,58 @@ describe("LifecycleDriver", () => {
     await driver.idle();
     expect(calls).toBe(3);
 
+    await driver.close();
+  });
+
+  it("uses the event-aware cadence when eventStartsAt is supplied and stops after completion", async () => {
+    const { machine } = await createMachine();
+    const time = new ManualDriverTime();
+    let calls = 0;
+    const driver = new LifecycleDriver({
+      machine,
+      espnProvider: {
+        fetchObservations: async () => {
+          calls += 1;
+          return calls === 1
+            ? [observationInput(time, { state: "post", completed: true, period: 1 })]
+            : [];
+        },
+      },
+      espnPollingMs: 5_000,
+      eventStartsAt: "2026-07-27T22:00:00.000Z",
+      clock: time,
+      timer: time,
+    });
+
+    await driver.start();
+    expect(calls).toBe(1);
+    expect(time.pendingTimerCount()).toBe(0);
+    time.advance(120_000);
+    await driver.idle();
+    expect(calls).toBe(1);
+    await driver.close();
+  });
+
+  it("uses the one-minute event-day pre-start cadence when eventStartsAt is supplied", async () => {
+    const { machine } = await createMachine();
+    const time = new ManualDriverTime();
+    let calls = 0;
+    const driver = new LifecycleDriver({
+      machine,
+      espnProvider: { fetchObservations: async () => { calls += 1; return []; } },
+      espnPollingMs: 5_000,
+      eventStartsAt: "2026-07-27T22:00:00.000Z",
+      clock: time,
+      timer: time,
+    });
+
+    await driver.start();
+    time.advance(59_999);
+    await driver.idle();
+    expect(calls).toBe(1);
+    time.advance(1);
+    await driver.idle();
+    expect(calls).toBe(2);
     await driver.close();
   });
 

@@ -302,7 +302,12 @@ export function createKalshiUpcomingProvider(
       return parseKalshiUpcomingMarkets(
         payload,
         parseKalshiDistanceMarkets(distancePayload),
-      );
+      ).map((market) => {
+        const streamIds = tickers.get(market.externalId);
+        return streamIds === undefined || streamIds.length !== 2
+          ? market
+          : { ...market, streamIds: [streamIds[0]!, streamIds[1]!] };
+      });
     },
     lastMarketTickers: () => tickers,
   };

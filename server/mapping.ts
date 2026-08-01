@@ -41,6 +41,18 @@ export interface DiscoveredBoutIdentity {
   blueFighter: string;
 }
 
+/**
+ * A provider reference already matched to an ESPN bout by the pre-event
+ * upcoming-odds sync. This is deliberately distinct from a manual override:
+ * its confidence remains observable and can only lower an automatic mapping's
+ * confidence.
+ */
+export interface ImportedBoutExternalRef {
+  internalBoutId: string;
+  externalRef: ExternalRef;
+  confidence: number;
+}
+
 export interface FuzzyBoutMatch {
   confidence: number;
   cornersReversed: boolean;
@@ -354,6 +366,53 @@ export class BoutMappingRegistry {
     mapping.mappingConfidence = mapping.manuallyVerified
       ? 1
       : Math.min(mapping.mappingConfidence, best.confidence);
+    this.rebuildExternalIndex();
+    await this.persistMappingIfChanged(mapping);
+    return cloneMapping(mapping);
+  }
+
+  /**
+   * Attaches a pre-validated provider reference to its known canonical bout.
+   *
+   * The upcoming sync has already matched the provider market to an ESPN bout,
+   * so repeating fuzzy matching here would both be redundant and risk choosing
+   * another current-card bout. Conflicting provider ids are rejected rather
+   * than reassigned; only a manual override is allowed to move one.
+   */
+  async importExternalRef(
+    imported: ImportedBoutExternalRef,
+  ): Promise<BoutMapping | undefined> {
+    if (
+      !isExternalRef(imported.externalRef) ||
+      !Number.isFinite(imported.confidence) ||
+      imported.confidence < 0 ||
+      imported.confidence > 1
+    ) {
+      throw new TypeError(
+        "Imported mappings require an externalRef and confidence between 0 and 1",
+      );
+    }
+    const mapping = this.mappings.get(imported.internalBoutId);
+    if (mapping === undefined) return undefined;
+
+    const existingInternalId = this.findInternalBoutId(
+      imported.externalRef.source,
+      imported.externalRef.id,
+    );
+    if (
+      existingInternalId !== undefined &&
+      existingInternalId !== imported.internalBoutId
+    ) {
+      return undefined;
+    }
+    if (existingInternalId === imported.internalBoutId) {
+      return cloneMapping(mapping);
+    }
+
+    mapping.externalRefs.push(cloneExternalRef(imported.externalRef));
+    mapping.mappingConfidence = mapping.manuallyVerified
+      ? 1
+      : Math.min(mapping.mappingConfidence, imported.confidence);
     this.rebuildExternalIndex();
     await this.persistMappingIfChanged(mapping);
     return cloneMapping(mapping);

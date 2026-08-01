@@ -1,6 +1,6 @@
 /**
- * ESPN "future cards" schedule source: the public scoreboard (list of
- * upcoming events), fightcenter (full fight card for one event), and
+ * ESPN current/upcoming-cards schedule source: the public scoreboard (list
+ * of current and upcoming events), fightcenter (full fight card for one event), and
  * per-athlete bio endpoints. Unlike espn.ts's live lifecycle fetcher, this
  * source is NOT gated behind `mode: "live"` / DATA_MODE=live. All endpoints
  * below are ESPN's public, unauthenticated "site API" surface (no API key,
@@ -391,21 +391,22 @@ export function buildEspnAthleteUrl(athleteId: string): string {
 const CONTENDER_SERIES_PATTERN = /contender series/i;
 
 /**
- * Parses the ESPN scoreboard payload into upcoming, non-Contender-Series
- * event summaries. Never throws on malformed input — an unrecognized shape
- * just yields an empty list, matching every other source client's
- * "no data" convention.
+ * Parses the ESPN scoreboard payload into current/upcoming, non-Contender-
+ * Series event summaries. A non-final card remains eligible after its listed
+ * start time: a process restarting during a live card must rediscover that
+ * card rather than jump directly to next week's event. Never throws on
+ * malformed input — an unrecognized shape just yields an empty list, matching
+ * every other source client's "no data" convention.
  */
 export function parseEspnScheduleEvents(
   payload: unknown,
-  now: Date,
+  _now: Date,
 ): EspnScheduledEventSummary[] {
   if (typeof payload !== "object" || payload === null) return [];
 
   const raw = payload as RawEspnScheduleResponse;
   if (!Array.isArray(raw.events)) return [];
 
-  const nowMs = now.getTime();
   const seenIds = new Set<string>();
   const results: EspnScheduledEventSummary[] = [];
 
@@ -420,12 +421,17 @@ export function parseEspnScheduleEvents(
     if (seenIds.has(id)) continue;
 
     const eventTime = new Date(date).getTime();
-    if (Number.isNaN(eventTime) || eventTime < nowMs) continue;
+    if (Number.isNaN(eventTime)) continue;
 
     const statusType = event.status?.type;
     if (statusType?.name === "STATUS_FINAL" || statusType?.completed === true) {
       continue;
     }
+
+    // A past *scheduled* time alone is not proof that a card is over. ESPN
+    // keeps a live event on the scoreboard while the card is in progress.
+    // Keep it so a restart can attach to the current card; completed events
+    // are filtered above.
 
     const shortName = event.shortName;
     if (CONTENDER_SERIES_PATTERN.test(`${name} ${shortName ?? ""}`)) continue;
@@ -1000,6 +1006,8 @@ async function fetchJsonWithLimits(
 // ---------------------------------------------------------------------------
 
 const DEFAULT_TTL_MS = 5 * 60_000;
+/** Covers a card that began before midnight UTC and is still in progress. */
+const SCHEDULE_LOOKBACK_DAYS = 1;
 const SCHEDULE_WINDOW_DAYS = 365;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCHEDULE_REQUEST_TIMEOUT_MS = 8_000;
@@ -1074,8 +1082,16 @@ export function createEspnScheduleSource(options?: {
   let rankingsInFlight: Promise<Map<string, string>> | undefined;
 
   async function fetchEventList(): Promise<EspnScheduledEventSummary[]> {
-    const start = now();
-    const end = new Date(start.getTime() + SCHEDULE_WINDOW_DAYS * DAY_MS);
+    const current = now();
+    // Preserve the 365-day future horizon while looking back one bounded day
+    // for an in-progress card that crossed a UTC midnight before restart.
+    // The 366-day query span remains inside ESPN's documented cap.
+    const start = new Date(
+      current.getTime() - SCHEDULE_LOOKBACK_DAYS * DAY_MS,
+    );
+    const end = new Date(
+      current.getTime() + SCHEDULE_WINDOW_DAYS * DAY_MS,
+    );
 
     try {
       const payload = await fetchJsonWithLimits(

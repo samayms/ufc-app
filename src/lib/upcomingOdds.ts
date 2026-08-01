@@ -54,6 +54,8 @@ export interface UpcomingProviderEntry {
   updatedAt?: string;
   /** Provider-native market id, kept so a mapping is reviewable. */
   externalId?: string;
+  /** Ordered provider stream ids, retained for the live collector bridge. */
+  streamIds?: readonly [string, string];
   /** Matcher confidence that produced this attachment. */
   confidence?: number;
   /** True when the matcher had to swap the provider's fighter order. */

@@ -329,7 +329,12 @@ export function createPolymarketUpcomingProvider(
         options,
       );
       tokens = polymarketOutcomeTokens(payload);
-      return parsePolymarketUpcomingMarkets(payload);
+      return parsePolymarketUpcomingMarkets(payload).map((market) => {
+        const streamIds = tokens.get(market.externalId);
+        return streamIds === undefined || streamIds.length !== 2
+          ? market
+          : { ...market, streamIds: [streamIds[0]!, streamIds[1]!] };
+      });
     },
     lastOutcomeTokens: () => tokens,
   };

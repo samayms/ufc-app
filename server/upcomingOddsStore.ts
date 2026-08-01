@@ -76,6 +76,7 @@ export interface PersistedUpcomingMapping {
   espnEventId: string;
   provider: UpcomingProviderId;
   externalId: string;
+  streamIds?: readonly [string, string];
   confidence: number;
   cornersReversed: boolean;
 }
@@ -108,6 +109,9 @@ export async function persistUpcomingMappings(
           espnEventId: bout.espnEventId,
           provider: provider as UpcomingProviderId,
           externalId: entry.externalId,
+          ...(entry.streamIds === undefined
+            ? {}
+            : { streamIds: entry.streamIds }),
           confidence: entry.confidence ?? 0,
           cornersReversed: entry.cornersReversed ?? false,
         } satisfies PersistedUpcomingMapping);

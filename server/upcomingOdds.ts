@@ -444,6 +444,9 @@ export async function syncUpcomingOdds(
           fetchedAt,
           updatedAt: attachment.market.marketUpdatedAt ?? fetchedAt,
           externalId: attachment.market.externalId,
+          ...(attachment.market.streamIds === undefined
+            ? {}
+            : { streamIds: attachment.market.streamIds }),
           confidence: attachment.confidence,
           cornersReversed: attachment.cornersReversed,
           ...(attachment.market.metadata === undefined

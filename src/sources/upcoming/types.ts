@@ -70,6 +70,11 @@ export interface UpcomingDecisionMarket {
 export interface UpcomingProviderMarket {
   /** Provider-native id: Kalshi event ticker, Polymarket condition id, … */
   externalId: string;
+  /**
+   * Provider-native stream ids ordered as `firstFighter`/`secondFighter`.
+   * Present only for sources whose live transport subscribes per outcome.
+   */
+  streamIds?: readonly [string, string];
   firstFighter: string;
   secondFighter: string;
   /** ISO 8601 scheduled start, when the provider publishes one. */
