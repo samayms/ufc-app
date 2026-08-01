@@ -992,6 +992,31 @@ export class MarketTickStore implements TickHistorySource {
     return operation.then(() => result);
   }
 
+  /**
+   * Pins the last available market for a bout before its opening bell.  This
+   * is intentionally a separate entry point from round boundaries: pre-fight
+   * snapshots use the reserved round zero and must never be confused with an
+   * in-progress or completed round.
+   */
+  snapshotPreFight(
+    boutId: string,
+    takenAt: string,
+  ): Promise<readonly MarketSnapshot[]> {
+    let result: readonly MarketSnapshot[] = [];
+    const operation = this.enqueue(async () => {
+      await this.restore();
+      result = await this.snapshotBoundary(
+        boutId,
+        0,
+        "pre-fight",
+        takenAt,
+        undefined,
+        "pre-fight-open",
+      );
+    });
+    return operation.then(() => result);
+  }
+
   handleProvisionalSupersession(
     supersession: ProvisionalRoundSupersession,
   ): Promise<void> {
@@ -1190,8 +1215,16 @@ export class MarketTickStore implements TickHistorySource {
     sourceFilter?: MarketSource,
     label?: MarketSnapshotLabel,
   ): Promise<readonly MarketSnapshot[]> {
-    if (!Number.isSafeInteger(round) || round < 1) {
-      throw new TypeError("round must be a positive integer");
+    const isPreFight = boundaryType === "pre-fight";
+    if (
+      !Number.isSafeInteger(round) ||
+      (isPreFight ? round !== 0 : round < 1)
+    ) {
+      throw new TypeError(
+        isPreFight
+          ? "pre-fight snapshots must use round zero"
+          : "round snapshots must use a positive integer",
+      );
     }
     const boundaryTime = timestamp(takenAt, "takenAt");
     const states = new Map<string, BookState>();

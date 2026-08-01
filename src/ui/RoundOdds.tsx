@@ -1,10 +1,6 @@
 import type { CollectorUnifiedRound } from "../store/collectorClient.ts";
-import { devigPair, marketProbabilities } from "../lib/oddsMath.ts";
-import {
-  MARKET_PRIORITY_VOLUME_THRESHOLD,
-  pickPriorityMarket,
-} from "../lib/marketPriority.ts";
-import type { OddsSnapshot } from "../schema.ts";
+import { devigPair } from "../lib/oddsMath.ts";
+import { MARKET_PRIORITY_VOLUME_THRESHOLD } from "../lib/marketPriority.ts";
 import type { MarketSnapshot, MarketSnapshotOutcome } from "../sources/contract.ts";
 import { fmtPct } from "./format.ts";
 
@@ -66,22 +62,6 @@ function candidate(
   };
 }
 
-function choiceFromOddsSnapshot(snapshot: OddsSnapshot | undefined): MarketChoice | null {
-  if (snapshot === undefined) return null;
-  const redQuote = snapshot.quotes.find((quote) => quote.corner === "red");
-  const blueQuote = snapshot.quotes.find((quote) => quote.corner === "blue");
-  const probs = marketProbabilities(snapshot);
-  if (probs === null || redQuote === undefined || blueQuote === undefined) {
-    return null;
-  }
-  return {
-    market: snapshot.market,
-    volume: snapshot.volume,
-    red: probs.red,
-    blue: probs.blue,
-  };
-}
-
 /**
  * Picks the first complete market in the product's explicit priority order,
  * gated on volume the same way `pickPriorityMarket` gates `OddsSnapshot`s:
@@ -114,12 +94,6 @@ function chooseMarket(
   return sportsbook ?? kalshi ?? polymarket;
 }
 
-function chooseLatestMarket(
-  latestOdds: Partial<Record<OddsSnapshot["market"], OddsSnapshot>> | undefined,
-): MarketChoice | null {
-  return choiceFromOddsSnapshot(pickPriorityMarket(latestOdds ?? {}) ?? undefined);
-}
-
 function latestRoundRecord(
   records: readonly CollectorUnifiedRound[],
   boutId: string,
@@ -138,19 +112,21 @@ export function RoundOdds({
   blueName,
   selection,
   records = [],
-  latestOdds,
 }: {
   boutId: string;
   redName: string;
   blueName: string;
   selection: number | "total";
   records?: readonly CollectorUnifiedRound[];
-  latestOdds?: Partial<Record<OddsSnapshot["market"], OddsSnapshot>>;
 }) {
   const record = latestRoundRecord(records, boutId, selection);
+  // Round odds are meaningful only after the lifecycle has confirmed that
+  // round. Live odds are deliberately not substituted here: that would label
+  // an in-progress price as a completed-round boundary.
   const choice =
-    (record === undefined ? null : chooseMarket(record, redName, blueName)) ??
-    chooseLatestMarket(latestOdds);
+    record === undefined || record.provisional
+      ? null
+      : chooseMarket(record, redName, blueName);
   const selectionLabel =
     record === undefined
       ? selection === "total"
@@ -158,17 +134,7 @@ export function RoundOdds({
         : `Odds after Round ${selection}`
       : `Odds after Round ${record.round}`;
 
-  if (choice === null) {
-    return (
-      <div className="compact-stat round-odds round-odds-empty" aria-label={selectionLabel}>
-        <div className="compact-stat-values">
-          <span className="num">—</span>
-          <span>Odds</span>
-          <span className="num">—</span>
-        </div>
-      </div>
-    );
-  }
+  if (choice === null) return null;
 
   const total = Math.max(choice.red + choice.blue, 0.0001);
   const redShare = (choice.red / total) * 100;

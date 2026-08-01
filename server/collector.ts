@@ -1389,8 +1389,34 @@ export async function createCollector(
     refreshDiscoveredSubscriptions();
   };
 
+  /**
+   * The opening line belongs to the bout about to start, not to the bout
+   * which just ended.  Pin the current book at that handoff so a later live
+   * tick cannot overwrite the pre-fight comparison in the browser.
+   */
+  const capturePreFightOdds = (boutId: string, takenAt: string): void => {
+    void initializedTickStore.snapshotPreFight(boutId, takenAt).catch(
+      () => undefined,
+    );
+  };
+
+  const nextUpcomingBoutAfter = (boutId: string): string | undefined => {
+    const completed = loaded.event.bouts.find((bout) => bout.id === boutId);
+    const upcoming = loaded.event.bouts
+      .filter((bout) => bout.status === "upcoming")
+      .filter(
+        (bout) =>
+          completed === undefined || bout.cardPosition > completed.cardPosition,
+      )
+      .sort((left, right) => left.cardPosition - right.cardPosition)[0];
+    return upcoming?.id;
+  };
+
   unsubscribers.push(
-    eventBus.subscribe("FIGHT_STARTED", () => {
+    eventBus.subscribe("FIGHT_STARTED", (event) => {
+      // Covers the first bout of a card as well as a restart where no prior
+      // FIGHT_ENDED event was observed locally.
+      capturePreFightOdds(event.boutId, event.detectedAt);
       applyActiveSubscriptions();
     }),
     eventBus.subscribe("FIGHT_ENDED", (event) => {
@@ -1408,6 +1434,10 @@ export async function createCollector(
           ),
         ).catch(() => undefined);
         return;
+      }
+      const nextBoutId = nextUpcomingBoutAfter(event.boutId);
+      if (nextBoutId !== undefined) {
+        capturePreFightOdds(nextBoutId, event.detectedAt);
       }
       applyActiveSubscriptions();
     }),

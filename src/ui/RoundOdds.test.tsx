@@ -4,6 +4,39 @@ import type { CollectorUnifiedRound } from "../store/collectorClient.ts";
 import { RoundOdds } from "./RoundOdds.tsx";
 
 describe("RoundOdds", () => {
+  it("renders nothing until the selected round has a confirmed boundary", () => {
+    const html = renderToStaticMarkup(
+      <RoundOdds
+        boutId="bout-main"
+        redName="Danilo Reyes"
+        blueName="Artem Volkov"
+        selection={1}
+        records={[]}
+      />,
+    );
+    expect(html).toBe("");
+  });
+
+  it("does not present provisional round odds as post-round odds", () => {
+    const html = renderToStaticMarkup(
+      <RoundOdds
+        boutId="bout-main"
+        redName="Danilo Reyes"
+        blueName="Artem Volkov"
+        selection={1}
+        records={[{
+          boutId: "bout-main",
+          round: 1,
+          detectedEndedAt: "2026-07-28T01:00:00Z",
+          endingSignal: "clock_zero_provisional",
+          provisional: true,
+          marketAtEnd: {},
+        }]}
+      />,
+    );
+    expect(html).toBe("");
+  });
+
   it("renders the selected round's preferred market with source accents", () => {
     const record: CollectorUnifiedRound = {
       boutId: "bout-main",

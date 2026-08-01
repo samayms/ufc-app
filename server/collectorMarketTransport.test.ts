@@ -65,6 +65,39 @@ afterEach(async () => {
 });
 
 describe("collector market transport wiring", () => {
+  it("captures opening odds at the first bell and hands the next upcoming bout a pre-fight boundary", async () => {
+    const collector = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage: new MemoryStorage(),
+      market: { transports: [] },
+    });
+    collectors.push(collector);
+    const capture = vi.spyOn(collector.tickStore, "snapshotPreFight");
+
+    collector.eventBus.emit({
+      type: "FIGHT_STARTED",
+      boutId: "bout-main",
+      detectedAt: "2026-07-28T01:00:00.000Z",
+    });
+    await collector.tickStore.idle();
+    expect(capture).toHaveBeenCalledWith(
+      "bout-main",
+      "2026-07-28T01:00:00.000Z",
+    );
+
+    collector.eventBus.emit({
+      type: "FIGHT_ENDED",
+      boutId: "bout-main",
+      round: 3,
+      detectedAt: "2026-07-28T01:15:00.000Z",
+    });
+    await collector.tickStore.idle();
+    expect(capture).toHaveBeenCalledWith(
+      "bout-3",
+      "2026-07-28T01:15:00.000Z",
+    );
+  });
+
   it("does not restart live market streams for an already completed card", async () => {
     const state = await loadFixtureState();
     expect(eventNeedsLiveMarketTransport(state)).toBe(true);

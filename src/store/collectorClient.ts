@@ -169,6 +169,7 @@ interface CollectorBootstrap {
   health: Record<string, CollectorSourceHealth>;
   lifecycleObservations: ParsedLifecycleObservation[];
   unifiedRounds: CollectorUnifiedRound[];
+  marketSnapshots: MarketSnapshot[];
   latestMarkets: MarketTick[];
 }
 
@@ -282,7 +283,7 @@ function isMarketSource(value: unknown): value is MarketSource {
 }
 
 function isMarketBoundaryType(value: unknown): value is MarketBoundaryType {
-  return value === "provisional" || value === "confirmed";
+  return value === "provisional" || value === "confirmed" || value === "pre-fight";
 }
 
 function isOptionalFiniteNumber(value: unknown): boolean {
@@ -419,10 +420,12 @@ function parseMarketSnapshot(value: unknown): MarketSnapshot | null {
     !isMarketSource(value.source) ||
     typeof value.boutId !== "string" ||
     !Number.isSafeInteger(value.round) ||
-    (value.round as number) < 1 ||
+    ((value.boundaryType === "pre-fight" && value.round !== 0) ||
+      (value.boundaryType !== "pre-fight" && (value.round as number) < 1)) ||
     !isMarketBoundaryType(value.boundaryType) ||
     (value.label !== undefined &&
-      value.label !== "broad-post-round-comparison") ||
+      value.label !== "broad-post-round-comparison" &&
+      value.label !== "pre-fight-open") ||
     !isTimestamp(value.takenAt) ||
     typeof value.fresh !== "boolean" ||
     !Array.isArray(value.outcomes)
@@ -751,6 +754,7 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
     !Array.isArray(value.unifiedRounds) ||
     (value.lifecycleObservations !== undefined &&
       !Array.isArray(value.lifecycleObservations)) ||
+    (value.marketSnapshots !== undefined && !Array.isArray(value.marketSnapshots)) ||
     (value.latestMarkets !== undefined && !Array.isArray(value.latestMarkets))
   ) {
     return null;
@@ -774,6 +778,13 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
       .filter(
         (round): round is CollectorUnifiedRound => round !== null,
       ),
+    marketSnapshots: Array.isArray(value.marketSnapshots)
+      ? value.marketSnapshots
+          .map(parseMarketSnapshot)
+          .filter(
+            (snapshot): snapshot is MarketSnapshot => snapshot !== null,
+          )
+      : [],
     latestMarkets: Array.isArray(value.latestMarkets)
       ? value.latestMarkets
           .map(parseMarketTick)
@@ -1165,6 +1176,81 @@ function applyMarketUpdates(
   return { dashboard: current, deliveries };
 }
 
+/** Converts durable pre-fight market boundaries into the dashboard's opening-line shape. */
+function applyPreFightMarketSnapshots(
+  dashboard: DashboardState | null,
+  snapshots: readonly MarketSnapshot[],
+): DashboardState | null {
+  if (dashboard === null) return null;
+  let current = dashboard;
+  for (const snapshot of snapshots) {
+    if (snapshot.boundaryType !== "pre-fight" || snapshot.round !== 0) {
+      continue;
+    }
+    const view = current.boutViews[snapshot.boutId];
+    if (view === undefined) continue;
+    const market = MARKET_TO_ODDS_SNAPSHOT[snapshot.source];
+    const quotes: OddsQuote[] = [];
+    for (const outcome of snapshot.outcomes) {
+      const corner = matchCorner(outcome.outcome, view.bout);
+      if (corner === null) continue;
+      const price = outcome.midpoint ??
+        (outcome.bid !== undefined && outcome.ask !== undefined
+          ? (outcome.bid + outcome.ask) / 2
+          : outcome.lastTrade ?? outcome.rawOdds);
+      if (price === undefined || !Number.isFinite(price)) continue;
+      const native: NativePrice | null = snapshot.source === "kalshi"
+        ? price >= 0 && price <= 100
+          ? { kind: "kalshi-cents", yesCents: price, noCents: 100 - price }
+          : null
+        : snapshot.source === "polymarket"
+          ? price >= 0 && price <= 1
+            ? { kind: "polymarket-price", price }
+            : null
+          : outcome.rawOdds !== undefined && outcome.rawOdds !== 0
+            ? {
+                kind: "american-moneyline",
+                moneyline: outcome.rawOdds,
+                book: outcome.bookmaker ?? "unknown",
+              }
+            : null;
+      if (native === null) continue;
+      const impliedProbability = outcome.noVigProbability ??
+        outcome.impliedProbability ??
+        (native.kind === "kalshi-cents"
+          ? native.yesCents / 100
+          : native.kind === "polymarket-price"
+            ? native.price
+            : americanToImpliedProb(native.moneyline));
+      if (!Number.isFinite(impliedProbability)) continue;
+      quotes.push({ corner, native, impliedProbability });
+    }
+    if (quotes.length === 0) continue;
+    const opening: OddsSnapshot = {
+      boutId: snapshot.boutId,
+      market,
+      quotes,
+      marketUpdatedAt: snapshot.takenAt,
+      provenance: {
+        source: schemaSourceFor(snapshot.source),
+        fetchedAt: snapshot.takenAt,
+        synthetic: false,
+      },
+    };
+    current = {
+      ...current,
+      boutViews: {
+        ...current.boutViews,
+        [snapshot.boutId]: {
+          ...view,
+          preFightOdds: { ...view.preFightOdds, [market]: opening },
+        },
+      },
+    };
+  }
+  return current;
+}
+
 function replaceBout(
   dashboard: DashboardState,
   boutId: string,
@@ -1548,8 +1634,12 @@ export function createCollectorClient(
             dashboardWithRounds,
             bootstrap.lifecycleObservations,
           );
-    const { dashboard, deliveries } = applyMarketUpdates(
+    const dashboardWithPreFightOdds = applyPreFightMarketSnapshots(
       dashboardWithLifecycle,
+      bootstrap.marketSnapshots,
+    );
+    const { dashboard, deliveries } = applyMarketUpdates(
+      dashboardWithPreFightOdds,
       bootstrap.latestMarkets,
       "seed",
     );
@@ -1693,6 +1783,15 @@ export function createCollectorClient(
     if (value.kind === "market-snapshot") {
       const record = parseMarketSnapshot(value.snapshot);
       if (record === null) return;
+      if (record.boundaryType === "pre-fight") {
+        publish({
+          ...snapshot,
+          connection: "connected",
+          dashboard: applyPreFightMarketSnapshots(snapshot.dashboard, [record]),
+          lastReceivedAt: receivedAt,
+        });
+        return;
+      }
       const field = marketAtEndField(record.source);
       const unifiedRounds = snapshot.unifiedRounds.map((round) =>
         round.boutId === record.boutId && round.round === record.round

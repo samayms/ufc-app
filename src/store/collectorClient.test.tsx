@@ -575,6 +575,63 @@ describe("collector browser client", () => {
     client.close();
   });
 
+  it("hydrates durable pre-fight snapshots separately from live odds", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [],
+          marketSnapshots: [
+            {
+              source: "kalshi",
+              boutId: "bout-main",
+              round: 0,
+              boundaryType: "pre-fight",
+              label: "pre-fight-open",
+              takenAt: "2026-07-28T00:59:59Z",
+              fresh: true,
+              outcomes: [
+                {
+                  outcome: "Danilo Reyes",
+                  marketType: "fight-winner",
+                  midpoint: 61,
+                  impliedProbability: 0.61,
+                  receivedAt: "2026-07-28T00:59:59Z",
+                  stale: false,
+                },
+                {
+                  outcome: "Artem Volkov",
+                  marketType: "fight-winner",
+                  midpoint: 39,
+                  impliedProbability: 0.39,
+                  receivedAt: "2026-07-28T00:59:59Z",
+                  stale: false,
+                },
+              ],
+            },
+          ],
+          latestMarkets: [],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+
+    await client.start();
+    const opening = client.getSnapshot().dashboard?.boutViews["bout-main"]
+      ?.preFightOdds.kalshi;
+    expect(opening?.quotes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ corner: "red", impliedProbability: 0.61 }),
+        expect.objectContaining({ corner: "blue", impliedProbability: 0.39 }),
+      ]),
+    );
+    expect(opening?.marketUpdatedAt).toBe("2026-07-28T00:59:59Z");
+    client.close();
+  });
+
   it("applies a market-tick SSE event to the right latest odds entry, appends history, and propagates staleness", async () => {
     const fixture = await assembleDashboard();
     const client = createCollectorClient({
