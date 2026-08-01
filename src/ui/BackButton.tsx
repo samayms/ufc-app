@@ -20,12 +20,12 @@ export function BackButton({
     <Button
       type="button"
       variant="ghost"
-      size={label ? "sm" : "icon-sm"}
+      size={label ? "default" : "icon"}
       onClick={onClick}
       aria-label={label ?? "Back"}
       className={`gap-1.5 px-2 text-foreground/80 hover:text-foreground${className ? ` ${className}` : ""}`}
     >
-      <ChevronLeft aria-hidden="true" className="size-4" />
+      <ChevronLeft aria-hidden="true" className="size-6" strokeWidth={2.5} />
       {label && <span>{label}</span>}
     </Button>
   );
