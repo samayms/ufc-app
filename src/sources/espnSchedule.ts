@@ -1008,7 +1008,9 @@ async function fetchJsonWithLimits(
 const DEFAULT_TTL_MS = 5 * 60_000;
 /** Covers a card that began before midnight UTC and is still in progress. */
 const SCHEDULE_LOOKBACK_DAYS = 1;
-const SCHEDULE_WINDOW_DAYS = 365;
+// With the one-day lookback, +364 keeps the inclusive ESPN `dates` range at
+// its verified 366-calendar-day maximum (yesterday through 364 days ahead).
+const SCHEDULE_WINDOW_DAYS = 364;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCHEDULE_REQUEST_TIMEOUT_MS = 8_000;
 const SCHEDULE_MAX_RESPONSE_BYTES = 4_000_000;
@@ -1083,9 +1085,9 @@ export function createEspnScheduleSource(options?: {
 
   async function fetchEventList(): Promise<EspnScheduledEventSummary[]> {
     const current = now();
-    // Preserve the 365-day future horizon while looking back one bounded day
-    // for an in-progress card that crossed a UTC midnight before restart.
-    // The 366-day query span remains inside ESPN's documented cap.
+    // Look back one bounded day for an in-progress card that crossed a UTC
+    // midnight before restart while staying inside ESPN's inclusive
+    // 366-calendar-day cap.
     const start = new Date(
       current.getTime() - SCHEDULE_LOOKBACK_DAYS * DAY_MS,
     );

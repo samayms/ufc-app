@@ -678,7 +678,7 @@ describe("createEspnScheduleSource", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it("requests a one-day lookback while preserving the 365-day future window", async () => {
+  it("requests a one-day lookback within ESPN's inclusive 366-day cap", async () => {
     const currentTime = new Date("2026-07-28T00:00:00Z");
     const fetchImpl = vi.fn(async () => jsonResponse(scoreboardFixture));
     const source = createEspnScheduleSource({
@@ -690,7 +690,7 @@ describe("createEspnScheduleSource", () => {
 
     const expectedUrl = buildEspnScheduleUrl(
       new Date(currentTime.getTime() - 24 * 60 * 60 * 1_000),
-      new Date(currentTime.getTime() + 365 * 24 * 60 * 60 * 1000),
+      new Date(currentTime.getTime() + 364 * 24 * 60 * 60 * 1000),
     );
     expect(fetchImpl).toHaveBeenCalledWith(expectedUrl, expect.anything());
   });
