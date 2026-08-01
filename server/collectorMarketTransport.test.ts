@@ -85,6 +85,7 @@ describe("collector market transport wiring", () => {
     expect(capture).toHaveBeenCalledWith(
       "bout-4",
       expect.any(String),
+      undefined,
     );
     await expect(
       collector.tickStore.getTickHistory("bout-4", "odds-api-io"),

@@ -1406,9 +1406,22 @@ export async function createCollector(
       const refreshedAt = refresh
         ? await initializedOddsApiIoPoller.refreshPendingBout(boutId)
         : undefined;
+      const relevantStreams = marketTransports.filter((transport) =>
+        transport.subscriptions.some((subscription) => subscription.boutId === boutId),
+      );
+      const readySources = (
+        await Promise.all(
+          relevantStreams.map(async (transport) =>
+            (await transport.waitUntilReady(2_500)) ? transport.source : undefined,
+          ),
+        )
+      ).filter((source): source is "kalshi" | "polymarket" => source !== undefined);
       await initializedTickStore.snapshotPreFight(
         boutId,
         refreshedAt ?? takenAt,
+        relevantStreams.length === 0
+          ? undefined
+          : ["odds-api-io", "the-odds-api", ...readySources],
       );
     })().catch(() => undefined);
   };

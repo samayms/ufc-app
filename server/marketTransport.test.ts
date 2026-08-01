@@ -197,6 +197,7 @@ describe("SupervisedMarketTransport", () => {
     sockets[0]!.open();
     await transport.idle();
     expect(sockets[0]!.sent).toEqual(["SUBSCRIBE"]);
+    const ready = transport.waitUntilReady(1_000);
 
     sockets[0]!.message({
       kind: "delta",
@@ -240,6 +241,7 @@ describe("SupervisedMarketTransport", () => {
     });
     await transport.idle();
     expect(calls.at(-1)).toBe("fresh");
+    await expect(ready).resolves.toBe(true);
 
     sockets[0]!.remoteClose();
     expect(store.markStale).toHaveBeenCalled();

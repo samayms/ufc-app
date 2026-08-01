@@ -1001,6 +1001,7 @@ export class MarketTickStore implements TickHistorySource {
   snapshotPreFight(
     boutId: string,
     takenAt: string,
+    sources?: readonly MarketSource[],
   ): Promise<readonly MarketSnapshot[]> {
     let result: readonly MarketSnapshot[] = [];
     const operation = this.enqueue(async () => {
@@ -1012,6 +1013,7 @@ export class MarketTickStore implements TickHistorySource {
         takenAt,
         undefined,
         "pre-fight-open",
+        sources,
       );
     });
     return operation.then(() => result);
@@ -1214,6 +1216,7 @@ export class MarketTickStore implements TickHistorySource {
     takenAt: string,
     sourceFilter?: MarketSource,
     label?: MarketSnapshotLabel,
+    sourceAllowlist?: readonly MarketSource[],
   ): Promise<readonly MarketSnapshot[]> {
     const isPreFight = boundaryType === "pre-fight";
     if (
@@ -1248,6 +1251,9 @@ export class MarketTickStore implements TickHistorySource {
     const changed: MarketSnapshot[] = [];
     for (const [source, sourceStates] of bySource) {
       if (sourceFilter !== undefined && source !== sourceFilter) continue;
+      if (sourceAllowlist !== undefined && !sourceAllowlist.includes(source)) {
+        continue;
+      }
       const freshAtBoundary = sourceFreshAt(
         this.freshnessHistory,
         source,

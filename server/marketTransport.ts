@@ -62,6 +62,8 @@ export interface MarketTransport {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   idle(): Promise<void>;
+  /** Resolves once the current subscription set has rebuilt from full books. */
+  waitUntilReady(timeoutMs: number): Promise<boolean>;
   setSubscriptions(subscriptions: readonly MarketSubscription[]): void;
   on(listener: MarketTransportListener): () => void;
 }
@@ -343,6 +345,8 @@ export class SupervisedMarketTransport implements MarketTransport {
 
   private buffered = new Map<string, NormalizedTransportMessage[]>();
 
+  private readonly readyWaiters = new Set<(ready: boolean) => void>();
+
   private messageQueue: Promise<void> = Promise.resolve();
 
   constructor(options: SupervisedMarketTransportOptions) {
@@ -458,6 +462,23 @@ export class SupervisedMarketTransport implements MarketTransport {
       await Promise.resolve();
       if (queue === this.messageQueue) return;
     }
+  }
+
+  waitUntilReady(timeoutMs: number): Promise<boolean> {
+    if (this.connectedState) return Promise.resolve(true);
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
+      throw new TypeError("timeoutMs must be a non-negative finite number");
+    }
+    return new Promise((resolve) => {
+      const finish = (ready: boolean): void => {
+        this.readyWaiters.delete(onReady);
+        globalThis.clearTimeout(timeout);
+        resolve(ready);
+      };
+      const onReady = (): void => finish(true);
+      const timeout = globalThis.setTimeout(() => finish(false), timeoutMs);
+      this.readyWaiters.add(onReady);
+    });
   }
 
   protected onConnected(_socket: MarketSocket): void {
@@ -643,6 +664,8 @@ export class SupervisedMarketTransport implements MarketTransport {
     this.reconnectAttempt = 0;
     this.connectedState = true;
     await this.tickStore.markFresh(this.source, this.nowIso());
+    for (const resolve of this.readyWaiters) resolve(true);
+    this.readyWaiters.clear();
   }
 
   private async handleClose(
@@ -830,6 +853,10 @@ export abstract class FixtureReplayTransport
 
   async idle(): Promise<void> {
     await Promise.resolve();
+  }
+
+  async waitUntilReady(_timeoutMs: number): Promise<boolean> {
+    return this.connected;
   }
 
   async replay(): Promise<void> {
