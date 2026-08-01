@@ -49,16 +49,35 @@ import {
 import type { ProbeDescriptor, ProbeResult } from "./contract.ts";
 import { redactSecrets } from "./contract.ts";
 
-/** The weekend card, as each vendor names it. Verified live 2026-07-30. */
+/**
+ * The weekend card, as each vendor names it. Cito bout ids re-verified live
+ * 2026-08-01 against `GET ufc/events/{slug}/bouts` — see below, they are NOT
+ * static and drift as the card progresses.
+ */
 export const WEEKEND = {
   espnEventId: "600059339",
   citoEventSlug: "ufc-fight-night-august-01-2026",
-  /** Main Card 1 on Saturday's card — a Cito bout id with no stats yet. */
-  citoBoutId: "12879",
   /**
-   * A completed bout whose round stats ARE populated. Use it to prove the
-   * parser works before the card starts, so a silent round on Saturday is
-   * unambiguously Cito being late rather than our parse being wrong.
+   * Prelims 7, Poppeck vs. Leka — completed, round 1, KO/TKO. As of
+   * 2026-08-01 ~14:40 UTC (well after the finish), `GET
+   * ufc/bouts/12996/stats?round=1` still returns
+   * `{"boutStats":[],"roundStats":[],"availability":"pending_stat_enrichment"}`.
+   * `GET ufc/live/health` for this event shows `ok:false`,
+   * `degradedReason:"worker_heartbeat_stale"`, and the currently-armed live
+   * bout (12927) is `degradedReason:"source_no_live_clock"` — Cito's own
+   * worker is behind, not our request/parsing. A blank result here is
+   * expected right now; it stops being expected once their health probe
+   * reports `ok:true` again. Re-run `ufc/events/{slug}/bouts` to get the
+   * current bout id for whichever fight just ended before re-testing —
+   * these ids are stable per-bout but the "which one just finished" answer
+   * obviously isn't.
+   */
+  citoBoutId: "12996",
+  /**
+   * A completed bout (different card) whose round stats ARE populated. Use
+   * it to prove the parser and request path work — if this one comes back
+   * empty too, stop blaming Cito's enrichment lag and go check the request
+   * itself (API key, base URL, endpoint shape).
    */
   citoEnrichedBoutId: "9009ec7b91f2be14",
 } as const;
