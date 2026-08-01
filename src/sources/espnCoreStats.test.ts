@@ -17,8 +17,8 @@ describe("ESPN core cumulative stats", () => {
   it("handles captured control, submissions, and target component names", () => {
     const payload = { splits: { categories: [{ stats: [
       { name: "timeInControl", value: 74 }, { name: "submissions", value: 2 },
-      { name: "headStrikesLandedDistance", value: 3 }, { name: "headStrikesLandedClinch", value: 2 }, { name: "headStrikesLandedGround", value: 1 },
-      { name: "headStrikesAttemptedDistance", value: 7 }, { name: "headStrikesAttemptedClinch", value: 4 }, { name: "headStrikesAttemptedGround", value: 2 },
+      { name: "sigDistanceHeadStrikesLanded", value: 3 }, { name: "sigClinchHeadStrikesLanded", value: 2 }, { name: "sigGroundHeadStrikesLanded", value: 1 },
+      { name: "sigDistanceHeadStrikesAttempted", value: 7 }, { name: "sigClinchHeadStrikesAttempted", value: 4 }, { name: "sigGroundHeadStrikesAttempted", value: 2 },
       { name: "bodyStrikesLanded", value: 9 }, { name: "bodyStrikesLandedDistance", value: 1 },
     ] }] } };
     expect(parseEspnCoreCumulativeStats(payload)).toMatchObject({ controlTimeSeconds: 74, submissionsAttempted: 2, headStrikesLanded: 6, headStrikesAttempted: 13, bodyStrikesLanded: 9 });

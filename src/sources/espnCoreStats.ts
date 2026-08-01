@@ -43,7 +43,17 @@ export function parseEspnCoreCumulativeStats(payload: unknown): EspnCumulativeSt
     // ESPN's core response sometimes splits target totals across distance,
     // clinch, and ground rather than supplying a Head/Body/Leg aggregate.
     const component = /^(head|body|leg)strikes(?:(landed|attempted)(distance|clinch|ground)|(distance|clinch|ground)(landed|attempted))$/.exec(name);
-    if (component !== null) {
+    const capturedComponent =
+      /^sig(distance|clinch|ground)(head|body|leg)strikes(landed|attempted)$/.exec(
+        name,
+      );
+    if (capturedComponent !== null) {
+      const target = `${capturedComponent[2]}Strikes${capturedComponent[3]![0]!.toUpperCase()}${capturedComponent[3]!.slice(1)}` as keyof EspnCumulativeStats;
+      components.set(
+        target,
+        (components.get(target) ?? 0) + number(stat.value),
+      );
+    } else if (component !== null) {
       const outcome = component[2] ?? component[5];
       const target = `${component[1]}Strikes${outcome![0]!.toUpperCase()}${outcome!.slice(1)}` as keyof EspnCumulativeStats;
       components.set(target, (components.get(target) ?? 0) + number(stat.value));
