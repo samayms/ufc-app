@@ -266,7 +266,7 @@ export function loadConfig(
       ),
     },
     pollingMs: {
-      espn: parsePositiveInteger(env, "POLL_ESPN_MS", 5_000),
+      espn: parsePositiveInteger(env, "POLL_ESPN_MS", 2_500),
       cito: parsePositiveInteger(env, "POLL_CITO_MS", 15_000),
       oddsApiIo: parsePositiveInteger(
         env,

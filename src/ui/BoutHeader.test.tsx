@@ -1,11 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { interpolateClockSeconds } from "../store/collectorClient.ts";
 import { loadFixtureEvent } from "../store/fixtureEvent.ts";
-import {
-  BoutHeader,
-  formatFightClock,
-  interpolateClockSeconds,
-} from "./BoutHeader.tsx";
+import { BoutHeader, formatFightClock } from "./BoutHeader.tsx";
 
 describe("BoutHeader live clock", () => {
   it("counts down from the latest source value and clamps at zero", () => {

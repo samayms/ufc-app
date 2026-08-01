@@ -43,7 +43,7 @@ import {
 } from "./espnStats.ts";
 import type { LabTimeline } from "./timeline.ts";
 
-const DEFAULT_ESPN_INTERVAL_MS = 5_000;
+const DEFAULT_ESPN_INTERVAL_MS = 2_500;
 const DEFAULT_CITO_INTERVAL_MS = 5_000;
 const DEFAULT_KALSHI_INTERVAL_MS = 5_000;
 const DEFAULT_SHERDOG_INTERVAL_MS = 20_000;
