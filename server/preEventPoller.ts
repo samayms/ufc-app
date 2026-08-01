@@ -346,6 +346,13 @@ export class PreEventPoller {
     this.suspended = hasActiveBout(this.getLifecycleStates?.());
     const nextAt = this.nextScheduledAt(this.clock.now());
     if (this.suspended) {
+      // A fresh install or a lost ephemeral cache still needs one discovery
+      // pass so the active collector can obtain provider ids. Keep the normal
+      // no-pulls-during-fights rule once any successful snapshot exists.
+      if (this.lastSuccessAt === undefined) {
+        await this.runOnce();
+        return;
+      }
       if (nextAt <= this.clock.now()) this.skippedSuspendedSlot = true;
       return;
     }
@@ -429,6 +436,7 @@ export class PreEventPoller {
         const now = this.clock.now();
         if (
           !this.skippedSuspendedSlot &&
+          this.lastSuccessAt !== undefined &&
           this.nextScheduledAt(now) <= now
         ) {
           // A timer is cleared as soon as a bout starts. If the cleared slot

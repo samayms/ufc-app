@@ -274,10 +274,17 @@ describe("PreEventPoller", () => {
   it("suspends on active bouts, skips a due slot, and resumes after fight end", async () => {
     const time = new ManualTime();
     const bus = new CollectorEventBus();
+    const storage = new MemoryStorage();
+    await storage.append(PRE_EVENT_POLL_STORAGE_STREAM, {
+      version: 1,
+      completedAt: BASE_TIME,
+      intervalMs: PRE_EVENT_INTERVAL_NON_EVENT_DAY_MS,
+      mode: "non-event-day",
+    });
     let active = true;
     let calls = 0;
     const poller = new PreEventPoller(
-      pollerOptions(time, undefined, {
+      pollerOptions(time, storage, {
         eventBus: bus,
         getLifecycleStates: () =>
           active
@@ -321,7 +328,7 @@ describe("PreEventPoller", () => {
     await poller.close();
   });
 
-  it("starts suspended after restoring an active lifecycle state", async () => {
+  it("bootstraps once while active when no successful snapshot exists", async () => {
     const time = new ManualTime();
     let calls = 0;
     const poller = new PreEventPoller(
@@ -338,6 +345,37 @@ describe("PreEventPoller", () => {
         },
       }),
     );
+    await poller.start();
+    expect(poller.isSuspended()).toBe(true);
+    expect(calls).toBe(1);
+    await poller.close();
+  });
+
+  it("does not pull while active when a successful snapshot was restored", async () => {
+    const time = new ManualTime();
+    const storage = new MemoryStorage();
+    await storage.append(PRE_EVENT_POLL_STORAGE_STREAM, {
+      version: 1,
+      completedAt: BASE_TIME - 60_000,
+      intervalMs: PRE_EVENT_INTERVAL_NON_EVENT_DAY_MS,
+      mode: "non-event-day",
+    });
+    let calls = 0;
+    const poller = new PreEventPoller(
+      pollerOptions(time, storage, {
+        getLifecycleStates: () => [{
+          boutId: "bout-1",
+          state: "in",
+          period: 1,
+          completed: false,
+          receivedAt: new Date(time.now()).toISOString(),
+        }],
+        runSync: async () => {
+          calls += 1;
+        },
+      }),
+    );
+
     await poller.start();
     expect(poller.isSuspended()).toBe(true);
     expect(calls).toBe(0);
