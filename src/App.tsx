@@ -6,6 +6,7 @@ import { BoutHeader } from "./ui/BoutHeader.tsx";
 import { CardRail } from "./ui/CardRail.tsx";
 import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
+import { useSwipeBack } from "./hooks/useSwipeBack.ts";
 import { LiveStatsPanel } from "./ui/LiveStatsPanel.tsx";
 import { LoadingSplash } from "./ui/LoadingSplash.tsx";
 import { withoutSportsbookOnEventDay } from "./lib/marketPriority.ts";
@@ -186,6 +187,15 @@ export default function App() {
   const backToEventList = () => {
     setScheduleSelection(null);
   };
+
+  const activeBackHandler =
+    tab === "fight"
+      ? backToEventFromFight
+      : tab === "event" && scheduleSelection !== null
+        ? backToEventList
+        : undefined;
+
+  useSwipeBack(mainContentRef, activeBackHandler);
 
   // Bottom nav is the only "start fresh" entry point — clears any
   // drill-down/back-arrow state left over from the Event tab.
