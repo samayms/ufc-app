@@ -99,16 +99,33 @@
  * hair taller than the visual viewport (dvh/vh rounding, the address-bar
  * show/hide transition) and become scrollable themselves, which drags the
  * whole .app — including the fixed top bar and bottom nav — with it on an
- * iOS rubber-band pull instead of just bouncing the inner content. */
-html,
-body,
-#root {
+ * iOS rubber-band pull instead of just bouncing the inner content.
+ *
+ * body uses `position: fixed; inset: 0` rather than `height: 100%` —
+ * percentage heights on html/body resolve against iOS Safari's *layout*
+ * viewport, which can disagree with the *visual* viewport .app's own
+ * `100dvh` tracks (most visibly while the address bar is animating in/out).
+ * A mismatch there, combined with `overflow: hidden`, silently clips
+ * whatever falls outside body's box — in practice the bottom nav, since
+ * it's the last child in .app's column. `position: fixed; inset: 0` pins
+ * body to the true visual viewport instead, so it can never disagree with
+ * .app's own sizing. */
+html {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
 }
 
+#root {
+  height: 100%;
+}
+
 body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
   margin: 0;
   background: var(--bg);
   color: var(--text);

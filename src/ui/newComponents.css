@@ -211,6 +211,14 @@
 }
 
 .event-card-center-result {
+  /* Fills .event-card-center's full fixed width rather than shrinking to
+   * its own content — .event-card-center's `align-items: center` would
+   * otherwise size this to its content and center *that whole block*,
+   * so a wider status label ("KO/TKO · R1") pushed both slots outward
+   * from a narrower one ("vs") even though the grid tracks below are
+   * individually fixed-width. Stretching this to 100% first is what
+   * actually pins the slots to .event-card-center's own edges. */
+  width: 100%;
   display: grid;
   grid-template-columns: 7px minmax(0, 1fr) 7px;
   column-gap: 3px;
