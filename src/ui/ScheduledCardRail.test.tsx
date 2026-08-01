@@ -194,10 +194,10 @@ describe("ScheduledCardRail", () => {
     expect(markup).toContain("tot-winner-arrow-blue");
     expect(markup).toContain('aria-label="Winning Blue won"');
     expect(markup).toMatch(
-      /tot-winner-arrow-red event-card-winner-arrow[^>]*><\/span><span class="chip chip-final">KO\/TKO · R1<\/span>/,
+      /tot-winner-arrow-red event-card-winner-arrow[^>]*><\/span><\/span><span class="chip chip-final">KO\/TKO · R1<\/span>/,
     );
     expect(markup).toMatch(
-      /<span class="chip chip-final">SUB · R2<\/span><span class="tot-winner-arrow tot-winner-arrow-blue event-card-winner-arrow"/,
+      /<span class="chip chip-final">SUB · R2<\/span><span class="event-card-arrow-slot event-card-arrow-slot-right"><span class="tot-winner-arrow tot-winner-arrow-blue event-card-winner-arrow"/,
     );
     expect(markup).not.toContain(">UPCOMING<");
   });

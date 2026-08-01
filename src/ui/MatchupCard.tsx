@@ -235,21 +235,25 @@ export function MatchupCard({
         <MatchupFighter fighter={red} corner="red" isLoser={redIsLoser} />
         <span className="event-card-center">
           <span className="event-card-center-result">
-            {winnerCorner === "red" && (
-              <span
-                className="tot-winner-arrow tot-winner-arrow-red event-card-winner-arrow"
-                role="img"
-                aria-label={`${red?.name ?? "Red corner"} won`}
-              />
-            )}
+            <span className="event-card-arrow-slot event-card-arrow-slot-left">
+              {winnerCorner === "red" && (
+                <span
+                  className="tot-winner-arrow tot-winner-arrow-red event-card-winner-arrow"
+                  role="img"
+                  aria-label={`${red?.name ?? "Red corner"} won`}
+                />
+              )}
+            </span>
             {center}
-            {winnerCorner === "blue" && (
-              <span
-                className="tot-winner-arrow tot-winner-arrow-blue event-card-winner-arrow"
-                role="img"
-                aria-label={`${blue?.name ?? "Blue corner"} won`}
-              />
-            )}
+            <span className="event-card-arrow-slot event-card-arrow-slot-right">
+              {winnerCorner === "blue" && (
+                <span
+                  className="tot-winner-arrow tot-winner-arrow-blue event-card-winner-arrow"
+                  role="img"
+                  aria-label={`${blue?.name ?? "Blue corner"} won`}
+                />
+              )}
+            </span>
           </span>
           {centerDetail}
         </span>
