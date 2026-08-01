@@ -70,6 +70,11 @@ export function LiveOddsSection({
   );
 }
 
+function screenDepth(key: string): number {
+  if (key === "event:list" || key === "data") return 0;
+  return 1;
+}
+
 export default function App() {
   const dashboard = useDashboard();
   const state = dashboard.data;
@@ -170,11 +175,6 @@ export default function App() {
       : tab === "fight"
         ? `fight:${selectedFutureFight?.competitionId ?? selected ?? "current"}`
         : "data";
-
-  const screenDepth = (key: string): number => {
-    if (key === "event:list" || key === "data") return 0;
-    return 1;
-  };
 
   const previousScreenKeyRef = useRef<string | null>(null);
   const screenDirection = directionBetween(

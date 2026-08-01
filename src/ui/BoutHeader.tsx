@@ -136,11 +136,7 @@ function CenterStatus({
     const winnerCorner =
       winner === "red" || winner === "blue" ? winner : undefined;
     const arrowSlot = winnerCorner && (
-      <span
-        className={`tot-method-arrow-slot tot-method-arrow-slot-${
-          winnerCorner === "red" ? "left" : "right"
-        }`}
-      >
+      <span className="tot-method-arrow-slot">
         <span
           className={`tot-winner-arrow tot-winner-arrow-${winnerCorner}`}
           role="img"

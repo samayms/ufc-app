@@ -15,10 +15,14 @@ export function useSwipeBack(
   onBack: (() => void) | undefined,
 ): void {
   const startRef = useRef<SwipePoint | null>(null);
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+
+  const hasBack = Boolean(onBack);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el || !onBack) return;
+    if (!el || !hasBack) return;
 
     const handleTouchStart = (e: TouchEvent) => {
       const touch = e.touches[0];
@@ -34,7 +38,7 @@ export function useSwipeBack(
       if (!touch) return;
       const end = { x: touch.clientX, y: touch.clientY };
       if (isBackSwipe(start, end, el.clientWidth, DEFAULT_SWIPE_CONFIG)) {
-        onBack();
+        onBackRef.current?.();
       }
     };
 
@@ -44,5 +48,5 @@ export function useSwipeBack(
       el.removeEventListener("touchstart", handleTouchStart);
       el.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [ref, onBack]);
+  }, [ref, hasBack]);
 }

@@ -5,7 +5,7 @@ import "./skeleton.css";
  * through `className` — this component contributes only the shimmer
  * animation, matching the reserved-slot pattern used elsewhere in src/ui.
  */
-export function Skeleton({ className }: { className?: string }): JSX.Element {
+export function Skeleton({ className }: { className?: string }) {
   return (
     <span
       className={`skeleton${className ? ` ${className}` : ""}`}
@@ -21,7 +21,7 @@ export function SkeletonRows({
 }: {
   count: number;
   className?: string;
-}): JSX.Element {
+}) {
   return (
     <>
       {Array.from({ length: count }, (_, i) => (
