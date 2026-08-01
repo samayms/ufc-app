@@ -763,26 +763,22 @@ export function interpolateClockSeconds(
 /**
  * ESPN (and Cito) only actually change their reported round clock every so
  * often — far less often than we poll. Replacing the stored sync on every
- * poll regardless would reset the interpolation baseline each time and make
- * the on-screen countdown visibly stutter back up to the same stale number
- * instead of smoothly ticking down between real updates.
+ * poll regardless would make the on-screen countdown visibly stutter back
+ * up to the same stale number instead of smoothly ticking down between
+ * real updates.
  *
  * A new observation is adopted as the fresh sync point only when it reports
  * the round/fight as over in some capacity (state changed away from "in",
  * `completed` flipped true, or the round number advanced — always
- * authoritative) or when its clock is at or behind what our own countdown
- * would show at the moment it arrived (the source has caught up to, or
- * past, where we already are — the normal case when it's ticking in step
- * with real time). It's only rejected when the source reports a clock
- * *ahead* of where we've already counted down to: the same stale value
- * repeated across polls while our own countdown has moved past it.
- * Otherwise the existing sync is kept as-is and the local clock just keeps
- * counting down.
+ * authoritative) or when its clock is strictly less than the *previous
+ * poll's* reported clock — a genuine tick forward in time, compared
+ * directly against what the source itself last said, not against our own
+ * interpolated countdown. Otherwise the existing sync is kept as-is and
+ * the local clock just keeps counting down.
  */
 export function shouldAdoptClockSync(
   existing: CollectorClockSync | undefined,
   candidate: CollectorClockSync,
-  candidateReceivedAtMs: number,
 ): boolean {
   if (existing === undefined) return true;
   if (
@@ -795,14 +791,7 @@ export function shouldAdoptClockSync(
   if (candidate.clockSeconds === undefined) return false;
   if (existing.clockSeconds === undefined) return true;
 
-  const interpolatedExisting = interpolateClockSeconds(
-    existing,
-    candidateReceivedAtMs,
-  );
-  return (
-    interpolatedExisting === undefined ||
-    candidate.clockSeconds <= interpolatedExisting
-  );
+  return candidate.clockSeconds < existing.clockSeconds;
 }
 
 function clockSyncs(
@@ -811,7 +800,6 @@ function clockSyncs(
   current: Readonly<Record<string, CollectorClockSync>> = {},
 ): Record<string, CollectorClockSync> {
   const next = { ...current };
-  const receivedAtMs = Date.parse(receivedAt);
   for (const observation of observations) {
     const candidate: CollectorClockSync = {
       boutId: observation.boutId,
@@ -825,9 +813,7 @@ function clockSyncs(
       sourceReceivedAt: observation.receivedAt,
       receivedAt,
     };
-    if (
-      shouldAdoptClockSync(next[observation.boutId], candidate, receivedAtMs)
-    ) {
+    if (shouldAdoptClockSync(next[observation.boutId], candidate)) {
       next[observation.boutId] = candidate;
     }
   }

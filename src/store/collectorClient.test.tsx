@@ -678,54 +678,44 @@ describe("shouldAdoptClockSync", () => {
   }
 
   it("always adopts when there is no existing sync yet", () => {
-    expect(
-      shouldAdoptClockSync(undefined, sync(), Date.parse("2026-08-01T00:00:00Z")),
-    ).toBe(true);
+    expect(shouldAdoptClockSync(undefined, sync())).toBe(true);
   });
 
-  it("ignores a same-round update that is not behind our own countdown", () => {
-    const existing = sync({ clockSeconds: 200, receivedAt: "2026-08-01T00:00:00Z" });
-    // 10s have passed locally, so our countdown reads 190 by now — ESPN
-    // reporting 195 (still ahead of our countdown) means it hasn't ticked.
-    const candidate = sync({ clockSeconds: 195, receivedAt: "2026-08-01T00:00:10Z" });
-    expect(
-      shouldAdoptClockSync(existing, candidate, Date.parse("2026-08-01T00:00:10Z")),
-    ).toBe(false);
+  it("ignores a same-round poll that repeats or exceeds the previous poll's clock", () => {
+    const existing = sync({ clockSeconds: 200 });
+    expect(shouldAdoptClockSync(existing, sync({ clockSeconds: 200 }))).toBe(
+      false,
+    );
+    expect(shouldAdoptClockSync(existing, sync({ clockSeconds: 205 }))).toBe(
+      false,
+    );
   });
 
-  it("adopts a same-round update once ESPN's clock is behind our countdown", () => {
-    const existing = sync({ clockSeconds: 200, receivedAt: "2026-08-01T00:00:00Z" });
-    // Our countdown reads 190 at t+10s; ESPN reporting 188 has caught up.
-    const candidate = sync({ clockSeconds: 188, receivedAt: "2026-08-01T00:00:10Z" });
-    expect(
-      shouldAdoptClockSync(existing, candidate, Date.parse("2026-08-01T00:00:10Z")),
-    ).toBe(true);
+  it("adopts a same-round poll once it's strictly less than the previous poll", () => {
+    const existing = sync({ clockSeconds: 200 });
+    const candidate = sync({ clockSeconds: 195 });
+    expect(shouldAdoptClockSync(existing, candidate)).toBe(true);
   });
 
   it("always adopts once the round or fight is reported over, regardless of the clock", () => {
-    const existing = sync({ clockSeconds: 200, receivedAt: "2026-08-01T00:00:00Z" });
+    const existing = sync({ clockSeconds: 200 });
     const roundOver = sync({ state: "post", clockSeconds: 999 });
     const completed = sync({ completed: true, clockSeconds: 999 });
     const nextRound = sync({ period: 2, clockSeconds: 999 });
-    const now = Date.parse("2026-08-01T00:00:01Z");
-    expect(shouldAdoptClockSync(existing, roundOver, now)).toBe(true);
-    expect(shouldAdoptClockSync(existing, completed, now)).toBe(true);
-    expect(shouldAdoptClockSync(existing, nextRound, now)).toBe(true);
+    expect(shouldAdoptClockSync(existing, roundOver)).toBe(true);
+    expect(shouldAdoptClockSync(existing, completed)).toBe(true);
+    expect(shouldAdoptClockSync(existing, nextRound)).toBe(true);
   });
 
   it("does not adopt a same-round update with no clock reading", () => {
     const existing = sync({ clockSeconds: 200 });
     const candidate = sync({ clockSeconds: undefined });
-    expect(
-      shouldAdoptClockSync(existing, candidate, Date.parse("2026-08-01T00:00:05Z")),
-    ).toBe(false);
+    expect(shouldAdoptClockSync(existing, candidate)).toBe(false);
   });
 
   it("adopts the first real clock reading when the existing sync had none", () => {
     const existing = sync({ clockSeconds: undefined });
     const candidate = sync({ clockSeconds: 150 });
-    expect(
-      shouldAdoptClockSync(existing, candidate, Date.parse("2026-08-01T00:00:05Z")),
-    ).toBe(true);
+    expect(shouldAdoptClockSync(existing, candidate)).toBe(true);
   });
 });
