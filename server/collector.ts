@@ -8,8 +8,8 @@ import { pathToFileURL } from "node:url";
 import type {
   BoutView,
   DashboardState,
+  ExternalRef,
   OddsSnapshot,
-  ScorecardAccount,
   SourceId,
 } from "../src/schema.ts";
 import {
@@ -23,19 +23,28 @@ import { createEspnSource } from "../src/sources/espn.ts";
 import { createKalshiSource } from "../src/sources/kalshi.ts";
 import {
   createOddsApiSource,
+  createTheOddsApiLiveHook,
+  type TheOddsApiLiveHook,
   type TheOddsApiSource,
 } from "../src/sources/oddsapi.ts";
 import {
+  createOddsApiIoLiveHook,
   createOddsApiIoSource,
+  type OddsApiIoLiveHook,
   type OddsApiIoSource,
 } from "../src/sources/oddsApiIo.ts";
 import { createPolymarketSource } from "../src/sources/polymarket.ts";
 import { createSherdogSource } from "../src/sources/sherdog.ts";
 import {
-  createXSource,
-  type XApiFetcher,
-  type XScoreSource,
-} from "../src/sources/x.ts";
+  createDisabledSummarizer,
+  createLiveGeminiSummarizer,
+  type RoundSummarizer,
+} from "./geminiSummarizer.ts";
+import {
+  createLiveCitoDiscoveryTransport,
+  discoverCitoBouts,
+  type CitoDiscoveryTransport,
+} from "./citoDiscovery.ts";
 import { marketMovesForBout } from "../src/lib/oddsMath.ts";
 import { loadFixtureEvent } from "../src/store/fixtureEvent.ts";
 import {
@@ -55,7 +64,10 @@ import {
   type MetricsSnapshot,
   type SourceHealth,
 } from "./health.ts";
-import { FightLifecycleMachine } from "./lifecycle.ts";
+import {
+  FightLifecycleMachine,
+  type FightLifecycleObservation,
+} from "./lifecycle.ts";
 import {
   createFixtureLifecycleProvider,
   createLiveCitoLifecycleProvider,
@@ -65,6 +77,10 @@ import {
   type LifecycleDriverTimer,
   type LifecycleObservationProvider,
 } from "./lifecycleDriver.ts";
+import {
+  PreEventPoller,
+  type PreEventPollerOptions,
+} from "./preEventPoller.ts";
 import {
   createBoutMappingRegistry,
   type BoutMapping,
@@ -95,9 +111,10 @@ import {
 } from "./push.ts";
 import { ReviewRegistry } from "./review.ts";
 import type { QuotaPolicy } from "./quota.ts";
-import type {
-  RoundJobClock,
-  RoundJobTimer,
+import {
+  TerminalRoundJobError,
+  type RoundJobClock,
+  type RoundJobTimer,
 } from "./roundJobs.ts";
 import {
   RoundStatsPipeline,
@@ -105,6 +122,7 @@ import {
 } from "./roundStats.ts";
 import {
   createFixtureSherdogFetcher,
+  createLiveSherdogFetcher,
   SherdogRoundJobs,
   type SherdogFetcher,
 } from "./sherdogJobs.ts";
@@ -112,6 +130,9 @@ import {
   JsonlStorage,
   type Storage,
 } from "./storage.ts";
+import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
+import { loadLiveEventState } from "./liveEventState.ts";
+import { TheOddsApiActivePoller } from "./theOddsApiActivePoller.ts";
 import {
   MarketTickStore,
   type LocalOrderBookState,
@@ -119,7 +140,7 @@ import {
   type TickStoreClock,
 } from "./tickStore.ts";
 import { TheOddsApiRoundJob } from "./theOddsApiJob.ts";
-import { XRoundJobs } from "./xJobs.ts";
+import { isEventCalendarDay } from "./espnPollingSchedule.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
 export const COLLECTOR_HEALTH_STREAM = SOURCE_HEALTH_STORAGE_STREAM;
@@ -132,6 +153,8 @@ export interface CollectorBootstrap {
   state: DashboardState | null;
   boutMappings: BoutMapping[];
   health: Readonly<Record<string, SourceHealth>>;
+  /** Latest source clock/state observation per bout, used to seed local clocks. */
+  lifecycleObservations: readonly FightLifecycleObservation[];
   unifiedRounds: readonly UnifiedRoundRecord[];
   marketSnapshots: readonly MarketSnapshot[];
   latestMarkets: readonly LocalOrderBookState[];
@@ -148,6 +171,46 @@ export interface CollectorRoundStatsOptions {
   quotaPolicy?: QuotaPolicy;
 }
 
+export interface CollectorCitoOptions {
+  /** Test seam for captured discovery payloads; production defaults to Cito HTTP. */
+  discoveryTransport?: CitoDiscoveryTransport;
+}
+
+/** Keeps vendor ids at the source boundary; round jobs continue to use canonical ids. */
+export function createCitoRoundStatsRefTranslator(
+  fetcher: CitoRoundStatsFetcher,
+  getExternalRefs: (internalBoutId: string) => readonly ExternalRef[],
+  onMissingRef: (internalBoutId: string) => void,
+): CitoRoundStatsFetcher {
+  const reportedMissing = new Set<string>();
+  const resolve = (internalBoutId: string): string | undefined => {
+    const ref = getExternalRefs(internalBoutId).find(
+      (candidate) => candidate.source === "cito",
+    );
+    if (ref !== undefined) return ref.id;
+    if (!reportedMissing.has(internalBoutId)) {
+      reportedMissing.add(internalBoutId);
+      onMissingRef(internalBoutId);
+    }
+    return undefined;
+  };
+
+  return {
+    async fetchRound(internalBoutId, round) {
+      const citoBoutId = resolve(internalBoutId);
+      return citoBoutId === undefined
+        ? null
+        : fetcher.fetchRound(citoBoutId, round);
+    },
+    async fetchAllRounds(internalBoutId) {
+      const citoBoutId = resolve(internalBoutId);
+      return citoBoutId === undefined
+        ? []
+        : fetcher.fetchAllRounds(citoBoutId);
+    },
+  };
+}
+
 export interface CollectorMarketOptions {
   clock?: TickStoreClock;
   staleAfterMs?: number;
@@ -158,6 +221,10 @@ export interface CollectorSportsbookOptions {
   clock?: RoundJobClock;
   timer?: OddsApiIoPollTimer & RoundJobTimer;
   random?: () => number;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  oddsApiIoLiveHook?: OddsApiIoLiveHook;
+  theOddsApiLiveHook?: TheOddsApiLiveHook;
   oddsApiIoSource?: OddsApiIoSource;
   theOddsApiSource?: TheOddsApiSource;
   oddsApiIoQuotaPolicy?: QuotaPolicy;
@@ -165,13 +232,10 @@ export interface CollectorSportsbookOptions {
 
 export interface CollectorSherdogOptions {
   fetcher?: SherdogFetcher;
-  random?: () => number;
+  summarizer?: RoundSummarizer;
   requestTimeoutMs?: number;
-}
-
-export interface CollectorXOptions {
-  source?: XScoreSource;
-  apiFetcher?: XApiFetcher;
+  fetchImpl?: typeof fetch;
+  baseUrl?: string;
 }
 
 export interface CollectorLifecycleDriverOptions {
@@ -181,6 +245,15 @@ export interface CollectorLifecycleDriverOptions {
   citoProvider?: LifecycleObservationProvider;
   clock?: LifecycleDriverClock;
   timer?: LifecycleDriverTimer;
+}
+
+export interface CollectorPreEventPollOptions {
+  /** Overrides config.preEventPollEnabled (defaults to live mode only). */
+  enabled?: boolean;
+  runSync?: PreEventPollerOptions["runSync"];
+  readDocument?: PreEventPollerOptions["readDocument"];
+  clock?: PreEventPollerOptions["clock"];
+  timer?: PreEventPollerOptions["timer"];
 }
 
 export type NormalizedStateLoader = (
@@ -195,14 +268,15 @@ export interface CreateCollectorOptions {
   host?: string;
   sse?: Pick<
     SsePushOptions,
-    "bufferSize" | "heartbeatMs" | "now"
+    "bufferSize" | "heartbeatMs" | "now" | "flushIntervalMs"
   >;
   roundStats?: CollectorRoundStatsOptions;
+  cito?: CollectorCitoOptions;
   market?: CollectorMarketOptions;
   sportsbook?: CollectorSportsbookOptions;
   sherdog?: CollectorSherdogOptions;
-  x?: CollectorXOptions;
   lifecycle?: CollectorLifecycleDriverOptions;
+  preEventPoll?: CollectorPreEventPollOptions;
   health?: {
     now?: () => string;
     persistIntervalMs?: number;
@@ -221,10 +295,11 @@ export interface Collector {
   readonly marketTransports: readonly MarketTransport[];
   readonly oddsApiIoPoller: OddsApiIoPoller;
   readonly theOddsApiJob: TheOddsApiRoundJob;
+  readonly theOddsApiActivePoller: TheOddsApiActivePoller;
   readonly sherdogJobs: SherdogRoundJobs;
-  readonly xJobs: XRoundJobs;
   readonly lifecycle: FightLifecycleMachine;
   readonly lifecycleDriver: LifecycleDriver;
+  readonly preEventPoller: PreEventPoller;
   readonly health: SourceHealthRegistry;
   readonly review: ReviewRegistry;
   readonly server: Server;
@@ -240,18 +315,6 @@ interface PersistedCollectorState {
   state: DashboardState;
 }
 
-const SCORECARD_ACCOUNTS: readonly ScorecardAccount[] = [
-  {
-    handle: "arielhelwani",
-    displayName: "Ariel Helwani",
-    active: true,
-  },
-  { handle: "DinThomas", displayName: "Din Thomas", active: true },
-  { handle: "KevinI", displayName: "Kevin Iole", active: true },
-  { handle: "lthomasnews", displayName: "Luke Thomas", active: true },
-  { handle: "MMAJunkie", displayName: "MMA Junkie", active: true },
-];
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -262,8 +325,7 @@ function isDashboardState(value: unknown): value is DashboardState {
     isRecord(value.event) &&
     typeof value.event.id === "string" &&
     Array.isArray(value.event.bouts) &&
-    isRecord(value.boutViews) &&
-    Array.isArray(value.scorecardAccounts)
+    isRecord(value.boutViews)
   );
 }
 
@@ -338,12 +400,7 @@ function fixtureHealth(state: DashboardState): SourceHealth[] {
   });
 }
 
-export async function loadFixtureState(
-  collectorConfig?: Pick<
-    CollectorConfig,
-    "xMode" | "xEmbeds" | "xManualScores"
-  >,
-): Promise<DashboardState> {
+export async function loadFixtureState(): Promise<DashboardState> {
   const sourceConfig: SourceConfig = { mode: "fixture" };
   const event = loadFixtureEvent();
   const polymarket = createPolymarketSource(sourceConfig);
@@ -352,15 +409,6 @@ export async function loadFixtureState(
   const kalshi = createKalshiSource(sourceConfig);
   const espn = createEspnSource(sourceConfig);
   const cito = createCitoSource(sourceConfig);
-  const x = createXSource({
-    mode:
-      (collectorConfig?.xMode ?? "embed") === "embed"
-        ? "embed"
-        : "disabled",
-    embeds: collectorConfig?.xEmbeds ?? [],
-    manualScores: collectorConfig?.xManualScores ?? [],
-    fixtureMode: true,
-  });
   const boutViews: Record<string, BoutView> = {};
 
   for (const bout of event.bouts) {
@@ -417,29 +465,23 @@ export async function loadFixtureState(
       oddsHistory,
       preFightOdds,
       marketMoves,
-      scorecards: x.configuredEmbeds(bout.id),
     };
   }
 
-  return {
-    event,
-    boutViews,
-    scorecardAccounts: SCORECARD_ACCOUNTS.map((account) => ({
-      ...account,
-    })),
-  };
+  return { event, boutViews };
 }
 
 async function defaultStateLoader(
   config: CollectorConfig,
 ): Promise<DashboardState> {
   if (config.dataMode === "fixture") {
-    return loadFixtureState(config);
+    return loadFixtureState();
   }
 
-  throw new Error(
-    "Live mode credentials are configured, but live transports are not installed",
-  );
+  // Live mode builds the card from ESPN's public schedule. Every bout starts
+  // with an empty BoutView; the lifecycle driver, tick store and round
+  // pipelines fill those in from real observations during the event.
+  return loadLiveEventState({});
 }
 
 function sendJson(
@@ -610,6 +652,10 @@ export async function createCollector(
   let roundStats: RoundStatsPipeline | undefined;
   let tickStore: MarketTickStore | undefined;
   let marketTransports: MarketTransport[] = [];
+  const latestLifecycleObservations = new Map<
+    string,
+    FightLifecycleObservation
+  >();
 
   const defaultStaleAfterMs: Readonly<Record<string, number>> = {
     espn: config.staleAfterMs.lifecycle,
@@ -646,6 +692,7 @@ export async function createCollector(
     state,
     boutMappings: boutMappings?.getAll() ?? [],
     health: healthRegistry.getHealth(),
+    lifecycleObservations: [...latestLifecycleObservations.values()],
     unifiedRounds: roundStats?.getUnifiedRounds() ?? [],
     marketSnapshots: tickStore?.getSnapshots() ?? [],
     latestMarkets: tickStore?.getLatest() ?? [],
@@ -716,14 +763,33 @@ export async function createCollector(
     roundStatsOptions?.clock ?? options.sportsbook?.clock;
   const roundJobTimer =
     roundStatsOptions?.timer ?? options.sportsbook?.timer;
+  const reportMissingCitoRef = (internalBoutId: string): void => {
+    healthRegistry.increment("source_errors_total", "cito");
+    console.warn(
+      `cito: missing bout ref for round stats (${internalBoutId}); returning no stats`,
+    );
+  };
+  const underlyingCitoRoundStatsFetcher =
+    roundStatsOptions?.fetcher ??
+    (config.dataMode === "fixture"
+      ? createFixtureCitoRoundStatsFetcher()
+      : createLiveCitoRoundStatsFetcher({
+          baseUrl: config.citoApiBaseUrl ?? "",
+          apiKey: config.credentials.CITO_API_KEY ?? "",
+        }));
+  const initializedCitoRoundStatsFetcher =
+    config.dataMode === "fixture"
+      ? underlyingCitoRoundStatsFetcher
+      : createCitoRoundStatsRefTranslator(
+          underlyingCitoRoundStatsFetcher,
+          (internalBoutId) =>
+            boutMappings?.getExternalRefs(internalBoutId) ?? [],
+          reportMissingCitoRef,
+        );
   const initializedRoundStats = await RoundStatsPipeline.create({
     eventBus,
     storage,
-    fetcher:
-      roundStatsOptions?.fetcher ??
-      (config.dataMode === "fixture"
-        ? createFixtureCitoRoundStatsFetcher()
-        : createLiveCitoRoundStatsFetcher()),
+    fetcher: initializedCitoRoundStatsFetcher,
     publish: async (record) => {
       await push.publish("update", {
         kind: "round",
@@ -787,6 +853,37 @@ export async function createCollector(
     credentials: { ...config.credentials },
   };
 
+  if (config.dataMode === "live" && config.citoApiBaseUrl !== undefined) {
+    try {
+      const summary = await discoverCitoBouts({
+        event: loaded.event,
+        registry: initializedBoutMappings,
+        transport:
+          options.cito?.discoveryTransport ??
+          createLiveCitoDiscoveryTransport({
+            baseUrl: config.citoApiBaseUrl,
+            apiKey: config.credentials.CITO_API_KEY ?? "",
+          }),
+        ...(config.citoEventSlug === undefined
+          ? {}
+          : { configuredEventSlug: config.citoEventSlug }),
+      });
+      const total = summary.matched + summary.unmatched.length;
+      console.log(`cito: ${summary.matched}/${total} bouts mapped`);
+      if (loaded.event.externalRefs.some((ref) => ref.source === "cito")) {
+        await storage.append(COLLECTOR_STATE_STREAM, {
+          version: 1,
+          state: loaded,
+        } satisfies PersistedCollectorState);
+      }
+    } catch (error: unknown) {
+      console.warn(
+        "cito: card discovery failed; round stats may be unavailable",
+        error instanceof Error ? error.message : "unknown error",
+      );
+    }
+  }
+
   const lifecycleGetBouts = () => loaded.event.bouts;
   const requiredEventExternalId = (source: "espn" | "cito"): string => {
     const id = loaded.event.externalRefs.find(
@@ -812,12 +909,20 @@ export async function createCollector(
           lifecycleGetBouts,
           { clock: options.lifecycle?.clock },
         ));
+  // Cito is the lifecycle fallback; discovery above adds its event ref before
+  // this provider is built, while a failed discovery still leaves ESPN able
+  // to drive the card.
+  const citoEventExternalId = loaded.event.externalRefs.find(
+    (ref) => ref.source === "cito",
+  )?.id;
   const lifecycleCitoProvider =
     options.lifecycle?.citoProvider ??
-    (config.dataMode === "live" && config.citoApiBaseUrl !== undefined
+    (config.dataMode === "live" &&
+    config.citoApiBaseUrl !== undefined &&
+    citoEventExternalId !== undefined
       ? createLiveCitoLifecycleProvider(
           sourceConfig,
-          requiredEventExternalId("cito"),
+          citoEventExternalId,
           lifecycleGetBouts,
           { baseUrl: config.citoApiBaseUrl, clock: options.lifecycle?.clock },
         )
@@ -830,6 +935,11 @@ export async function createCollector(
       : { citoProvider: lifecycleCitoProvider }),
     espnPollingMs: config.pollingMs.espn,
     citoPollingMs: config.pollingMs.cito,
+    // Tiered ESPN polling (6a/6p ET non-event-day, 60s pre-start, 5s live,
+    // stopped after completion) only makes sense against a real event date.
+    ...(config.dataMode === "live"
+      ? { eventStartsAt: loaded.event.startsAt }
+      : {}),
     espnFailureThreshold: config.lifecycleEspnFailureThreshold,
     ...(options.lifecycle?.clock === undefined
       ? {}
@@ -837,12 +947,60 @@ export async function createCollector(
     ...(options.lifecycle?.timer === undefined
       ? {}
       : { timer: options.lifecycle.timer }),
+    onObservations: async (observations) => {
+      for (const observation of observations) {
+        latestLifecycleObservations.set(
+          observation.boutId,
+          observation,
+        );
+      }
+      await push.publish("update", {
+        kind: "lifecycle-observations",
+        observations,
+      });
+    },
     metrics: healthRegistry,
   });
 
+  const preEventPoller = new PreEventPoller({
+    storage,
+    eventBus,
+    getLifecycleStates: () => lifecycle.getStates(),
+    enabled:
+      options.preEventPoll?.enabled ?? config.preEventPollEnabled,
+    runSync: options.preEventPoll?.runSync,
+    readDocument:
+      options.preEventPoll?.readDocument ??
+      (() => readUpcomingOddsDocument(config.persistencePath)),
+    nonEventDayIntervalMs: config.preEventPollIntervalMs.nonEventDay,
+    eventDayIntervalMs: config.preEventPollIntervalMs.eventDay,
+    retryMs: config.preEventPollRetryMs,
+    metrics: healthRegistry,
+    ...(options.preEventPoll?.clock === undefined
+      ? {}
+      : { clock: options.preEventPoll.clock }),
+    ...(options.preEventPoll?.timer === undefined
+      ? {}
+      : { timer: options.preEventPoll.timer }),
+  });
+
+  const oddsApiIoLiveHook =
+    options.sportsbook?.oddsApiIoLiveHook ??
+    (config.dataMode === "live" &&
+    config.credentials.ODDS_API_IO_KEY !== undefined
+      ? createOddsApiIoLiveHook({
+          bookmakers: config.oddsApiIoBookmakers,
+          ...(options.sportsbook?.fetchImpl === undefined
+            ? {}
+            : { fetchImpl: options.sportsbook.fetchImpl }),
+          ...(options.sportsbook?.timeoutMs === undefined
+            ? {}
+            : { timeoutMs: options.sportsbook.timeoutMs }),
+        })
+      : undefined);
   const initializedOddsApiIoSource =
     options.sportsbook?.oddsApiIoSource ??
-    createOddsApiIoSource(sourceConfig);
+    createOddsApiIoSource(sourceConfig, oddsApiIoLiveHook);
   if (config.dataMode === "fixture") {
     for (const discoveredEvent of
       await initializedOddsApiIoSource.discoverEvents()) {
@@ -900,24 +1058,62 @@ export async function createCollector(
     options.sportsbook?.timer ?? options.roundStats?.timer;
   const findBout = (boutId: string) =>
     loaded.event.bouts.find((bout) => bout.id === boutId);
+  let defaultSherdogFetcher: SherdogFetcher;
+  if (config.dataMode === "fixture") {
+    defaultSherdogFetcher = createFixtureSherdogFetcher();
+  } else {
+    try {
+      defaultSherdogFetcher = createLiveSherdogFetcher({
+        permissionScope: config.sherdog.permissionScope,
+        // One play-by-play page carries the whole card, so the event-level URL
+        // serves every bout; a bout's own ref still wins where one exists.
+        resolveBoutUrl: (boutId) =>
+          initializedBoutMappings
+            .getExternalRefs(boutId)
+            .find((ref) => ref.source === "sherdog")?.id ??
+          config.sherdog.liveBlogUrl,
+        baseUrl: options.sherdog?.baseUrl ?? config.sherdog.baseUrl,
+        ...(options.sherdog?.fetchImpl === undefined
+          ? {}
+          : { fetchImpl: options.sherdog.fetchImpl }),
+        ...(options.sherdog?.requestTimeoutMs === undefined
+          ? {}
+          : { timeoutMs: options.sherdog.requestTimeoutMs }),
+      });
+    } catch (error) {
+      if (!(error instanceof TerminalRoundJobError)) throw error;
+      defaultSherdogFetcher = {
+        async fetchBout() {
+          return {
+            status: 503,
+            html: "",
+            sourceUrl: config.sherdog.baseUrl,
+          };
+        },
+      };
+    }
+  }
+  // Gated on the switch and the key, not on live mode: the fixture simulator
+  // runs real captured commentary, so summarizing it there is how the box gets
+  // reviewed before a card. Without a key, rounds keep their raw commentary.
+  const geminiKey = config.credentials.GEMINI_API_KEY;
+  const summarizer =
+    options.sherdog?.summarizer ??
+    (config.roundSummary.enabled && geminiKey !== undefined
+      ? createLiveGeminiSummarizer({
+          apiKey: geminiKey,
+          model: config.roundSummary.model,
+        })
+      : createDisabledSummarizer());
   const initializedSherdogJobs = await SherdogRoundJobs.create({
+    summarizer,
     eventBus,
     scheduler: initializedRoundStats.scheduler,
     storage,
     roundStats: initializedRoundStats,
     fetcher:
       options.sherdog?.fetcher ??
-      (config.dataMode === "fixture"
-        ? createFixtureSherdogFetcher()
-        : {
-            async fetchBout() {
-              return {
-                status: 503,
-                html: "",
-                sourceUrl: "https://www.sherdog.com/",
-              };
-            },
-          }),
+      defaultSherdogFetcher,
     getBout: findBout,
     dataMode: config.dataMode,
     permissionScope: config.sherdog.permissionScope,
@@ -926,42 +1122,9 @@ export async function createCollector(
     metrics: healthRegistry,
     review,
     ...(roundJobClock === undefined ? {} : { clock: roundJobClock }),
-    ...(options.sherdog?.random === undefined
-      ? {}
-      : { random: options.sherdog.random }),
     ...(options.sherdog?.requestTimeoutMs === undefined
       ? {}
       : { requestTimeoutMs: options.sherdog.requestTimeoutMs }),
-  });
-  const initializedXSource =
-    options.x?.source ??
-    createXSource({
-      mode: config.xMode,
-      bearerToken: config.credentials.X_BEARER_TOKEN,
-      embeds: config.xEmbeds,
-      manualScores: config.xManualScores,
-      fixtureMode: config.dataMode === "fixture",
-      ...(options.x?.apiFetcher === undefined
-        ? {}
-        : { apiFetcher: options.x.apiFetcher }),
-      ...(roundJobClock === undefined
-        ? {}
-        : {
-            now: () =>
-              new Date(roundJobClock.now()).toISOString(),
-          }),
-    });
-  const initializedXJobs = await XRoundJobs.create({
-    eventBus,
-    scheduler: initializedRoundStats.scheduler,
-    storage,
-    source: initializedXSource,
-    roundStats: initializedRoundStats,
-    getBout: findBout,
-    spendingCapUsd: config.xSpendCapUsd,
-    requestCostUsd: config.xRequestCostUsd,
-    metrics: healthRegistry,
-    ...(roundJobClock === undefined ? {} : { clock: roundJobClock }),
   });
   const initializedOddsApiIoPoller = await OddsApiIoPoller.create({
     eventBus,
@@ -978,6 +1141,7 @@ export async function createCollector(
         : { bout, externalBoutId };
     },
     bookmakers: config.oddsApiIoBookmakers,
+    activePollMs: config.activePollMs.oddsApiIo,
     publishTick: async (tick) => {
       await push.publish("update", {
         kind: "market-tick",
@@ -993,12 +1157,39 @@ export async function createCollector(
           quotaPolicy: options.sportsbook.oddsApiIoQuotaPolicy,
         }),
   });
+  // One client shared by the round job and the active poller, so both count
+  // against the same account and neither can double-instantiate it.
+  const theOddsApiLiveHook =
+    options.sportsbook?.theOddsApiLiveHook ??
+    (config.dataMode === "live" &&
+    config.credentials.THE_ODDS_API_KEY !== undefined
+      ? createTheOddsApiLiveHook({
+          ...(options.sportsbook?.fetchImpl === undefined
+            ? {}
+            : { fetchImpl: options.sportsbook.fetchImpl }),
+          ...(options.sportsbook?.timeoutMs === undefined
+            ? {}
+            : { timeoutMs: options.sportsbook.timeoutMs }),
+        })
+      : undefined);
+  const theOddsApiSource =
+    options.sportsbook?.theOddsApiSource ??
+    createOddsApiSource(sourceConfig, theOddsApiLiveHook);
+  // The Odds API only ever runs as part of the twice-daily upcoming sync —
+  // zero live/event-day collection. Historical snapshots already written
+  // stay in place; this only gates new collection going forward.
+  const theOddsApiEnabled: boolean | (() => boolean) =
+    config.dataMode === "live"
+      ? () =>
+          !isEventCalendarDay(
+            new Date(sportsbookClock?.now() ?? Date.now()),
+            new Date(loaded.event.startsAt),
+          )
+      : true;
   const initializedTheOddsApiJob = new TheOddsApiRoundJob({
     eventBus,
     scheduler: initializedRoundStats.scheduler,
-    source:
-      options.sportsbook?.theOddsApiSource ??
-      createOddsApiSource(sourceConfig),
+    source: theOddsApiSource,
     tickStore: initializedTickStore,
     getBout: findBout,
     publishTick: async (tick) => {
@@ -1008,23 +1199,83 @@ export async function createCollector(
       });
     },
     metrics: healthRegistry,
+    enabled: theOddsApiEnabled,
     ...(sportsbookClock === undefined ? {} : { clock: sportsbookClock }),
     ...(options.sportsbook?.random === undefined
       ? {}
       : { random: options.sportsbook.random }),
   });
 
+  const initializedTheOddsApiActivePoller =
+    await TheOddsApiActivePoller.create({
+      eventBus,
+      storage,
+      source: theOddsApiSource,
+      tickStore: initializedTickStore,
+      getBout: findBout,
+      activePollMs: config.activePollMs.theOddsApi,
+      publishTick: async (tick) => {
+        await push.publish("update", { kind: "market-tick", tick });
+      },
+      metrics: healthRegistry,
+      enabled: theOddsApiEnabled,
+      ...(sportsbookClock === undefined ? {} : { clock: sportsbookClock }),
+      ...(sportsbookTimer === undefined ? {} : { timer: sportsbookTimer }),
+    });
+
   // Streams remain connected across round breaks. The simple card policy
   // closes them once every bout represented by a market subscription has
   // emitted FIGHT_ENDED.
+  const allMarketSubscriptions = new Map(
+    marketTransports.map((transport) => [
+      transport,
+      transport.subscriptions,
+    ]),
+  );
   const relevantMarketBouts = new Set(
     marketTransports.flatMap((transport) =>
       transport.subscriptions.map(({ boutId }) => boutId),
     ),
   );
   const endedMarketBouts = new Set<string>();
+
+  /**
+   * Narrows every stream to the bouts ESPN currently says are live.
+   *
+   * The transports are told what to subscribe to, not merely which ticks to
+   * keep: a card has a dozen mapped bouts and only one is ever in progress, so
+   * subscribing to all of them would carry eleven idle books and make the one
+   * that matters harder to keep fresh. Before any fight starts, and after the
+   * last one ends, the full mapped set is restored so the streams are already
+   * pointed at the right markets when the next fight opens.
+   *
+   * SupervisedMarketTransport treats a new subscription set as stale until a
+   * fresh snapshot arrives for it, so narrowing can never leave deltas being
+   * applied to a book that was never rebuilt.
+   */
+  const applyActiveSubscriptions = (): void => {
+    const activeBouts = new Set(
+      lifecycle
+        .getStates()
+        .filter((state) => state.state === "in" && !state.completed)
+        .map((state) => state.boutId),
+    );
+
+    for (const transport of marketTransports) {
+      const all = allMarketSubscriptions.get(transport) ?? [];
+      const active = all.filter((subscription) =>
+        activeBouts.has(subscription.boutId),
+      );
+      transport.setSubscriptions(active.length > 0 ? active : all);
+    }
+  };
+
   unsubscribers.push(
+    eventBus.subscribe("FIGHT_STARTED", () => {
+      applyActiveSubscriptions();
+    }),
     eventBus.subscribe("FIGHT_ENDED", (event) => {
+      applyActiveSubscriptions();
       if (!relevantMarketBouts.has(event.boutId)) return;
       endedMarketBouts.add(event.boutId);
       if (
@@ -1085,6 +1336,22 @@ export async function createCollector(
     }
     if (request.method === "GET" && url.pathname === "/api/metrics") {
       sendJson(response, 200, healthRegistry.getMetrics(), secrets);
+      return;
+    }
+    // Served straight off disk rather than held in memory: the sync is a
+    // separate one-shot process, so the collector has no in-process copy to
+    // serve and re-reading is how it picks up a fresh run without a restart.
+    // A missing file is 200 with `document: null` — "the sync has not run yet"
+    // is a state the dashboard renders, not an error.
+    if (request.method === "GET" && url.pathname === "/api/upcoming-odds") {
+      sendJson(
+        response,
+        200,
+        {
+          document: await readUpcomingOddsDocument(config.persistencePath),
+        },
+        secrets,
+      );
       return;
     }
     if (request.method === "GET" && url.pathname === "/api/review") {
@@ -1175,10 +1442,11 @@ export async function createCollector(
     marketTransports,
     oddsApiIoPoller: initializedOddsApiIoPoller,
     theOddsApiJob: initializedTheOddsApiJob,
+    theOddsApiActivePoller: initializedTheOddsApiActivePoller,
     sherdogJobs: initializedSherdogJobs,
-    xJobs: initializedXJobs,
     lifecycle,
     lifecycleDriver,
+    preEventPoller,
     health: healthRegistry,
     review,
     server,
@@ -1189,6 +1457,11 @@ export async function createCollector(
         options.lifecycle?.enabled ?? config.lifecycleDriverEnabled;
       if (lifecycleDriverEnabled) {
         await lifecycleDriver.start();
+      }
+      const preEventPollEnabled =
+        options.preEventPoll?.enabled ?? config.preEventPollEnabled;
+      if (preEventPollEnabled) {
+        await preEventPoller.start();
       }
       if (config.dataMode === "live") {
         await Promise.all(
@@ -1202,19 +1475,25 @@ export async function createCollector(
             initializedOddsApiIoPoller.startActiveBout(
               lifecycleState.boutId,
             );
+            initializedTheOddsApiActivePoller.startActiveBout(
+              lifecycleState.boutId,
+            );
           }
         }
+        applyActiveSubscriptions();
         await initializedOddsApiIoPoller.idle();
+        await initializedTheOddsApiActivePoller.idle();
       }
       return port;
     },
     async close() {
       for (const unsubscribe of unsubscribers) unsubscribe();
+      await preEventPoller.close();
       await lifecycleDriver.close();
       await initializedOddsApiIoPoller.close();
       await initializedTheOddsApiJob.close();
+      await initializedTheOddsApiActivePoller.close();
       await initializedSherdogJobs.close();
-      await initializedXJobs.close();
       await Promise.all(
         marketTransports.map((transport) => transport.disconnect()),
       );

@@ -24,8 +24,11 @@ const bout = (id: string) => {
 describe("createKalshiSource", () => {
   const source = createKalshiSource({ mode: "fixture" });
 
-  it("throws at construction in live mode", () => {
-    expect(() => createKalshiSource({ mode: "live" })).toThrow(/live mode/);
+  it("constructs fail-closed in live mode", async () => {
+    const live = createKalshiSource({ mode: "live" });
+
+    await expect(live.getOddsSnapshot(bout("bout-main"))).resolves.toBeNull();
+    await expect(live.getTickHistory("bout-main")).resolves.toEqual([]);
   });
 
   it("returns mid-price quotes for both corners of the main event", async () => {

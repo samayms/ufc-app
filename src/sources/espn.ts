@@ -447,7 +447,17 @@ export function createEspnSource(
   config: SourceConfig,
 ): FightDataSource & FighterRecordSource {
   if (config.mode === "live") {
-    throw new Error("espn live mode not available yet");
+    return {
+      async getEvent() {
+        return null;
+      },
+      async getRoundUpdates() {
+        return [];
+      },
+      async getFighter() {
+        return null;
+      },
+    };
   }
 
   return {
@@ -486,23 +496,50 @@ export interface EspnLifecycleFetcher {
 }
 
 /**
- * ESPN's public "site API" host (site.api.espn.com) is the well-known
- * pattern ESPN uses for unauthenticated scoreboard reads across sports. The
- * exact MMA/UFC scoreboard path below is a best-effort placeholder — verify
- * it against real traffic before depending on it for a live event.
+ * ESPN's public "site API" host, used for unauthenticated scoreboard reads.
+ * This is the same path `espnSchedule.ts` reads the card from.
+ *
+ * **ESPN ignores an `event` query parameter.** Verified 2026-07-30: a request
+ * for `?event=999999999` returns the current scoreboard byte-for-byte
+ * identically to `?event=<a real id>`. An earlier note here claimed addressing
+ * was verified and only timing was open; that was wrong in both directions.
+ *
+ * The parameter appeared to work only because a single UFC event is usually on
+ * the board at a time. On a day with more than one — or any time the requested
+ * event is not the current one — the caller would silently receive a different
+ * event's bouts and drive the lifecycle machine from the wrong fight. That is
+ * exactly the confidently-wrong-data failure the freshness design exists to
+ * prevent, so this addresses by date (`dates` IS honored) and filters the
+ * payload by event id, failing loudly when the requested event is absent.
  */
 const ESPN_SCOREBOARD_BASE_URL =
   "https://site.api.espn.com/apis/site/v2/sports/mma/ufc/scoreboard";
 const ESPN_SCOREBOARD_REQUEST_TIMEOUT_MS = 8_000;
 const ESPN_SCOREBOARD_MAX_RESPONSE_BYTES = 2_000_000;
 
-export function buildEspnScoreboardUrl(eventExternalId: string): string {
-  if (eventExternalId.trim().length === 0) {
-    throw new TypeError("ESPN scoreboard URL requires a non-empty event id");
-  }
+/** ESPN's `dates` parameter format. */
+function formatEspnDate(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
 
+/**
+ * Builds a scoreboard URL. Pass `date` to address a specific card; omit it to
+ * read whatever is on the board now. There is deliberately no event-id
+ * parameter — see the note above.
+ */
+export function buildEspnScoreboardUrl(
+  options: { date?: Date } = {},
+): string {
   const url = new URL(ESPN_SCOREBOARD_BASE_URL);
-  url.searchParams.set("event", eventExternalId);
+  if (options.date !== undefined) {
+    if (Number.isNaN(options.date.getTime())) {
+      throw new TypeError("ESPN scoreboard URL requires a valid date");
+    }
+    url.searchParams.set("dates", formatEspnDate(options.date));
+  }
   return url.toString();
 }
 
@@ -523,26 +560,60 @@ function parseLifecycleState(
   return "pre";
 }
 
-/** Pure normalization: raw ESPN scoreboard JSON -> per-bout lifecycle entries. */
+/**
+ * Pure normalization: raw ESPN scoreboard JSON -> per-bout lifecycle entries.
+ *
+ * `eventExternalId` selects one event from the payload. It is required in
+ * practice because ESPN ignores the `event` query parameter and may return
+ * several events; passing it is what keeps the lifecycle machine from being
+ * driven by an unrelated card. Omit it only when the caller genuinely wants
+ * every competition on the board (the schedule reader's use).
+ */
 export function parseEspnScoreboardLifecycle(
   payload: unknown,
+  eventExternalId?: string,
 ): EspnLifecycleEntry[] {
   if (typeof payload !== "object" || payload === null) {
     throw new TypeError("ESPN scoreboard response was not a JSON object");
   }
 
-  // Verified live 2026-07-28 against site.api.espn.com/.../mma/ufc/scoreboard:
-  // the scoreboard returns `events[].competitions[]` (one competition per
+  // The scoreboard returns `events[].competitions[]` (one competition per
   // bout). The `event.header.competitions` path below is the *summary*
   // endpoint's shape, which the bundled fixture uses; it is retained as a
   // fallback so either payload normalizes correctly.
   const raw = payload as EspnRawPayload & {
-    events?: Array<{ competitions?: EspnCompetition[] }>;
+    events?: Array<{ id?: string; competitions?: EspnCompetition[] }>;
   };
-  const competitions =
-    raw.events?.flatMap((event) => event.competitions ?? []) ??
-    raw.event?.header?.competitions ??
-    [];
+
+  let competitions: EspnCompetition[];
+  if (raw.events !== undefined) {
+    const events =
+      eventExternalId === undefined
+        ? raw.events
+        : raw.events.filter((event) => event.id === eventExternalId);
+
+    if (eventExternalId !== undefined && events.length === 0) {
+      throw new Error(
+        `ESPN scoreboard did not contain event ${eventExternalId}; ` +
+          `it returned [${raw.events
+            .map((event) => event.id ?? "?")
+            .join(", ")}]`,
+      );
+    }
+    competitions = events.flatMap((event) => event.competitions ?? []);
+  } else {
+    const header = raw.event?.header;
+    if (
+      eventExternalId !== undefined &&
+      header?.id !== undefined &&
+      header.id !== eventExternalId
+    ) {
+      throw new Error(
+        `ESPN summary payload was for event ${header.id}, not ${eventExternalId}`,
+      );
+    }
+    competitions = header?.competitions ?? [];
+  }
 
   return competitions.flatMap((competition): EspnLifecycleEntry[] => {
     if (typeof competition.id !== "string") return [];
@@ -650,15 +721,13 @@ export function createLiveEspnLifecycleFetcher(
 
   return {
     async fetchLifecycle(eventExternalId) {
-      const payload = await fetchJsonWithLimits(
-        buildEspnScoreboardUrl(eventExternalId),
-        {
-          timeoutMs: ESPN_SCOREBOARD_REQUEST_TIMEOUT_MS,
-          maxBytes: ESPN_SCOREBOARD_MAX_RESPONSE_BYTES,
-          fetchImpl,
-        },
-      );
-      return parseEspnScoreboardLifecycle(payload);
+      const payload = await fetchJsonWithLimits(buildEspnScoreboardUrl(), {
+        timeoutMs: ESPN_SCOREBOARD_REQUEST_TIMEOUT_MS,
+        maxBytes: ESPN_SCOREBOARD_MAX_RESPONSE_BYTES,
+        fetchImpl,
+      });
+      // Filtering happens here, not in the query string: ESPN ignores `event`.
+      return parseEspnScoreboardLifecycle(payload, eventExternalId);
     },
   };
 }

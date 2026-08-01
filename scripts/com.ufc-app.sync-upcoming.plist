@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Optional twice-daily upcoming-odds sync: 06:00 and 18:00.
+
+  The resident collector is the primary owner of the pre-event schedule,
+  including event-day hourly polls, restart deduplication, and active-bout
+  suspension. This launchd path remains useful when the collector is not
+  running; it is the only way to get a sync in that case.
+
+  launchd schedules StartCalendarInterval in the machine's *local* time and
+  follows daylight saving automatically, so on a Mac set to America/New_York
+  these two entries are 6:00 a.m. and 6:00 p.m. Eastern year round. On a
+  machine in another timezone, change the Hour values to the local equivalents
+  — launchd has no per-job timezone setting, and pretending otherwise by
+  setting TZ here would only affect the child process, not the schedule.
+
+  RunAtLoad is deliberately false: loading the job should not fire an
+  unexpected live sync against four rate-limited APIs.
+
+  Install (the one remaining deployment step):
+
+    cp scripts/com.ufc-app.sync-upcoming.plist ~/Library/LaunchAgents/
+    # Set WorkingDirectory below to this repo's absolute path first.
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ufc-app.sync-upcoming.plist
+    launchctl enable gui/$(id -u)/com.ufc-app.sync-upcoming
+
+  Verify without waiting for 6 o'clock:
+
+    launchctl kickstart -p gui/$(id -u)/com.ufc-app.sync-upcoming
+    tail -f /tmp/ufc-sync-upcoming.log
+
+  Remove:
+
+    launchctl bootout gui/$(id -u)/com.ufc-app.sync-upcoming
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ufc-app.sync-upcoming</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>scripts/sync-upcoming.sh</string>
+  </array>
+
+  <!-- Absolute path to this repository. Edit before installing. -->
+  <key>WorkingDirectory</key>
+  <string>/Users/samay/CodingProjects/ufc-app</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- launchd's PATH does not include Homebrew or a version manager.
+         Set this to the output of `command -v node`. -->
+    <key>UFC_NODE_BIN</key>
+    <string>/usr/local/bin/node</string>
+  </dict>
+
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Hour</key>
+      <integer>6</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+    <dict>
+      <key>Hour</key>
+      <integer>18</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+  </array>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/ufc-sync-upcoming.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/ufc-sync-upcoming.log</string>
+</dict>
+</plist>

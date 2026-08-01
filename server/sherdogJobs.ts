@@ -12,6 +12,10 @@ import type {
   CollectorEventBus,
 } from "./eventBus.ts";
 import { computeExpertConsensus } from "./expertConsensus.ts";
+import {
+  createDisabledSummarizer,
+  type RoundSummarizer,
+} from "./geminiSummarizer.ts";
 import { RequestIntervalGuard } from "./quota.ts";
 import type { RoundStatsPipeline } from "./roundStats.ts";
 import {
@@ -24,14 +28,18 @@ import type { Storage } from "./storage.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
 import type { ParserErrorSink } from "./review.ts";
 
-export const SHERDOG_ROUND_JOB_TYPE = "sherdog_round";
 export const SHERDOG_FINAL_JOB_TYPE = "sherdog_final";
 export const SHERDOG_OBSERVATIONS_STORAGE_STREAM =
   "sherdog-observations";
-export const SHERDOG_MIN_INITIAL_DELAY_MS = 10_000;
-export const SHERDOG_MAX_INITIAL_DELAY_MS = 15_000;
-export const SHERDOG_MIN_RETRY_DELAY_MS = 20_000;
-export const SHERDOG_MAX_RETRY_DELAY_MS = 30_000;
+export const SHERDOG_ROUND_ATTEMPT_DELAYS_MS = [
+  15_000,
+  30_000,
+  60_000,
+] as const;
+
+export function sherdogRoundJobType(attempt: 1 | 2 | 3): string {
+  return `sherdog_round_${attempt}`;
+}
 
 export interface SherdogFetchResponse {
   status: number;
@@ -45,6 +53,16 @@ export interface SherdogFetcher {
     boutId: string,
     purpose: "round" | "final",
   ): Promise<SherdogFetchResponse>;
+}
+
+export interface LiveSherdogFetcherOptions {
+  permissionScope: string;
+  resolveBoutUrl: (boutId: string) => string | undefined;
+  baseUrl?: string;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  maxBytes?: number;
+  userAgent?: string;
 }
 
 export interface SherdogObservationRevision {
@@ -73,8 +91,8 @@ export interface SherdogRoundJobsOptions {
   dataMode: "fixture" | "live";
   permissionScope: string;
   requestIntervalMs: number;
+  summarizer?: RoundSummarizer;
   clock?: RoundJobClock;
-  random?: () => number;
   requestTimeoutMs?: number;
   quota?: RequestIntervalGuard;
   publishHealth?: (health: {
@@ -153,33 +171,6 @@ function copyRevision(
   };
 }
 
-function sampleDelay(
-  random: number,
-  minimum: number,
-  maximum: number,
-): number {
-  if (!Number.isFinite(random) || random < 0 || random > 1) {
-    throw new TypeError("Sherdog delay sample must be between 0 and 1");
-  }
-  return minimum + Math.round(random * (maximum - minimum));
-}
-
-export function sherdogInitialDelayMs(random: number): number {
-  return sampleDelay(
-    random,
-    SHERDOG_MIN_INITIAL_DELAY_MS,
-    SHERDOG_MAX_INITIAL_DELAY_MS,
-  );
-}
-
-export function sherdogRetryDelayMs(random: number): number {
-  return sampleDelay(
-    random,
-    SHERDOG_MIN_RETRY_DELAY_MS,
-    SHERDOG_MAX_RETRY_DELAY_MS,
-  );
-}
-
 function permissionAllowsLiveRead(scope: string): boolean {
   const permissions = new Set(
     scope
@@ -192,6 +183,128 @@ function permissionAllowsLiveRead(scope: string): boolean {
     permissions.has("sherdog-read") ||
     permissions.has("all")
   );
+}
+
+async function readWithByteLimit(
+  response: Response,
+  maxBytes: number,
+): Promise<string> {
+  const reader = response.body?.getReader();
+  if (reader === undefined) {
+    const text = await response.text();
+    if (new TextEncoder().encode(text).byteLength > maxBytes) {
+      throw new Error("Sherdog response exceeded the maximum response size");
+    }
+    return text;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value === undefined) continue;
+
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new Error("Sherdog response exceeded the maximum response size");
+    }
+    chunks.push(value);
+  }
+
+  const combined = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(combined);
+}
+
+function resolveSherdogRequestUrl(
+  baseUrl: string,
+  boutUrl: string,
+): string {
+  const parsed = new URL(boutUrl, baseUrl);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new TypeError("Sherdog bout URL must use HTTP or HTTPS");
+  }
+  return parsed.toString();
+}
+
+export function createLiveSherdogFetcher(
+  options: LiveSherdogFetcherOptions,
+): SherdogFetcher {
+  if (!permissionAllowsLiveRead(options.permissionScope)) {
+    throw new TerminalRoundJobError(
+      "Sherdog permission scope does not allow live-blog reads",
+    );
+  }
+
+  const baseUrl = options.baseUrl ?? "https://www.sherdog.com";
+  const parsedBaseUrl = new URL(baseUrl);
+  if (
+    parsedBaseUrl.protocol !== "http:" &&
+    parsedBaseUrl.protocol !== "https:"
+  ) {
+    throw new TypeError("Sherdog base URL must use HTTP or HTTPS");
+  }
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError("Sherdog request timeout must be positive");
+  }
+  const maxBytes = options.maxBytes ?? SHERDOG_MAX_PAYLOAD_BYTES;
+  if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
+    throw new TypeError("Sherdog maximum response size must be positive");
+  }
+  const userAgent =
+    options.userAgent ??
+    "UFC Live Dashboard/1.0 (personal non-commercial dashboard)";
+  if (userAgent.trim().length === 0) {
+    throw new TypeError("Sherdog User-Agent must not be empty");
+  }
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+
+  return {
+    async fetchBout(boutId) {
+      const boutUrl = options.resolveBoutUrl(boutId)?.trim();
+      if (boutUrl === undefined || boutUrl.length === 0) {
+        throw new TerminalRoundJobError(
+          `Sherdog bout ${boutId} has no mapped live-blog URL`,
+        );
+      }
+      const requestedUrl = resolveSherdogRequestUrl(baseUrl, boutUrl);
+      const controller = new AbortController();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const request = (async (): Promise<SherdogFetchResponse> => {
+        const response = await fetchImpl(requestedUrl, {
+          signal: controller.signal,
+          headers: { "User-Agent": userAgent },
+        });
+        const html = await readWithByteLimit(response, maxBytes);
+        return {
+          status: response.status,
+          html,
+          sourceUrl: requestedUrl,
+        };
+      })();
+
+      try {
+        return await Promise.race([
+          request,
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(() => {
+              controller.abort();
+              reject(new Error("Sherdog request timed out"));
+            }, timeoutMs);
+          }),
+        ]);
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+      }
+    },
+  };
 }
 
 function errorText(error: unknown): string {
@@ -239,9 +352,9 @@ export class SherdogRoundJobs {
 
   private readonly permissionScope: string;
 
-  private readonly clock: RoundJobClock;
+  private readonly summarizer: RoundSummarizer;
 
-  private readonly random: () => number;
+  private readonly clock: RoundJobClock;
 
   private readonly requestTimeoutMs: number;
 
@@ -285,8 +398,8 @@ export class SherdogRoundJobs {
     this.getBout = options.getBout;
     this.dataMode = options.dataMode;
     this.permissionScope = options.permissionScope;
+    this.summarizer = options.summarizer ?? createDisabledSummarizer();
     this.clock = options.clock ?? { now: () => Date.now() };
-    this.random = options.random ?? Math.random;
     this.requestTimeoutMs = options.requestTimeoutMs ?? 10_000;
     this.publishHealth = options.publishHealth;
     this.metrics = options.metrics ?? NOOP_METRICS;
@@ -300,10 +413,12 @@ export class SherdogRoundJobs {
         metrics: this.metrics,
       });
 
-    this.scheduler.registerHandler(
-      SHERDOG_ROUND_JOB_TYPE,
-      (job) => this.runRound(job),
-    );
+    for (const attempt of [1, 2, 3] as const) {
+      this.scheduler.registerHandler(
+        sherdogRoundJobType(attempt),
+        (job) => this.runRound(job),
+      );
+    }
     this.scheduler.registerHandler(
       SHERDOG_FINAL_JOB_TYPE,
       (job) => this.runFinal(job),
@@ -413,17 +528,16 @@ export class SherdogRoundJobs {
       { type: "PROVISIONAL_ROUND_ENDED" | "ROUND_ENDED" }
     >,
   ): Promise<void> {
-    const initialDelay = sherdogInitialDelayMs(this.random());
-    await this.scheduler.schedule({
-      boutId: event.boutId,
-      round: event.round,
-      jobType: SHERDOG_ROUND_JOB_TYPE,
-      dueAt: this.clock.now() + initialDelay,
-      retryPolicy: {
-        delayMs: sherdogRetryDelayMs(this.random()),
-        maxAttempts: 2,
-      },
-    });
+    const now = this.clock.now();
+    for (const [index, delayMs] of SHERDOG_ROUND_ATTEMPT_DELAYS_MS.entries()) {
+      await this.scheduler.schedule({
+        boutId: event.boutId,
+        round: event.round,
+        jobType: sherdogRoundJobType((index + 1) as 1 | 2 | 3),
+        dueAt: now + delayMs,
+        retryPolicy: { delayMs: 0, maxAttempts: 1 },
+      });
+    }
   }
 
   private async scheduleFinal(
@@ -533,6 +647,9 @@ export class SherdogRoundJobs {
       );
     }
 
+    // A live play-by-play page carries the whole card, so the parser needs the
+    // fighters to pick this bout's rounds out of it.
+    const bout = this.getBout(boutId);
     try {
       return await parseSherdogRoundObservations({
         boutId,
@@ -542,6 +659,14 @@ export class SherdogRoundJobs {
         ...(response.publishedAt === undefined
           ? {}
           : { publishedAt: response.publishedAt }),
+        ...(bout === undefined
+          ? {}
+          : {
+              fighterNames: {
+                red: bout.fighters.red.name,
+                blue: bout.fighters.blue.name,
+              },
+            }),
       });
     } catch (error) {
       await this.review?.recordParserError({
@@ -559,11 +684,50 @@ export class SherdogRoundJobs {
     }
   }
 
-  private async observe(
+  /**
+   * Adds the model's condensation of the round, reusing the previous one when
+   * the payload is unchanged so the three-attempt ladder does not pay for the
+   * same page three times. Summaries are decorative: any failure leaves the
+   * observation and its raw commentary exactly as parsed.
+   */
+  private async summarize(
     observation: SherdogRoundObservation,
+    previous: SherdogObservationRevision | undefined,
+  ): Promise<SherdogRoundObservation> {
+    if (
+      previous !== undefined &&
+      previous.observation.payloadHash === observation.payloadHash
+    ) {
+      return previous.observation.aiSummary === undefined
+        ? observation
+        : { ...observation, aiSummary: previous.observation.aiSummary };
+    }
+
+    const bout = this.getBout(observation.boutId);
+    if (bout === undefined) return observation;
+
+    try {
+      const aiSummary = await this.summarizer.summarize({
+        round: observation.round,
+        redName: bout.fighters.red.name,
+        blueName: bout.fighters.blue.name,
+        commentary: observation.commentary,
+        scorerCards: observation.scorerCards,
+      });
+      return aiSummary.length === 0
+        ? observation
+        : { ...observation, aiSummary };
+    } catch {
+      return observation;
+    }
+  }
+
+  private async observe(
+    rawObservation: SherdogRoundObservation,
   ): Promise<void> {
-    const key = `${observation.boutId}:${observation.round}`;
+    const key = `${rawObservation.boutId}:${rawObservation.round}`;
     const previous = this.current.get(key);
+    const observation = await this.summarize(rawObservation, previous);
     const next: SherdogObservationRevision = {
       observation: copyObservation(observation),
       revision:
@@ -623,17 +787,9 @@ export class SherdogRoundJobs {
 
     const bout = this.getBout(observation.boutId);
     if (bout === undefined) return;
-    const existing = this.roundStats.getUnifiedRound(
-      observation.boutId,
-      observation.round,
-    );
     await this.roundStats.setSherdogObservation(
       observation,
-      computeExpertConsensus(
-        bout,
-        observation,
-        existing?.xScores ?? [],
-      ),
+      computeExpertConsensus(bout, observation),
     );
     await this.publishHealth?.({
       source: "sherdog",

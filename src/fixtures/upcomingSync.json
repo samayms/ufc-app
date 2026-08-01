@@ -1,0 +1,666 @@
+{
+  "note": "Synthetic upcoming-market payloads in each provider's native shape, aligned with the UFC 330 card in espnFightcenter.json. Deliberately uneven coverage so every provider state is reachable: Kalshi uses the Ian Garry alias and reversed corners, Polymarket lists an unpriced fight, Odds-API.io and The Odds API each include a fight from another promotion that must not match. Polymarket entries carry Gamma's real date semantics: startDate is the listing date and endDateIso is the resolution deadline just after the fight.",
+  "espnEventId": "600059185",
+  "kalshiEvents": {
+    "events": [
+      {
+        "event_ticker": "KXUFCFIGHT-26AUG15MAKGAR",
+        "title": "UFC 330: Makhachev vs Garry",
+        "series_ticker": "KXUFCFIGHT",
+        "markets": [
+          {
+            "ticker": "KXUFCFIGHT-26AUG15MAKGAR-0",
+            "status": "active",
+            "yes_sub_title": "Ian Garry",
+            "no_sub_title": "Ian Garry",
+            "yes_bid_dollars": "0.3000",
+            "yes_ask_dollars": "0.3200",
+            "no_bid_dollars": "0.6800",
+            "no_ask_dollars": "0.7000",
+            "last_price_dollars": "0.3100",
+            "occurrence_datetime": "2026-08-15T21:00:00Z"
+          },
+          {
+            "ticker": "KXUFCFIGHT-26AUG15MAKGAR-1",
+            "status": "active",
+            "yes_sub_title": "Islam Makhachev",
+            "no_sub_title": "Islam Makhachev",
+            "yes_bid_dollars": "0.6800",
+            "yes_ask_dollars": "0.7000",
+            "no_bid_dollars": "0.3000",
+            "no_ask_dollars": "0.3200",
+            "last_price_dollars": "0.6900",
+            "occurrence_datetime": "2026-08-15T21:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_ticker": "KXUFCFIGHT-26AUG15DERROB",
+        "title": "UFC 330: Dern vs Robertson",
+        "series_ticker": "KXUFCFIGHT",
+        "markets": [
+          {
+            "ticker": "KXUFCFIGHT-26AUG15DERROB-0",
+            "status": "active",
+            "yes_sub_title": "Mackenzie Dern",
+            "no_sub_title": "Mackenzie Dern",
+            "yes_bid_dollars": "0.5700",
+            "yes_ask_dollars": "0.5900",
+            "no_bid_dollars": "0.4100",
+            "no_ask_dollars": "0.4300",
+            "last_price_dollars": "0.5800",
+            "occurrence_datetime": "2026-08-15T21:00:00Z"
+          },
+          {
+            "ticker": "KXUFCFIGHT-26AUG15DERROB-1",
+            "status": "active",
+            "yes_sub_title": "Gillian Robertson",
+            "no_sub_title": "Gillian Robertson",
+            "yes_bid_dollars": "0.4100",
+            "yes_ask_dollars": "0.4300",
+            "no_bid_dollars": "0.5700",
+            "no_ask_dollars": "0.5900",
+            "last_price_dollars": "0.4200",
+            "occurrence_datetime": "2026-08-15T21:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_ticker": "KXUFCFIGHT-26AUG15TURFER",
+        "title": "UFC 330: Turner vs Fernandes",
+        "series_ticker": "KXUFCFIGHT",
+        "markets": [
+          {
+            "ticker": "KXUFCFIGHT-26AUG15TURFER-0",
+            "status": "active",
+            "yes_sub_title": "Jalin Turner",
+            "no_sub_title": "Jalin Turner",
+            "yes_bid_dollars": "0.6100",
+            "yes_ask_dollars": "0.6300",
+            "no_bid_dollars": "0.3700",
+            "no_ask_dollars": "0.3900",
+            "last_price_dollars": "0.6200",
+            "occurrence_datetime": "2026-08-15T21:00:00Z"
+          },
+          {
+            "ticker": "KXUFCFIGHT-26AUG15TURFER-1",
+            "status": "active",
+            "yes_sub_title": "Kaue Fernandes",
+            "no_sub_title": "Kaue Fernandes",
+            "yes_bid_dollars": "0.3700",
+            "yes_ask_dollars": "0.3900",
+            "no_bid_dollars": "0.6100",
+            "no_ask_dollars": "0.6300",
+            "last_price_dollars": "0.3800",
+            "occurrence_datetime": "2026-08-15T21:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_ticker": "KXUFCFIGHT-26AUG15BARRIB",
+        "title": "UFC 330: Barboza vs Ribovics",
+        "series_ticker": "KXUFCFIGHT",
+        "markets": [
+          {
+            "ticker": "KXUFCFIGHT-26AUG15BARRIB-0",
+            "status": "active",
+            "yes_sub_title": "Edson Barboza",
+            "no_sub_title": "Edson Barboza",
+            "yes_bid_dollars": "0.4300",
+            "yes_ask_dollars": "0.4500",
+            "no_bid_dollars": "0.5500",
+            "no_ask_dollars": "0.5700",
+            "last_price_dollars": "0.4400",
+            "occurrence_datetime": "2026-08-15T21:00:00Z"
+          },
+          {
+            "ticker": "KXUFCFIGHT-26AUG15BARRIB-1",
+            "status": "active",
+            "yes_sub_title": "Esteban Ribovics",
+            "no_sub_title": "Esteban Ribovics",
+            "yes_bid_dollars": "0.5500",
+            "yes_ask_dollars": "0.5700",
+            "no_bid_dollars": "0.4300",
+            "no_ask_dollars": "0.4500",
+            "last_price_dollars": "0.5600",
+            "occurrence_datetime": "2026-08-15T21:00:00Z"
+          }
+        ]
+      }
+    ]
+  },
+  "polymarketEvents": [
+    {
+      "id": "9000",
+      "slug": "ufc-330-0",
+      "closed": false,
+      "active": true,
+      "startDate": "2026-07-20T22:00:00Z",
+      "title": "UFC 330: Islam Makhachev vs. Ian Machado Garry (Welterweight, Main Card)",
+      "markets": [
+        {
+          "id": "8000",
+          "question": "UFC 330: Islam Makhachev vs. Ian Machado Garry (Welterweight, Main Card)",
+          "conditionId": "0xaa01",
+          "outcomes": "[\"Islam Makhachev\",\"Ian Machado Garry\"]",
+          "outcomePrices": "[\"0.7\",\"0.3\"]",
+          "clobTokenIds": "[\"0xaa01-t1\",\"0xaa01-t2\"]",
+          "bestBid": 0.69,
+          "bestAsk": 0.71,
+          "lastTradePrice": 0.7,
+          "closed": false,
+          "active": true,
+          "updatedAt": "2026-08-14T18:00:00Z",
+          "endDateIso": "2026-08-16T03:59:59.999Z"
+        },
+        {
+          "id": "8500",
+          "question": "Fight to Go the Distance?",
+          "conditionId": "0xaa01-prop",
+          "outcomes": "[\"Yes\",\"No\"]",
+          "outcomePrices": "[\"0.5\",\"0.5\"]",
+          "clobTokenIds": "[\"0xaa01-p1\",\"0xaa01-p2\"]",
+          "closed": false,
+          "active": true,
+          "endDateIso": "2026-08-16T03:59:59.999Z"
+        }
+      ],
+      "endDate": "2026-08-16T03:59:59.999Z"
+    },
+    {
+      "id": "9001",
+      "slug": "ufc-330-1",
+      "closed": false,
+      "active": true,
+      "startDate": "2026-07-20T22:00:00Z",
+      "title": "UFC 330: Mackenzie Dern vs. Gillian Robertson (Women's Strawweight, Main Card)",
+      "markets": [
+        {
+          "id": "8001",
+          "question": "UFC 330: Mackenzie Dern vs. Gillian Robertson (Women's Strawweight, Main Card)",
+          "conditionId": "0xaa02",
+          "outcomes": "[\"Mackenzie Dern\",\"Gillian Robertson\"]",
+          "outcomePrices": "[\"0.57\",\"0.43\"]",
+          "clobTokenIds": "[\"0xaa02-t1\",\"0xaa02-t2\"]",
+          "bestBid": 0.5599999999999999,
+          "bestAsk": 0.58,
+          "lastTradePrice": 0.57,
+          "closed": false,
+          "active": true,
+          "updatedAt": "2026-08-14T18:00:00Z",
+          "endDateIso": "2026-08-16T03:59:59.999Z"
+        },
+        {
+          "id": "8501",
+          "question": "Fight to Go the Distance?",
+          "conditionId": "0xaa02-prop",
+          "outcomes": "[\"Yes\",\"No\"]",
+          "outcomePrices": "[\"0.5\",\"0.5\"]",
+          "clobTokenIds": "[\"0xaa02-p1\",\"0xaa02-p2\"]",
+          "closed": false,
+          "active": true,
+          "endDateIso": "2026-08-16T03:59:59.999Z"
+        }
+      ],
+      "endDate": "2026-08-16T03:59:59.999Z"
+    },
+    {
+      "id": "9002",
+      "slug": "ufc-330-2",
+      "closed": false,
+      "active": true,
+      "startDate": "2026-07-20T22:00:00Z",
+      "title": "UFC 330: Geoff Neal vs. Chidi Njokuani (Welterweight, Main Card)",
+      "markets": [
+        {
+          "id": "8002",
+          "question": "UFC 330: Geoff Neal vs. Chidi Njokuani (Welterweight, Main Card)",
+          "conditionId": "0xaa03",
+          "outcomes": "[\"Geoff Neal\",\"Chidi Njokuani\"]",
+          "outcomePrices": "[\"0\",\"0\"]",
+          "clobTokenIds": "[\"0xaa03-t1\",\"0xaa03-t2\"]",
+          "bestBid": 0,
+          "bestAsk": 1,
+          "lastTradePrice": 0,
+          "closed": false,
+          "active": true,
+          "updatedAt": "2026-08-14T18:00:00Z",
+          "endDateIso": "2026-08-16T03:59:59.999Z"
+        },
+        {
+          "id": "8502",
+          "question": "Fight to Go the Distance?",
+          "conditionId": "0xaa03-prop",
+          "outcomes": "[\"Yes\",\"No\"]",
+          "outcomePrices": "[\"0.5\",\"0.5\"]",
+          "clobTokenIds": "[\"0xaa03-p1\",\"0xaa03-p2\"]",
+          "closed": false,
+          "active": true,
+          "endDateIso": "2026-08-16T03:59:59.999Z"
+        }
+      ],
+      "endDate": "2026-08-16T03:59:59.999Z"
+    }
+  ],
+  "oddsApiIoEvents": [
+    {
+      "id": 73000001,
+      "home": "Makhachev, Islam",
+      "away": "Machado Garry, Ian",
+      "date": "2026-08-15T21:00:00Z",
+      "sport": {
+        "name": "MMA",
+        "slug": "mma"
+      },
+      "league": {
+        "name": "UFC - UFC 330: Makhachev vs. Machado Garry",
+        "slug": "ufc-ufc-330"
+      },
+      "status": "pending"
+    },
+    {
+      "id": 73000002,
+      "home": "Abdul-Malik, Mansur",
+      "away": "Stoltzfus, Dustin",
+      "date": "2026-08-15T21:00:00Z",
+      "sport": {
+        "name": "MMA",
+        "slug": "mma"
+      },
+      "league": {
+        "name": "UFC - UFC 330: Makhachev vs. Machado Garry",
+        "slug": "ufc-ufc-330"
+      },
+      "status": "pending"
+    },
+    {
+      "id": 73000003,
+      "home": "Magny, Neil",
+      "away": "Brahimaj, Ramiz",
+      "date": "2026-08-15T21:00:00Z",
+      "sport": {
+        "name": "MMA",
+        "slug": "mma"
+      },
+      "league": {
+        "name": "UFC - UFC 330: Makhachev vs. Machado Garry",
+        "slug": "ufc-ufc-330"
+      },
+      "status": "pending"
+    },
+    {
+      "id": 73000004,
+      "home": "Luque, Vicente",
+      "away": "Gore, Tresean",
+      "date": "2026-08-15T21:00:00Z",
+      "sport": {
+        "name": "MMA",
+        "slug": "mma"
+      },
+      "league": {
+        "name": "UFC - UFC 330: Makhachev vs. Machado Garry",
+        "slug": "ufc-ufc-330"
+      },
+      "status": "pending"
+    },
+    {
+      "id": 73999999,
+      "home": "Nurmagomedov, Usman",
+      "away": "Colgan, Paul",
+      "date": "2026-08-15T21:00:00Z",
+      "sport": {
+        "name": "MMA",
+        "slug": "mma"
+      },
+      "league": {
+        "name": "PFL - PFL New York",
+        "slug": "pfl-new-york"
+      },
+      "status": "pending"
+    }
+  ],
+  "oddsApiIoOddsByEventId": {
+    "73000001": {
+      "id": 73000001,
+      "home": "Makhachev, Islam",
+      "away": "Machado Garry, Ian",
+      "date": "2026-08-15T21:00:00Z",
+      "status": "pending",
+      "bookmakers": {
+        "Bet365": [
+          {
+            "name": "ML",
+            "updatedAt": "2026-08-14T18:00:00Z",
+            "odds": [
+              {
+                "home": "1.45",
+                "away": "2.75"
+              }
+            ]
+          }
+        ],
+        "DraftKings": [
+          {
+            "name": "ML",
+            "updatedAt": "2026-08-14T18:00:00Z",
+            "odds": [
+              {
+                "home": "1.48",
+                "away": "2.70"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "73000002": {
+      "id": 73000002,
+      "home": "Abdul-Malik, Mansur",
+      "away": "Stoltzfus, Dustin",
+      "date": "2026-08-15T21:00:00Z",
+      "status": "pending",
+      "bookmakers": {
+        "Bet365": [
+          {
+            "name": "ML",
+            "updatedAt": "2026-08-14T18:00:00Z",
+            "odds": [
+              {
+                "home": "1.30",
+                "away": "3.40"
+              }
+            ]
+          }
+        ],
+        "DraftKings": [
+          {
+            "name": "ML",
+            "updatedAt": "2026-08-14T18:00:00Z",
+            "odds": [
+              {
+                "home": "1.33",
+                "away": "3.35"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "73000003": {
+      "id": 73000003,
+      "home": "Magny, Neil",
+      "away": "Brahimaj, Ramiz",
+      "date": "2026-08-15T21:00:00Z",
+      "status": "pending",
+      "bookmakers": {
+        "Bet365": [
+          {
+            "name": "ML",
+            "updatedAt": "2026-08-14T18:00:00Z",
+            "odds": [
+              {
+                "home": "2.10",
+                "away": "1.72"
+              }
+            ]
+          }
+        ],
+        "DraftKings": [
+          {
+            "name": "ML",
+            "updatedAt": "2026-08-14T18:00:00Z",
+            "odds": [
+              {
+                "home": "2.13",
+                "away": "1.67"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "73000004": {
+      "id": 73000004,
+      "home": "Luque, Vicente",
+      "away": "Gore, Tresean",
+      "date": "2026-08-15T21:00:00Z",
+      "status": "pending",
+      "bookmakers": {
+        "Bet365": [
+          {
+            "name": "ML",
+            "updatedAt": "2026-08-14T18:00:00Z",
+            "odds": [
+              {
+                "home": "1.55",
+                "away": "2.45"
+              }
+            ]
+          }
+        ],
+        "DraftKings": [
+          {
+            "name": "ML",
+            "updatedAt": "2026-08-14T18:00:00Z",
+            "odds": [
+              {
+                "home": "1.58",
+                "away": "2.40"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "theOddsApiOdds": [
+    {
+      "id": "toa-1",
+      "sport_key": "mma_mixed_martial_arts",
+      "sport_title": "MMA",
+      "commence_time": "2026-08-15T21:00:00Z",
+      "home_team": "Islam Makhachev",
+      "away_team": "Ian Machado Garry",
+      "bookmakers": [
+        {
+          "key": "draftkings",
+          "title": "DraftKings",
+          "last_update": "2026-08-14T18:00:00Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-08-14T18:00:00Z",
+              "outcomes": [
+                {
+                  "name": "Islam Makhachev",
+                  "price": -230
+                },
+                {
+                  "name": "Ian Machado Garry",
+                  "price": 190
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "fanduel",
+          "title": "FanDuel",
+          "last_update": "2026-08-14T18:00:00Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-08-14T18:00:00Z",
+              "outcomes": [
+                {
+                  "name": "Islam Makhachev",
+                  "price": -235
+                },
+                {
+                  "name": "Ian Machado Garry",
+                  "price": 195
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toa-2",
+      "sport_key": "mma_mixed_martial_arts",
+      "sport_title": "MMA",
+      "commence_time": "2026-08-15T21:00:00Z",
+      "home_team": "Edson Barboza",
+      "away_team": "Esteban Ribovics",
+      "bookmakers": [
+        {
+          "key": "draftkings",
+          "title": "DraftKings",
+          "last_update": "2026-08-14T18:00:00Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-08-14T18:00:00Z",
+              "outcomes": [
+                {
+                  "name": "Edson Barboza",
+                  "price": 135
+                },
+                {
+                  "name": "Esteban Ribovics",
+                  "price": -155
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "fanduel",
+          "title": "FanDuel",
+          "last_update": "2026-08-14T18:00:00Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-08-14T18:00:00Z",
+              "outcomes": [
+                {
+                  "name": "Edson Barboza",
+                  "price": 130
+                },
+                {
+                  "name": "Esteban Ribovics",
+                  "price": -150
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toa-3",
+      "sport_key": "mma_mixed_martial_arts",
+      "sport_title": "MMA",
+      "commence_time": "2026-08-15T21:00:00Z",
+      "home_team": "Jeremiah Wells",
+      "away_team": "Myktybek Orolbai",
+      "bookmakers": [
+        {
+          "key": "draftkings",
+          "title": "DraftKings",
+          "last_update": "2026-08-14T18:00:00Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-08-14T18:00:00Z",
+              "outcomes": [
+                {
+                  "name": "Jeremiah Wells",
+                  "price": 260
+                },
+                {
+                  "name": "Myktybek Orolbai",
+                  "price": -320
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "fanduel",
+          "title": "FanDuel",
+          "last_update": "2026-08-14T18:00:00Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-08-14T18:00:00Z",
+              "outcomes": [
+                {
+                  "name": "Jeremiah Wells",
+                  "price": 255
+                },
+                {
+                  "name": "Myktybek Orolbai",
+                  "price": -315
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "toa-4",
+      "sport_key": "mma_mixed_martial_arts",
+      "sport_title": "MMA",
+      "commence_time": "2026-08-15T21:00:00Z",
+      "home_team": "Sean Gauci",
+      "away_team": "Allan Begosso",
+      "bookmakers": [
+        {
+          "key": "draftkings",
+          "title": "DraftKings",
+          "last_update": "2026-08-14T18:00:00Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-08-14T18:00:00Z",
+              "outcomes": [
+                {
+                  "name": "Sean Gauci",
+                  "price": -240
+                },
+                {
+                  "name": "Allan Begosso",
+                  "price": 165
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "fanduel",
+          "title": "FanDuel",
+          "last_update": "2026-08-14T18:00:00Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-08-14T18:00:00Z",
+              "outcomes": [
+                {
+                  "name": "Sean Gauci",
+                  "price": -245
+                },
+                {
+                  "name": "Allan Begosso",
+                  "price": 170
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

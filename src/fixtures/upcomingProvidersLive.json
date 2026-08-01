@@ -1,0 +1,542 @@
+{
+  "capturedAt": "2026-07-29T05:25:00.000Z",
+  "note": "Trimmed verbatim captures of each provider's upcoming-market discovery response. Shape reference for the parsers; no credentials appear in any payload.",
+  "kalshiEvents": {
+    "cursor": "",
+    "events": [
+      {
+        "event_ticker": "KXUFCFIGHT-26AUG01REBPRE",
+        "title": "Fight Night: Rebecki vs Prepolec",
+        "sub_title": "Rebecki vs Prepolec",
+        "series_ticker": "KXUFCFIGHT",
+        "markets": [
+          {
+            "ticker": "KXUFCFIGHT-26AUG01REBPRE-REB",
+            "status": "active",
+            "yes_sub_title": "Mateusz Rebecki",
+            "no_sub_title": "Mateusz Rebecki",
+            "yes_bid_dollars": "0.8300",
+            "yes_ask_dollars": "0.8400",
+            "no_bid_dollars": "0.1600",
+            "no_ask_dollars": "0.1700",
+            "last_price_dollars": "0.8400",
+            "occurrence_datetime": "2026-08-01T19:00:00Z",
+            "expiration_time": "2026-08-15T14:00:00Z"
+          },
+          {
+            "ticker": "KXUFCFIGHT-26AUG01REBPRE-PRE",
+            "status": "active",
+            "yes_sub_title": "Kyle Prepolec",
+            "no_sub_title": "Kyle Prepolec",
+            "yes_bid_dollars": "0.1700",
+            "yes_ask_dollars": "0.1800",
+            "no_bid_dollars": "0.8200",
+            "no_ask_dollars": "0.8300",
+            "last_price_dollars": "0.1800",
+            "occurrence_datetime": "2026-08-01T19:00:00Z",
+            "expiration_time": "2026-08-15T14:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_ticker": "KXUFCFIGHT-26AUG01SPALUC",
+        "title": "Fight Night: Spasic vs Luciano",
+        "sub_title": "Spasic vs Luciano",
+        "series_ticker": "KXUFCFIGHT",
+        "markets": [
+          {
+            "ticker": "KXUFCFIGHT-26AUG01SPALUC-SPA",
+            "status": "active",
+            "yes_sub_title": "Marina Spasic",
+            "no_sub_title": "Marina Spasic",
+            "yes_bid_dollars": "0.2600",
+            "yes_ask_dollars": "0.2700",
+            "no_bid_dollars": "0.7300",
+            "no_ask_dollars": "0.7400",
+            "last_price_dollars": "0.2700",
+            "occurrence_datetime": "2026-08-01T19:00:00Z",
+            "expiration_time": "2026-08-15T14:00:00Z"
+          },
+          {
+            "ticker": "KXUFCFIGHT-26AUG01SPALUC-LUC",
+            "status": "active",
+            "yes_sub_title": "Stephanie Bruna Luciano",
+            "no_sub_title": "Stephanie Bruna Luciano",
+            "yes_bid_dollars": "0.7300",
+            "yes_ask_dollars": "0.7400",
+            "no_bid_dollars": "0.2600",
+            "no_ask_dollars": "0.2700",
+            "last_price_dollars": "0.7400",
+            "occurrence_datetime": "2026-08-01T19:00:00Z",
+            "expiration_time": "2026-08-15T14:00:00Z"
+          }
+        ]
+      },
+      {
+        "event_ticker": "KXUFCFIGHT-26AUG01LEKPOP",
+        "title": "Fight Night: Leka vs Poppeck",
+        "sub_title": "Leka vs Poppeck",
+        "series_ticker": "KXUFCFIGHT",
+        "markets": [
+          {
+            "ticker": "KXUFCFIGHT-26AUG01LEKPOP-LEK",
+            "status": "active",
+            "yes_sub_title": "Jovan Leka",
+            "no_sub_title": "Jovan Leka",
+            "yes_bid_dollars": "0.6600",
+            "yes_ask_dollars": "0.6700",
+            "no_bid_dollars": "0.3300",
+            "no_ask_dollars": "0.3400",
+            "last_price_dollars": "0.6700",
+            "occurrence_datetime": "2026-08-01T19:20:00Z",
+            "expiration_time": "2026-08-15T14:20:00Z"
+          },
+          {
+            "ticker": "KXUFCFIGHT-26AUG01LEKPOP-POP",
+            "status": "active",
+            "yes_sub_title": "Alexander Poppeck",
+            "no_sub_title": "Alexander Poppeck",
+            "yes_bid_dollars": "0.3300",
+            "yes_ask_dollars": "0.3400",
+            "no_bid_dollars": "0.6600",
+            "no_ask_dollars": "0.6700",
+            "last_price_dollars": "0.3400",
+            "occurrence_datetime": "2026-08-01T19:20:00Z",
+            "expiration_time": "2026-08-15T14:20:00Z"
+          }
+        ]
+      }
+    ]
+  },
+  "polymarketEvents": [
+    {
+      "id": "723151",
+      "slug": "ufc-dan7-uro-2026-08-01",
+      "title": "UFC Fight Night: Daniel Rodriguez vs. Uroš Medic (Welterweight, Main Card)",
+      "startDate": "2026-07-19T22:00:53Z",
+      "endDate": "2026-08-02T03:59:59.999Z",
+      "closed": false,
+      "active": true,
+      "markets": [
+        {
+          "id": "2994062",
+          "question": "UFC Fight Night: Daniel Rodriguez vs. Uroš Medic (Welterweight, Main Card)",
+          "conditionId": "0x236d7be30db86a3025d47fb3b6943b0d0aff7e6ff1af25978f288f508f275c76",
+          "slug": "ufc-dan7-uro-2026-08-01",
+          "outcomes": "[\"Daniel Rodriguez\", \"Uroš Medic\"]",
+          "outcomePrices": "[\"0.225\", \"0.775\"]",
+          "clobTokenIds": "[\"113526858026638802812196374097209130979386569186803826889574680119317898248712\", \"2771556511080234700107479731480026526226277627691974822230055352871535305753\"]",
+          "bestBid": 0.22,
+          "bestAsk": 0.23,
+          "lastTradePrice": 0.22,
+          "closed": false,
+          "active": true,
+          "acceptingOrders": true,
+          "updatedAt": "2026-07-29T05:20:10.266624Z",
+          "endDateIso": "2026-08-02"
+        },
+        {
+          "id": "2994063",
+          "question": "Fight to Go the Distance?",
+          "conditionId": "0x343f1cfc219b823553ee7645c062f53260066603522114771f5964ed9d22f769",
+          "slug": "ufc-dan7-uro-2026-08-01-go-the-distance",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.475\", \"0.525\"]",
+          "clobTokenIds": "[\"104151007367749561764377424820496095215771143162293156814438150073067490754256\", \"5481991378819041252719715170350492679170982895456826662340141280589328649637\"]",
+          "bestBid": 0.04,
+          "bestAsk": 0.91,
+          "closed": false,
+          "active": true,
+          "acceptingOrders": true,
+          "updatedAt": "2026-07-29T05:20:10.266624Z",
+          "endDateIso": "2026-08-02"
+        },
+        {
+          "id": "2994064",
+          "question": "Will the fight be won by KO or TKO?",
+          "conditionId": "0x1ef66fd47bdc7592ac7eb7bd3e76925faf7476fe08428d294ef4b948b3aab6fa",
+          "slug": "ufc-dan7-uro-2026-08-01-win-by-ko-tko",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.51\", \"0.49\"]",
+          "clobTokenIds": "[\"86952571015576424159020710938309364485874391258363827191800372922251788695730\", \"6929928397031500297022902757339384665011490315687039327243173080640531140954\"]",
+          "bestBid": 0.08,
+          "bestAsk": 0.94,
+          "closed": false,
+          "active": true,
+          "acceptingOrders": true,
+          "updatedAt": "2026-07-29T05:20:10.266624Z",
+          "endDateIso": "2026-08-02"
+        }
+      ]
+    },
+    {
+      "id": "723162",
+      "slug": "ufc-mar12-ale15-2026-08-01",
+      "title": "UFC Fight Night: Marcin Tybura vs. Aleksandar Rakic (Heavyweight, Main Card)",
+      "startDate": "2026-07-19T22:01:10Z",
+      "endDate": "2026-08-02T03:59:59.999Z",
+      "closed": false,
+      "active": true,
+      "markets": [
+        {
+          "id": "2994091",
+          "question": "UFC Fight Night: Marcin Tybura vs. Aleksandar Rakic (Heavyweight, Main Card)",
+          "conditionId": "0xe2218e631597ab8f431725570a393d35c9b68adf51e78c9e2d3908a3f61c4864",
+          "slug": "ufc-mar12-ale15-2026-08-01",
+          "outcomes": "[\"Marcin Tybura\", \"Aleksandar Rakic\"]",
+          "outcomePrices": "[\"0.235\", \"0.765\"]",
+          "clobTokenIds": "[\"86204725596081522318345730104592710655023034125260661746676909952940315170598\", \"82763048148280849608118747024447682466395292101567133879940952188182137087723\"]",
+          "bestBid": 0.23,
+          "bestAsk": 0.24,
+          "lastTradePrice": 0.24,
+          "closed": false,
+          "active": true,
+          "acceptingOrders": true,
+          "updatedAt": "2026-07-29T05:20:10.266624Z",
+          "endDateIso": "2026-08-02"
+        },
+        {
+          "id": "2994094",
+          "question": "Fight to Go the Distance?",
+          "conditionId": "0x080bc1d3d4e55ef4f8e7da677a0bb07e6cf97560acf56cc515282c72e06be519",
+          "slug": "ufc-mar12-ale15-2026-08-01-go-the-distance",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.47\", \"0.53\"]",
+          "clobTokenIds": "[\"77268630475487932631700979961058713849846374447513519952148149019124491257514\", \"63245763677520281532427303769821801368182196095098991162672231466979784648322\"]",
+          "bestBid": 0.45,
+          "bestAsk": 0.49,
+          "closed": false,
+          "active": true,
+          "acceptingOrders": true,
+          "updatedAt": "2026-07-29T05:20:10.266624Z",
+          "endDateIso": "2026-08-02"
+        },
+        {
+          "id": "2994097",
+          "question": "Will the fight be won by KO or TKO?",
+          "conditionId": "0xf3c8be389bc46771a8d926730c8bd245404c7d6a652717f811a03e32484c8ea0",
+          "slug": "ufc-mar12-ale15-2026-08-01-win-by-ko-tko",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.49\", \"0.51\"]",
+          "clobTokenIds": "[\"75172378188040365835618110820069364708356991639617765096725953692559506811612\", \"87300153670858366330529519208089478970153158679029805481811909408343301980031\"]",
+          "bestBid": 0.04,
+          "bestAsk": 0.94,
+          "closed": false,
+          "active": true,
+          "acceptingOrders": true,
+          "updatedAt": "2026-07-29T05:20:10.266624Z",
+          "endDateIso": "2026-08-02"
+        }
+      ]
+    },
+    {
+      "id": "723179",
+      "slug": "ufc-gil3-vcepo-2026-08-01",
+      "title": "UFC Fight Night: Gilbert Urbina vs. Vlasto Cepo (Middleweight, Prelims)",
+      "startDate": "2026-07-19T22:01:32Z",
+      "endDate": "2026-08-02T03:59:59.999Z",
+      "closed": false,
+      "active": true,
+      "markets": [
+        {
+          "id": "2994165",
+          "question": "UFC Fight Night: Gilbert Urbina vs. Vlasto Cepo (Middleweight, Prelims)",
+          "conditionId": "0xfc68443ea655514550f322c8778bdf44488fd536b098efac4e5cb86b42b78a1e",
+          "slug": "ufc-gil3-vcepo-2026-08-01",
+          "outcomes": "[\"Gilbert Urbina\", \"Vlasto Cepo\"]",
+          "outcomePrices": "[\"0.265\", \"0.735\"]",
+          "clobTokenIds": "[\"38380966034388651204394453910781546805515553346714973874775920760175476203395\", \"97125780015163793551386222165170774094934691458979065973191807899561383659628\"]",
+          "bestBid": 0.26,
+          "bestAsk": 0.27,
+          "lastTradePrice": 0.27,
+          "closed": false,
+          "active": true,
+          "acceptingOrders": true,
+          "updatedAt": "2026-07-29T05:20:10.266624Z",
+          "endDateIso": "2026-08-02"
+        },
+        {
+          "id": "2994168",
+          "question": "Fight to Go the Distance?",
+          "conditionId": "0x3954d3d41735b420b9a02b37bc45dc8017abcab54ec7b9cc3ae3e9f453ffc5af",
+          "slug": "ufc-gil3-vcepo-2026-08-01-go-the-distance",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.49\", \"0.51\"]",
+          "clobTokenIds": "[\"10935649887739209343789434453395789243971091761615524927883932620843306511190\", \"75076900266022815314960457315703117926790059364653497921314496918328815285934\"]",
+          "bestBid": 0.07,
+          "bestAsk": 0.91,
+          "closed": false,
+          "active": true,
+          "acceptingOrders": true,
+          "updatedAt": "2026-07-29T05:20:10.266624Z",
+          "endDateIso": "2026-08-02"
+        },
+        {
+          "id": "2994170",
+          "question": "Will the fight be won by KO or TKO?",
+          "conditionId": "0xcfc0206da251e8e2da440bfb138efc3d8d3d6b3fc313a3c27e9f5cbb90add531",
+          "slug": "ufc-gil3-vcepo-2026-08-01-win-by-ko-tko",
+          "outcomes": "[\"Yes\", \"No\"]",
+          "outcomePrices": "[\"0.515\", \"0.485\"]",
+          "clobTokenIds": "[\"93605161308283693401481495035567051713848492409281041118086639928038086931420\", \"40731746717724340669678712341896725038225879536452549188613112126976248415251\"]",
+          "bestBid": 0.08,
+          "bestAsk": 0.95,
+          "closed": false,
+          "active": true,
+          "acceptingOrders": true,
+          "updatedAt": "2026-07-29T05:20:10.266624Z",
+          "endDateIso": "2026-08-02"
+        }
+      ]
+    }
+  ],
+  "oddsApiIoEvents": [
+    {
+      "id": 73240944,
+      "home": "Spasic, Marina",
+      "away": "Luciano, Stephanie Bruna",
+      "homeId": 1377152,
+      "awayId": 1026595,
+      "date": "2026-08-01T14:00:00Z",
+      "sport": {
+        "name": "MMA",
+        "slug": "mma"
+      },
+      "league": {
+        "name": "UFC - UFC Fight Night: Medic vs. Rodriguez",
+        "slug": "ufc-ufc-fight-night-medic-vs-rodriguez"
+      },
+      "status": "pending",
+      "scores": {
+        "home": 0,
+        "away": 0
+      }
+    },
+    {
+      "id": 71770202,
+      "home": "Leka, Jovan",
+      "away": "Gimenis, Max",
+      "homeId": 1296449,
+      "awayId": 1298944,
+      "date": "2026-08-01T14:20:00Z",
+      "sport": {
+        "name": "MMA",
+        "slug": "mma"
+      },
+      "league": {
+        "name": "UFC - UFC Fight Night: Medic vs. Rodriguez",
+        "slug": "ufc-ufc-fight-night-medic-vs-rodriguez"
+      },
+      "status": "pending",
+      "scores": {
+        "home": 0,
+        "away": 0
+      }
+    },
+    {
+      "id": 73240940,
+      "home": "Leka, Jovan",
+      "away": "Poppeck, Alexander",
+      "homeId": 1296449,
+      "awayId": 288701,
+      "date": "2026-08-01T14:20:00Z",
+      "sport": {
+        "name": "MMA",
+        "slug": "mma"
+      },
+      "league": {
+        "name": "UFC - UFC Fight Night: Medic vs. Rodriguez",
+        "slug": "ufc-ufc-fight-night-medic-vs-rodriguez"
+      },
+      "status": "pending",
+      "scores": {
+        "home": 0,
+        "away": 0
+      }
+    },
+    {
+      "id": 72397488,
+      "home": "Milosevic, Nina",
+      "away": "Cowan, Hailey",
+      "homeId": 1366256,
+      "awayId": 909505,
+      "date": "2026-08-01T14:40:00Z",
+      "sport": {
+        "name": "MMA",
+        "slug": "mma"
+      },
+      "league": {
+        "name": "UFC - UFC Fight Night: Medic vs. Rodriguez",
+        "slug": "ufc-ufc-fight-night-medic-vs-rodriguez"
+      },
+      "status": "pending",
+      "scores": {
+        "home": 0,
+        "away": 0
+      }
+    }
+  ],
+  "oddsApiIoEventOdds": {
+    "id": 73240944,
+    "home": "Spasic, Marina",
+    "away": "Luciano, Stephanie Bruna",
+    "homeId": 1377152,
+    "awayId": 1026595,
+    "date": "2026-08-01T14:00:00Z",
+    "status": "pending",
+    "sport": {
+      "name": "MMA",
+      "slug": "mma"
+    },
+    "league": {
+      "name": "UFC - UFC Fight Night: Medic vs. Rodriguez",
+      "slug": "ufc-ufc-fight-night-medic-vs-rodriguez"
+    },
+    "urls": {
+      "Bet365": "https://www.bet365.com/#/AC/B162/C1/D8/E26337469/F8/G198653771/H4/"
+    },
+    "bookmakerIds": {
+      "Bet365": "198653771"
+    },
+    "bookmakers": {
+      "Bet365": [
+        {
+          "name": "ML",
+          "updatedAt": "2026-07-29T05:16:20.227Z",
+          "odds": [
+            {
+              "home": "3.30",
+              "away": "1.35"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "theOddsApiOdds": [
+    {
+      "id": "7965160f55d2cc81efdd425e4db1b21d",
+      "sport_key": "mma_mixed_martial_arts",
+      "sport_title": "MMA",
+      "commence_time": "2026-07-31T23:00:00Z",
+      "home_team": "Sean Gauci",
+      "away_team": "Allan Begosso",
+      "bookmakers": [
+        {
+          "key": "betonlineag",
+          "title": "BetOnline.ag",
+          "last_update": "2026-07-29T05:22:13Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-07-29T05:22:12Z",
+              "outcomes": [
+                {
+                  "name": "Allan Begosso",
+                  "price": 165
+                },
+                {
+                  "name": "Sean Gauci",
+                  "price": -240
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "acdea5564fe571ee17da1ca48aa93888",
+      "sport_key": "mma_mixed_martial_arts",
+      "sport_title": "MMA",
+      "commence_time": "2026-07-31T23:00:00Z",
+      "home_team": "Amru Magomedov",
+      "away_team": "Joel Alvarez",
+      "bookmakers": [
+        {
+          "key": "betonlineag",
+          "title": "BetOnline.ag",
+          "last_update": "2026-07-29T05:22:13Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-07-29T05:22:12Z",
+              "outcomes": [
+                {
+                  "name": "Amru Magomedov",
+                  "price": -3800
+                },
+                {
+                  "name": "Joel Alvarez",
+                  "price": 950
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b65d80aa36f7a0ae20d2001eb26177ce",
+      "sport_key": "mma_mixed_martial_arts",
+      "sport_title": "MMA",
+      "commence_time": "2026-07-31T23:00:00Z",
+      "home_team": "Usman Nurmagomedov",
+      "away_team": "Archie Colgan",
+      "bookmakers": [
+        {
+          "key": "betonlineag",
+          "title": "BetOnline.ag",
+          "last_update": "2026-07-29T05:22:13Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-07-29T05:22:12Z",
+              "outcomes": [
+                {
+                  "name": "Archie Colgan",
+                  "price": 350
+                },
+                {
+                  "name": "Usman Nurmagomedov",
+                  "price": -600
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "2cd3941e9acf0b68afd8c36e3767f0bb",
+      "sport_key": "mma_mixed_martial_arts",
+      "sport_title": "MMA",
+      "commence_time": "2026-07-31T23:00:00Z",
+      "home_team": "Dakota Ditcheva",
+      "away_team": "Denise Kielholtz",
+      "bookmakers": [
+        {
+          "key": "betonlineag",
+          "title": "BetOnline.ag",
+          "last_update": "2026-07-29T05:22:13Z",
+          "markets": [
+            {
+              "key": "h2h",
+              "last_update": "2026-07-29T05:22:12Z",
+              "outcomes": [
+                {
+                  "name": "Dakota Ditcheva",
+                  "price": -8000
+                },
+                {
+                  "name": "Denise Kielholtz",
+                  "price": 1500
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

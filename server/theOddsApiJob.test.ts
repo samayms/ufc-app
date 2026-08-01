@@ -74,6 +74,7 @@ function mainBout() {
 async function setup(
   source: Pick<TheOddsApiSource, "getH2hSnapshot">,
   random = () => 0.5,
+  enabled?: boolean | (() => boolean),
 ) {
   const eventBus = new CollectorEventBus();
   const storage = new MemoryStorage();
@@ -98,6 +99,7 @@ async function setup(
       boutId === "bout-main" ? mainBout() : undefined,
     clock: time,
     random,
+    ...(enabled === undefined ? {} : { enabled }),
   });
   return { eventBus, roundJob, scheduler, tickStore, time };
 }
@@ -263,6 +265,54 @@ describe("The Odds API round job", () => {
       rawOdds: -185,
     });
     expect(outcome?.noVigProbability).toBeUndefined();
+    await roundJob.close();
+    await scheduler.close();
+    await tickStore.close();
+  });
+
+  it("no-ops on round end when disabled with a boolean", async () => {
+    const fixture = createOddsApiSource({ mode: "fixture" });
+    const getH2hSnapshot = vi.spyOn(fixture, "getH2hSnapshot");
+    const { eventBus, roundJob, scheduler, tickStore, time } =
+      await setup(fixture, () => 0.5, false);
+
+    eventBus.emit({
+      type: "ROUND_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: new Date(time.now()).toISOString(),
+      confirmation: "period_transition",
+    });
+    await roundJob.idle();
+    time.advance(30_000);
+    await roundJob.idle();
+
+    expect(scheduler.getJobs()).toEqual([]);
+    expect(getH2hSnapshot).not.toHaveBeenCalled();
+    await roundJob.close();
+    await scheduler.close();
+    await tickStore.close();
+  });
+
+  it("no-ops on round end when the enabled predicate returns false", async () => {
+    const fixture = createOddsApiSource({ mode: "fixture" });
+    const getH2hSnapshot = vi.spyOn(fixture, "getH2hSnapshot");
+    const { eventBus, roundJob, scheduler, tickStore, time } =
+      await setup(fixture, () => 0.5, () => false);
+
+    eventBus.emit({
+      type: "ROUND_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: new Date(time.now()).toISOString(),
+      confirmation: "period_transition",
+    });
+    await roundJob.idle();
+    time.advance(30_000);
+    await roundJob.idle();
+
+    expect(scheduler.getJobs()).toEqual([]);
+    expect(getH2hSnapshot).not.toHaveBeenCalled();
     await roundJob.close();
     await scheduler.close();
     await tickStore.close();

@@ -53,6 +53,10 @@ async function setup(options: {
   storage?: MemoryStorage;
   clock?: ManualClock;
   staleAfterMs?: number;
+  // Existing tests assert on synchronous per-tick persistence, unrelated to
+  // the sampled-persistence behavior; default to immediate writes here and
+  // opt individual tests into sampling explicitly.
+  persistIntervalMs?: number;
   onSnapshot?: (snapshot: Parameters<
     NonNullable<
       ConstructorParameters<typeof MarketTickStore>[0]["onSnapshot"]
@@ -72,6 +76,7 @@ async function setup(options: {
     storage,
     clock,
     staleAfterMs: options.staleAfterMs ?? 30_000,
+    persistIntervalMs: options.persistIntervalMs ?? 0,
     ...(options.onSnapshot === undefined
       ? {}
       : { onSnapshot: options.onSnapshot }),
@@ -106,6 +111,63 @@ describe("MarketTickStore", () => {
         impliedProbability: 0.63,
       }),
     ]);
+    await store.close();
+  });
+
+  it("samples durable persistence to roughly once per second per key while applying every tick in memory", async () => {
+    const clock = new ManualClock();
+    const storage = new MemoryStorage();
+    const timers: Array<{ callback: () => void; delayMs: number }> = [];
+    const timer = {
+      setTimeout: (callback: () => void, delayMs: number) => {
+        const handle = { callback, delayMs };
+        timers.push(handle);
+        return handle;
+      },
+      clearTimeout: (handle: unknown) => {
+        const index = timers.indexOf(
+          handle as (typeof timers)[number],
+        );
+        if (index >= 0) timers.splice(index, 1);
+      },
+    };
+    const bus = new CollectorEventBus();
+    const store = await MarketTickStore.create({
+      eventBus: bus,
+      storage,
+      clock,
+      persistIntervalMs: 1_000,
+      timer,
+    });
+
+    await store.appendTick(tick("red"));
+    await store.appendTick(tick("red", { bid: 0.6, ask: 0.62 }));
+    await store.appendTick(tick("red", { bid: 0.61, ask: 0.63 }));
+
+    // In-memory state reflects every tick immediately.
+    expect(store.getLatest(BOUT_ID)[0]).toMatchObject({
+      bid: 0.61,
+      ask: 0.63,
+    });
+    // Only the first tick for this key was durably written so far — the
+    // second and third landed inside the same 1s sampling window.
+    await expect(
+      storage.read(MARKET_TICKS_STORAGE_STREAM),
+    ).resolves.toHaveLength(1);
+
+    // The trailing flush lands the *latest* sample once the window elapses,
+    // not the stale one that first triggered it.
+    expect(timers).toHaveLength(1);
+    timers[0]?.callback();
+    await store.idle();
+    await expect(
+      storage.read(MARKET_TICKS_STORAGE_STREAM),
+    ).resolves.toHaveLength(2);
+    const persisted = (await storage.read<{
+      tick: MarketTick;
+    }>(MARKET_TICKS_STORAGE_STREAM)).map((record) => record.tick);
+    expect(persisted[1]).toMatchObject({ bid: 0.61, ask: 0.63 });
+
     await store.close();
   });
 

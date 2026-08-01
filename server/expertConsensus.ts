@@ -5,30 +5,12 @@ import type {
   ExpertConsensusValue,
   SherdogRoundObservation,
 } from "../src/schema.ts";
-import {
-  scoreWinner,
-  type ParsedExpertScore,
-} from "../src/sources/x.ts";
-
-function normalizedName(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
-    .replace(/[^\p{Letter}\p{Number}]/gu, "")
-    .toLocaleLowerCase("en");
-}
+import { fighterNameMatches } from "../src/sources/sherdog.ts";
 
 function winnerCorner(bout: Bout, winner: string): Corner | undefined {
-  const normalizedWinner = normalizedName(winner);
-  if (!normalizedWinner) return undefined;
-
-  return (["red", "blue"] as const).find((corner) => {
-    const full = normalizedName(bout.fighters[corner].name);
-    const last = normalizedName(
-      bout.fighters[corner].name.trim().split(/\s+/).at(-1) ?? "",
-    );
-    return normalizedWinner === full || normalizedWinner === last;
-  });
+  return (["red", "blue"] as const).find((corner) =>
+    fighterNameMatches(bout.fighters[corner].name, winner),
+  );
 }
 
 function consensusValue(
@@ -61,7 +43,6 @@ function consensusValue(
 export function computeExpertConsensus(
   bout: Bout,
   sherdog: SherdogRoundObservation | undefined,
-  xScores: readonly ParsedExpertScore[],
 ): ExpertConsensus | undefined {
   const sherdogConsensus =
     sherdog === undefined
@@ -74,18 +55,9 @@ export function computeExpertConsensus(
             return corner === undefined ? [] : [corner];
           }),
         );
-  const xConsensus = consensusValue(
-    "x",
-    xScores.map((score) => scoreWinner(score.score)),
-  );
 
-  if (sherdogConsensus === undefined && xConsensus === undefined) {
+  if (sherdogConsensus === undefined) {
     return undefined;
   }
-  return {
-    ...(sherdogConsensus === undefined
-      ? {}
-      : { sherdog: sherdogConsensus }),
-    ...(xConsensus === undefined ? {} : { x: xConsensus }),
-  };
+  return { sherdog: sherdogConsensus };
 }

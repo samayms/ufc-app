@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { MatchupCard, type MatchupFighterEntry } from "./MatchupCard.tsx";
 import "./newComponents.css";
 import { fmtEventDate } from "./format.ts";
 
@@ -7,80 +7,9 @@ export interface EventListEntry {
   id: string;
   name: string;
   startsAt: string;
-  redFighter?: { name: string; photoUrl?: string };
-  blueFighter?: { name: string; photoUrl?: string };
-}
-
-/** Two-letter initials from a full name, matching BoutHeader.tsx's FighterBlock convention. */
-function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2);
-}
-
-function EventCardFighter({
-  fighter,
-  corner,
-}: {
-  fighter: { name: string; photoUrl?: string } | undefined;
-  corner: "red" | "blue";
-}) {
-  const [imgFailed, setImgFailed] = useState(false);
-  if (!fighter) {
-    return <div className={`event-card-fighter${corner === "blue" ? " is-blue" : ""}`} />;
-  }
-  const showImg = fighter.photoUrl && !imgFailed;
-  return (
-    <div className={`event-card-fighter${corner === "blue" ? " is-blue" : ""}`}>
-      <span
-        className={`event-card-fighter-photo fighter-photo-${corner}`}
-        aria-hidden={showImg ? undefined : "true"}
-      >
-        {showImg ? (
-          <img
-            className="fighter-photo-img"
-            src={fighter.photoUrl}
-            alt={fighter.name}
-            onError={() => setImgFailed(true)}
-          />
-        ) : (
-          initialsOf(fighter.name)
-        )}
-      </span>
-      <span className="event-card-fighter-name">{fighter.name}</span>
-    </div>
-  );
-}
-
-function EventCard({
-  entry,
-  isSelected,
-  onSelect,
-}: {
-  entry: EventListEntry;
-  isSelected: boolean;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`event-card${isSelected ? " is-selected" : ""}`}
-      onClick={() => onSelect(entry.id)}
-      aria-current={isSelected ? "true" : undefined}
-    >
-      <div className="event-card-header">
-        <span className="event-card-name">{entry.name}</span>
-        <span className="event-card-date num">{fmtEventDate(entry.startsAt)}</span>
-      </div>
-      <div className="event-card-matchup">
-        <EventCardFighter fighter={entry.redFighter} corner="red" />
-        <span className="event-card-vs">vs</span>
-        <EventCardFighter fighter={entry.blueFighter} corner="blue" />
-      </div>
-    </button>
-  );
+  isLive?: boolean;
+  redFighter?: MatchupFighterEntry;
+  blueFighter?: MatchupFighterEntry;
 }
 
 /**
@@ -106,10 +35,19 @@ export function EventList({
       {currentEvent && (
         <section className="rail-segment">
           <h2 className="rail-heading">Current event</h2>
-          <EventCard
-            entry={currentEvent}
+          <MatchupCard
+            header={
+              <>
+                <span className="event-card-name">{currentEvent.name}</span>
+                <span className="event-card-date num">{fmtEventDate(currentEvent.startsAt)}</span>
+              </>
+            }
+            red={currentEvent.redFighter}
+            blue={currentEvent.blueFighter}
+            center={<span className="event-card-vs">vs</span>}
             isSelected={currentEvent.id === selectedId}
-            onSelect={onSelect}
+            isLive={currentEvent.isLive}
+            onSelect={() => onSelect(currentEvent.id)}
           />
         </section>
       )}
@@ -117,11 +55,20 @@ export function EventList({
         <section className="rail-segment">
           <h2 className="rail-heading">Upcoming events</h2>
           {events.map((entry) => (
-            <EventCard
+            <MatchupCard
               key={entry.id}
-              entry={entry}
+              header={
+                <>
+                  <span className="event-card-name">{entry.name}</span>
+                  <span className="event-card-date num">{fmtEventDate(entry.startsAt)}</span>
+                </>
+              }
+              red={entry.redFighter}
+              blue={entry.blueFighter}
+              center={<span className="event-card-vs">vs</span>}
               isSelected={entry.id === selectedId}
-              onSelect={onSelect}
+              isLive={entry.isLive}
+              onSelect={() => onSelect(entry.id)}
             />
           ))}
         </section>

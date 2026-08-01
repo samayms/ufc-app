@@ -1,17 +1,113 @@
 import { useState } from "react";
 
 import type { EspnScheduledFight, EspnScheduledFighter } from "../sources/espnSchedule.ts";
-import type { Corner, Fighter, FightRecord } from "../schema.ts";
+import type {
+  Bout,
+  BoutView,
+  Corner,
+  Fighter,
+  FightRecord,
+  OddsSnapshot,
+} from "../schema.ts";
 
+import {
+  findUpcomingBout,
+  type UpcomingBoutOdds,
+  type UpcomingProviderEntry,
+  type UpcomingProviderId,
+} from "../lib/upcomingOdds.ts";
+import type { UpcomingOddsState } from "../store/useUpcomingOdds.ts";
 import { BoutHeader } from "./BoutHeader.tsx";
 import { FighterProfile } from "./FighterProfile.tsx";
 import { MarketStrip } from "./MarketStrip.tsx";
-import { OddsPanel } from "./OddsPanel.tsx";
 import { RecentForm } from "./RecentForm.tsx";
+import { UpcomingOddsPanel } from "./UpcomingOddsPanel.tsx";
 import { SectionTabs, type FightSection } from "./SectionTabs.tsx";
+import { WEIGHT_LABEL, fmtRecord } from "./format.ts";
 import "./newComponents.css";
 
 const PREVIEW_SECTIONS: FightSection[] = ["tale", "odds"];
+
+function boutFighterToScheduledFighter(fighter: Fighter): EspnScheduledFighter {
+  const athleteId = fighter.externalRefs.find((ref) => ref.source === "espn")?.id;
+  return {
+    ...(athleteId === undefined ? {} : { athleteId }),
+    name: fighter.name,
+    record: fmtRecord(fighter.record),
+    ...(fighter.nickname === undefined ? {} : { nickname: fighter.nickname }),
+    ...(fighter.country === undefined ? {} : { country: fighter.country }),
+    ...(fighter.age === undefined ? {} : { age: fighter.age }),
+    ...(fighter.heightCm === undefined ? {} : { heightCm: fighter.heightCm }),
+    ...(fighter.reachCm === undefined ? {} : { reachCm: fighter.reachCm }),
+    ...(fighter.stance === undefined ? {} : { stance: fighter.stance }),
+    ...(fighter.recentBouts === undefined ? {} : { recentBouts: fighter.recentBouts }),
+    ...(fighter.ranking === undefined ? {} : { ranking: fighter.ranking }),
+  };
+}
+
+function liveSnapshotEntry(
+  provider: UpcomingProviderId,
+  snapshot: OddsSnapshot,
+): UpcomingProviderEntry {
+  const fetchedAt = snapshot.provenance.fetchedAt;
+  return {
+    status: "loaded",
+    fetchedAt,
+    updatedAt: snapshot.marketUpdatedAt ?? fetchedAt,
+    externalId: `${provider}:${snapshot.boutId}`,
+    confidence: 1,
+    cornersReversed: false,
+    snapshot,
+  };
+}
+
+/** Converts live snapshots into the same provider shape used by upcoming odds. */
+export function liveBoutToUpcomingOdds(view: BoutView): UpcomingBoutOdds {
+  const providers: UpcomingBoutOdds["providers"] = {};
+  for (const snapshot of Object.values(view.latestOdds)) {
+    const provider: UpcomingProviderId =
+      snapshot.market === "kalshi"
+        ? "kalshi"
+        : snapshot.market === "polymarket"
+          ? "polymarket"
+          : snapshot.provenance.source === "odds-api"
+            ? "odds-api"
+            : "odds-api-io";
+    providers[provider] = liveSnapshotEntry(provider, snapshot);
+  }
+  const synthetic = Object.values(view.latestOdds).some(
+    (snapshot) => snapshot.provenance.synthetic,
+  );
+  return {
+    boutId: view.bout.id,
+    espnEventId: view.bout.eventId,
+    redFighter: view.bout.fighters.red.name,
+    blueFighter: view.bout.fighters.blue.name,
+    providers,
+    decision: {
+      state: "not_listed",
+      fetchedAt: new Date().toISOString(),
+      synthetic,
+    },
+  };
+}
+
+/** Adapts a canonical bout into the same preview contract used by ESPN cards. */
+export function boutToScheduledFight(bout: Bout): EspnScheduledFight {
+  return {
+    competitionId: bout.id,
+    matchNumber: bout.cardPosition,
+    weightClassLabel: WEIGHT_LABEL[bout.weightClass] ?? bout.weightClass,
+    titleFight: bout.titleFight,
+    mainEvent: bout.cardPosition === 1,
+    red: boutFighterToScheduledFighter(bout.fighters.red),
+    blue: boutFighterToScheduledFighter(bout.fighters.blue),
+    status: bout.status,
+    ...(bout.currentRound === undefined ? {} : { currentRound: bout.currentRound }),
+    ...(bout.result === undefined ? {} : { result: bout.result }),
+    ...(bout.outlook === undefined ? {} : { outlook: bout.outlook }),
+  };
+}
 
 function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -62,21 +158,97 @@ function toFighter(fighter: EspnScheduledFighter): Fighter {
 }
 
 /**
- * Odds tab for a future (not-yet-started) fight. No real data pipeline
- * connects future ESPN fights to any market yet, so this renders the exact
- * same `OddsPanel` the live Fight tab uses, with empty `latestOdds` /
- * `preFightOdds` — which guarantees this view is pixel-identical to the
- * live Odds tab (same component, not a hand-duplicated copy) and means a
- * future prompt wiring up real Kalshi/Polymarket/sportsbook data only has
- * to pass snapshots in, not rebuild this layout. Missing numbers render as
- * "—" in the same bar layout the live tab uses, rather than swapping to a
- * different empty-state message.
+ * Odds tab for a future (not-yet-started) fight.
+ *
+ * Backed by the twice-daily upcoming-odds sync rather than the live
+ * collector's in-fight tick stream. Each of the four providers reports its
+ * own state, because before a fight starts "Kalshi hasn't listed it" and
+ * "Kalshi is down" are the two most common situations and they are not the
+ * same answer. Nothing here falls back to fixture prices: every number on
+ * this screen was published by a real provider for this exact bout.
  */
-function OddsSection({ fight }: { fight: EspnScheduledFight }) {
+export function UpcomingOddsSection({
+  fight,
+  upcoming,
+  liveView,
+}: {
+  fight: EspnScheduledFight;
+  upcoming: UpcomingOddsState;
+  liveView?: BoutView;
+}) {
   const redName = fight.red.name.split(" ").at(-1) ?? fight.red.name;
   const blueName = fight.blue.name.split(" ").at(-1) ?? fight.blue.name;
+  const upcomingBout = findUpcomingBout(upcoming.document, fight.competitionId);
+  const liveBout = liveView ? liveBoutToUpcomingOdds(liveView) : undefined;
+  const bout = liveBout && Object.keys(liveBout.providers).length > 0
+    ? liveBout
+    : upcomingBout;
+
+  const notice =
+    upcoming.status === "loading"
+      ? undefined
+      : upcoming.status === "error"
+        ? (upcoming.message ??
+          "The collector could not be reached. Start it with npm run dev:live.")
+        : upcoming.document === null
+          ? "No sync has run yet. Run npm run sync:upcoming:live to load provider odds."
+          : bout === undefined
+            ? "The last sync did not cover this card."
+            : undefined;
+
   return (
-    <OddsPanel redName={redName} blueName={blueName} latestOdds={{}} preFightOdds={{}} />
+    <UpcomingOddsPanel
+      bout={bout}
+      redName={redName}
+      blueName={blueName}
+      {...(upcoming.document === null
+        ? {}
+        : { syncedAt: upcoming.document.generatedAt })}
+      {...(notice === undefined ? {} : { notice })}
+      {...(liveView === undefined ? {} : { allowSynthetic: true })}
+    />
+  );
+}
+
+export function UpcomingTaleSection({
+  fighters,
+  statValues,
+  outlook,
+}: {
+  fighters: Record<Corner, Fighter>;
+  statValues?: Partial<Record<Corner, Record<string, string>>>;
+  /** Real Sherdog-derived outlook text; the panel is omitted entirely when absent. */
+  outlook?: string;
+}) {
+  return (
+    <>
+      <FighterProfile fighters={fighters} />
+      <RecentForm fighters={fighters} />
+      <section
+        className="profile-panel"
+        aria-label={outlook === undefined ? "Fighter stats" : "Fight outlook and fighter stats"}
+      >
+        {outlook === undefined ? undefined : (
+          <div className="outlook-panel">
+            <span className="outlook-heading">Fight outlook</span>
+            <p className="outlook-body">{outlook}</p>
+          </div>
+        )}
+        <div
+          className={
+            outlook === undefined ? "profile-rows profile-rows--leading" : "profile-rows"
+          }
+        >
+          {STAT_ROWS.map(({ key, label }) => (
+            <div className="profile-row" key={key}>
+              <span className="num">{statValues?.red?.[key] ?? "—"}</span>
+              <span>{label}</span>
+              <span className="num">{statValues?.blue?.[key] ?? "—"}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -86,35 +258,20 @@ function TaleSection({ fight }: { fight: EspnScheduledFight }) {
     blue: toFighter(fight.blue),
   };
   return (
-    <>
-      <FighterProfile fighters={fighters} />
-      <RecentForm fighters={fighters} />
-      <section className="profile-panel" aria-label="Fight outlook">
-        <div className="outlook-panel">
-          <span className="outlook-heading">Fight outlook</span>
-          <p className="outlook-body">{OUTLOOK_PLACEHOLDER}</p>
-        </div>
-        <div className="profile-rows">
-          {STAT_ROWS.map(({ key, label }) => (
-            <div className="profile-row" key={key}>
-              <span className="num">{statValue(fight.red, key)}</span>
-              <span>{label}</span>
-              <span className="num">{statValue(fight.blue, key)}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-    </>
+    <UpcomingTaleSection
+      fighters={fighters}
+      outlook={fight.outlook}
+      statValues={{
+        red: Object.fromEntries(
+          STAT_ROWS.map(({ key }) => [key, statValue(fight.red, key)]),
+        ),
+        blue: Object.fromEntries(
+          STAT_ROWS.map(({ key }) => [key, statValue(fight.blue, key)]),
+        ),
+      }}
+    />
   );
 }
-
-// Placeholder fight-outlook copy. Swap for a real AI-generated prediction
-// once a data source exists.
-const OUTLOOK_PLACEHOLDER =
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. This fight outlook " +
-  "will summarize stylistic matchups and a data-driven prediction once a " +
-  "live analysis source is wired up. Sed do eiusmod tempor incididunt ut " +
-  "labore et dolore magna aliqua.";
 
 const STAT_ROWS: { key: string; label: string }[] = [
   { key: "strikeLPM", label: "Sig. strikes landed/min" },
@@ -123,6 +280,30 @@ const STAT_ROWS: { key: string; label: string }[] = [
   { key: "takedownAccuracy", label: "Takedown accuracy" },
   { key: "submissionAvg", label: "Submission avg" },
 ];
+
+/**
+ * Collapses a bout's per-provider entries into the market-keyed shape
+ * `MarketStrip` already speaks. Kalshi and Polymarket map straight across; the
+ * two sportsbook providers share one slot, so the more recently updated of the
+ * two wins rather than whichever happened to be enumerated last.
+ */
+function latestOddsByMarket(
+  bout: UpcomingBoutOdds,
+): Partial<Record<OddsSnapshot["market"], OddsSnapshot>> {
+  const latest: Partial<Record<OddsSnapshot["market"], OddsSnapshot>> = {};
+  for (const entry of Object.values(bout.providers)) {
+    if (entry?.status !== "loaded" || entry.snapshot === undefined) continue;
+    const market = entry.snapshot.market;
+    const existing = latest[market];
+    if (
+      existing === undefined ||
+      (entry.updatedAt ?? "") > (existing.marketUpdatedAt ?? "")
+    ) {
+      latest[market] = entry.snapshot;
+    }
+  }
+  return latest;
+}
 
 function statValue(fighter: EspnScheduledFighter, key: string): string {
   return fighter.stats?.find((stat) => stat.name === key)?.displayValue ?? "—";
@@ -137,8 +318,12 @@ function statValue(fighter: EspnScheduledFighter, key: string): string {
  */
 export function ScheduledFightPreview({
   fight,
+  upcoming,
+  photosByCorner,
 }: {
   fight: EspnScheduledFight;
+  upcoming: UpcomingOddsState;
+  photosByCorner?: Partial<Record<Corner, string>>;
 }) {
   const [active, setActive] = useState<FightSection>("tale");
 
@@ -148,6 +333,11 @@ export function ScheduledFightPreview({
   // data.
   const scheduledRounds = fight.titleFight || fight.mainEvent ? 5 : 3;
 
+  // The strip above the tabs previews whatever the sync actually has, so a
+  // fight with real upcoming odds shows them before the Odds tab is opened.
+  const upcomingBout = findUpcomingBout(upcoming.document, fight.competitionId);
+  const stripOdds = upcomingBout === undefined ? {} : latestOddsByMarket(upcomingBout);
+
   return (
     <div className="scheduled-preview">
       <BoutHeader
@@ -156,16 +346,20 @@ export function ScheduledFightPreview({
         scheduledRounds={scheduledRounds}
         fighters={{ red: toFighter(fight.red), blue: toFighter(fight.blue) }}
         status="upcoming"
-        photosByCorner={{
+        photosByCorner={photosByCorner ?? {
           red: fight.red.headshotUrl,
           blue: fight.blue.headshotUrl,
         }}
       />
-      <MarketStrip latestOdds={{}} preFightOdds={{}} onOpen={() => setActive("odds")} />
+      <MarketStrip
+        latestOdds={stripOdds}
+        preFightOdds={{}}
+        onOpen={() => setActive("odds")}
+      />
 
       <SectionTabs active={active} onChange={setActive} sections={PREVIEW_SECTIONS} />
 
-      {active === "odds" && <OddsSection fight={fight} />}
+      {active === "odds" && <UpcomingOddsSection fight={fight} upcoming={upcoming} />}
       {active === "tale" && <TaleSection fight={fight} />}
     </div>
   );

@@ -12,6 +12,7 @@
  */
 
 import type { BoutResult, BoutStatus, FinishMethod, PastBout } from "../schema.ts";
+import { officialUfcRanking } from "../lib/ufcRankings.ts";
 
 /** Recognized fight-card sections, in display order. */
 export type ScheduledSegment = "main-card" | "prelims" | "early-prelims";
@@ -70,6 +71,9 @@ export interface EspnScheduledFight {
   currentRound?: number;
   /** Only present once status is "final". */
   result?: BoutResult;
+  /** Pre-fight outlook paragraph, carried over from `Bout.outlook` when the
+   * fight originates from the canonical event rather than a raw ESPN fetch. */
+  outlook?: string;
 }
 
 export interface EspnScheduledSection {
@@ -1214,25 +1218,35 @@ export function createEspnScheduleSource(options?: {
 
   /**
    * Merges each fighter's divisional ranking onto an already-built card.
-   * The rankings fetch is a single shared lookup (not per-athlete), so a
-   * failure here means no ranking data for the whole card rather than a
-   * per-fighter gap — but exactly like the bio enrichment above, that
-   * failure is swallowed rather than propagated: a rankings outage must
-   * never fail or block card loading.
+   *
+   * The official-UFC overlay wins wherever it names the fighter. ESPN's own
+   * rankings endpoint is years out of date (probed 2026-07-29: Ngannou still
+   * heavyweight champion) and is kept only as the fallback for fighters the
+   * overlay does not list — dropping it entirely would lose ranked fighters
+   * whose spelling the overlay and ESPN disagree on.
+   *
+   * The ESPN fetch is a single shared lookup (not per-athlete), so a failure
+   * there costs the fallback for the whole card rather than a per-fighter gap.
+   * Exactly like the bio enrichment above, that failure is swallowed rather
+   * than propagated: a rankings outage must never fail or block card loading,
+   * and the overlay still applies.
    */
   async function enrichCardWithRankings(
     card: EspnScheduledCard,
   ): Promise<EspnScheduledCard> {
-    let rankings: Map<string, string>;
+    let espnRankings: Map<string, string>;
     try {
-      rankings = await getRankingsMap();
+      espnRankings = await getRankingsMap();
     } catch {
-      return card;
+      espnRankings = new Map();
     }
-    if (rankings.size === 0) return card;
 
     const enrichFighter = (fighter: EspnScheduledFighter): EspnScheduledFighter => {
-      const ranking = fighter.athleteId !== undefined ? rankings.get(fighter.athleteId) : undefined;
+      const ranking =
+        officialUfcRanking(fighter.name) ??
+        (fighter.athleteId !== undefined
+          ? espnRankings.get(fighter.athleteId)
+          : undefined);
       return ranking === undefined ? fighter : { ...fighter, ranking };
     };
 

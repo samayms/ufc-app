@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import liveOdds from "../src/fixtures/oddsApiIoOddsLive.json" with {
+  type: "json",
+};
 import {
   createCollector,
+  loadFixtureState,
   type Collector,
 } from "./collector.ts";
 import { KalshiFixtureTransport } from "./kalshiTransport.ts";
@@ -60,6 +64,111 @@ afterEach(async () => {
 });
 
 describe("collector market transport wiring", () => {
+  it("installs live sportsbook hooks and keeps fixture mode network-free", async () => {
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      urls.push(url.toString());
+      return new Response(JSON.stringify(liveOdds), { status: 200 });
+    }) as unknown as typeof fetch;
+    const liveCollector = await createCollector({
+      env: {
+        DATA_MODE: "live",
+        COLLECTOR_PORT: "0",
+        CITO_API_KEY: "cito-key",
+        CITO_API_BASE_URL: "https://cito.example.invalid/api/v1",
+        ODDS_API_IO_KEY: "odds-io-key",
+        THE_ODDS_API_KEY: "odds-api-key",
+        KALSHI_API_KEY_ID: "kalshi-id",
+        KALSHI_PRIVATE_KEY_PATH: "not-read-with-injected-transports",
+        LIFECYCLE_DRIVER_ENABLED: "false",
+        PRE_EVENT_POLL_ENABLED: "false",
+      },
+      storage: new MemoryStorage(),
+      cito: {
+        discoveryTransport: {
+          async get() {
+            return { data: [] };
+          },
+        },
+      },
+      market: { transports: [] },
+      sportsbook: { fetchImpl },
+      stateLoader: async () => {
+        const state = await loadFixtureState();
+        const fixtureBout = state.event.bouts.find(
+          (bout) => bout.id === "bout-main",
+        );
+        if (fixtureBout === undefined) throw new Error("Missing fixture bout");
+        const fixtureView = state.boutViews[fixtureBout.id];
+        if (fixtureView === undefined) throw new Error("Missing fixture view");
+        const bout = {
+          ...fixtureBout,
+          fighters: {
+            red: { ...fixtureBout.fighters.red, name: "Spasic, Marina" },
+            blue: {
+              ...fixtureBout.fighters.blue,
+              name: "Luciano, Stephanie Bruna",
+            },
+          },
+          externalRefs: fixtureBout.externalRefs.map((ref) =>
+            ref.source === "odds-api-io"
+              ? { ...ref, id: String(liveOdds.id) }
+              : ref,
+          ),
+        };
+        return {
+          ...state,
+          event: {
+            ...state.event,
+            bouts: state.event.bouts.map((candidate) =>
+              candidate.id === bout.id ? bout : candidate,
+            ),
+          },
+          boutViews: {
+            ...state.boutViews,
+            [bout.id]: { ...fixtureView, bout },
+          },
+        };
+      },
+    });
+    collectors.push(liveCollector);
+
+    liveCollector.eventBus.emit({
+      type: "FIGHT_STARTED",
+      boutId: "bout-main",
+      detectedAt: "2026-07-28T14:05:00.000Z",
+    });
+    await liveCollector.oddsApiIoPoller.idle();
+    await liveCollector.theOddsApiActivePoller.idle();
+    await liveCollector.tickStore.idle();
+
+    expect(urls.some((url) => url.includes("api.odds-api.io/v3/odds"))).toBe(
+      true,
+    );
+    expect(
+      urls.some((url) =>
+        url.includes("api.the-odds-api.com/v4/sports/mma_mixed_martial_arts"),
+      ),
+    ).toBe(true);
+    await expect(
+      liveCollector.tickStore.getTickHistory("bout-main", "odds-api-io"),
+    ).resolves.toHaveLength(2);
+
+    const fixtureFetch = vi.fn(async () => {
+      throw new Error("fixture network forbidden");
+    }) as unknown as typeof fetch;
+    const fixtureCollector = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage: new MemoryStorage(),
+      sportsbook: { fetchImpl: fixtureFetch },
+    });
+    collectors.push(fixtureCollector);
+    fixtureCollector.oddsApiIoPoller.startActiveBout("bout-main");
+    await fixtureCollector.oddsApiIoPoller.idle();
+    expect(fixtureFetch).not.toHaveBeenCalled();
+  });
+
   it("constructs dormant fixture replayers and starts them only on replay()", async () => {
     const storage = new MemoryStorage();
     const collector = await createCollector({

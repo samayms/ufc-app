@@ -19,7 +19,6 @@ import type {
   Fighter,
   OddsSnapshot,
   RoundUpdate,
-  ScorecardEmbed,
   UfcEvent,
 } from "../schema.ts";
 
@@ -164,9 +163,4 @@ export type OddsSourceWithHistory = OddsSource &
 /** ESPN/Cito fighter profiles — fetch once, cache, don't re-poll. */
 export interface FighterRecordSource {
   getFighter(ref: ExternalRef): Promise<Fighter | null>;
-}
-
-/** X embeds for the known journalist accounts. */
-export interface ScorecardSource {
-  getScorecardEmbeds(bout: Bout): Promise<ScorecardEmbed[]>;
 }

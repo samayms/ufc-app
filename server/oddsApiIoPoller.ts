@@ -21,7 +21,14 @@ import type { MarketTickStore } from "./tickStore.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
 
 export const ODDS_API_IO_QUOTA_SOURCE = "odds-api-io";
-export const ODDS_API_IO_DEFAULT_INTERVAL_MS = 30_000;
+/** Target cadence while a tracked bout is actually live (in-round/between-rounds). */
+export const ODDS_API_IO_ACTIVE_INTERVAL_MS = 60_000;
+/**
+ * Target cadence for a tracked bout that isn't live yet (or no longer is) —
+ * event day, but between bouts. Distinct from the quota-degradation tiers
+ * below: those are floors applied *on top of* whichever target is active.
+ */
+export const ODDS_API_IO_BETWEEN_FIGHTS_INTERVAL_MS = 300_000;
 export const ODDS_API_IO_MID_INTERVAL_MS = 45_000;
 export const ODDS_API_IO_LOW_INTERVAL_MS = 60_000;
 
@@ -47,6 +54,10 @@ export interface OddsApiIoPollerOptions {
   tickStore: Pick<MarketTickStore, "ingest" | "snapshotSource">;
   resolveBout(boutId: string): ResolvedOddsApiIoBout | undefined;
   bookmakers: readonly string[];
+  /** Target poll interval while a bout is live; quota tiers override it. */
+  activePollMs?: number;
+  /** Target poll interval for a tracked bout that isn't live; quota tiers override it. */
+  betweenFightsPollMs?: number;
   clock?: QuotaClock;
   timer?: OddsApiIoPollTimer;
   quota?: RollingQuotaGuard;
@@ -55,30 +66,39 @@ export interface OddsApiIoPollerOptions {
   metrics?: Metrics;
 }
 
-type PollReason = "periodic" | "boundary" | "final";
+type PollReason = "periodic" | "boundary" | "confirmed-boundary" | "final";
 type RequestResult =
   | { status: "accepted"; receivedAt?: string }
   | { status: "failed" | "terminal" };
+type BoutTrackingState = "pending" | "live";
 
+/**
+ * Picks the polling interval from what quota is left.
+ *
+ * `targetIntervalMs` is what the owner *wants* — `ODDS_API_IO_ACTIVE_INTERVAL_MS`
+ * while a fight is live, `ODDS_API_IO_BETWEEN_FIGHTS_INTERVAL_MS` otherwise. It
+ * only applies while quota is healthy; the degraded tiers are floors, so a
+ * target faster than a tier can never speed polling back up as quota runs
+ * down. Quota protection always wins over the target, and below a day's
+ * reserve polling stops entirely and only round boundaries are fetched.
+ */
 export function oddsApiIoPollingPolicy(
   remaining: Pick<QuotaRemaining, "hour" | "day">,
+  targetIntervalMs: number = ODDS_API_IO_BETWEEN_FIGHTS_INTERVAL_MS,
 ): OddsApiIoPollingPolicy {
   if (remaining.day < 30) return { mode: "boundary-only" };
   if (remaining.hour > 30) {
-    return {
-      mode: "periodic",
-      intervalMs: ODDS_API_IO_DEFAULT_INTERVAL_MS,
-    };
+    return { mode: "periodic", intervalMs: targetIntervalMs };
   }
   if (remaining.hour >= 15) {
     return {
       mode: "periodic",
-      intervalMs: ODDS_API_IO_MID_INTERVAL_MS,
+      intervalMs: Math.max(targetIntervalMs, ODDS_API_IO_MID_INTERVAL_MS),
     };
   }
   return {
     mode: "periodic",
-    intervalMs: ODDS_API_IO_LOW_INTERVAL_MS,
+    intervalMs: Math.max(targetIntervalMs, ODDS_API_IO_LOW_INTERVAL_MS),
   };
 }
 
@@ -122,6 +142,10 @@ export class OddsApiIoPoller {
 
   private readonly bookmakers: readonly string[];
 
+  private readonly activePollMs: number;
+
+  private readonly betweenFightsPollMs: number;
+
   private readonly clock: QuotaClock;
 
   private readonly timer: OddsApiIoPollTimer;
@@ -132,7 +156,7 @@ export class OddsApiIoPoller {
 
   private readonly metrics: Metrics;
 
-  private readonly activeBouts = new Set<string>();
+  private readonly activeBouts = new Map<string, BoutTrackingState>();
 
   private readonly timers = new Map<string, unknown>();
 
@@ -155,6 +179,10 @@ export class OddsApiIoPoller {
     this.bookmakers = [...new Set(
       options.bookmakers.map((bookmaker) => bookmaker.toLowerCase()),
     )];
+    this.activePollMs =
+      options.activePollMs ?? ODDS_API_IO_ACTIVE_INTERVAL_MS;
+    this.betweenFightsPollMs =
+      options.betweenFightsPollMs ?? ODDS_API_IO_BETWEEN_FIGHTS_INTERVAL_MS;
     this.clock = options.clock ?? { now: () => Date.now() };
     this.timer = options.timer ?? defaultTimer();
     this.publishTick = options.publishTick;
@@ -178,6 +206,9 @@ export class OddsApiIoPoller {
       this.eventBus.subscribe("PROVISIONAL_ROUND_ENDED", (event) => {
         this.enqueue(() => this.onBoundary(event));
       }),
+      this.eventBus.subscribe("ROUND_ENDED", (event) => {
+        this.enqueue(() => this.onRoundEnded(event));
+      }),
       this.eventBus.subscribe("FIGHT_ENDED", (event) => {
         this.enqueue(() => this.onFightEnded(event));
       }),
@@ -195,12 +226,30 @@ export class OddsApiIoPoller {
   startActiveBout(boutId: string): void {
     this.enqueue(async () => {
       if (this.closed || this.halted || this.activeBouts.has(boutId)) return;
-      this.activeBouts.add(boutId);
+      this.activeBouts.set(boutId, "live");
+      await this.poll(boutId, "periodic");
+    });
+  }
+
+  /**
+   * Begins between-fights tracking (every `betweenFightsPollMs`, default 5
+   * minutes) for a bout that hasn't gone live yet — e.g. the next bout up on
+   * an event-day card. `FIGHT_STARTED` promotes it to the active-fight tier
+   * with an immediate fetch. A no-op if the bout is already tracked.
+   */
+  trackBout(boutId: string): void {
+    this.enqueue(async () => {
+      if (this.closed || this.halted || this.activeBouts.has(boutId)) return;
+      this.activeBouts.set(boutId, "pending");
       await this.poll(boutId, "periodic");
     });
   }
 
   isActive(boutId: string): boolean {
+    return this.activeBouts.get(boutId) === "live";
+  }
+
+  isTracked(boutId: string): boolean {
     return this.activeBouts.has(boutId);
   }
 
@@ -232,10 +281,14 @@ export class OddsApiIoPoller {
   private async onFightStarted(
     event: Extract<CollectorEvent, { type: "FIGHT_STARTED" }>,
   ): Promise<void> {
-    if (this.closed || this.halted || this.activeBouts.has(event.boutId)) {
+    if (this.closed || this.halted || this.isActive(event.boutId)) {
       return;
     }
-    this.activeBouts.add(event.boutId);
+    // Promotes a between-fights "pending" bout to "live", or starts tracking
+    // one fresh — either way the previous timer (if any) is stale and must
+    // be cleared before the immediate fetch schedules a fresh one.
+    this.clearTimer(event.boutId);
+    this.activeBouts.set(event.boutId, "live");
     await this.poll(event.boutId, "periodic");
   }
 
@@ -248,6 +301,18 @@ export class OddsApiIoPoller {
     if (!this.activeBouts.has(event.boutId) || this.halted) return;
     this.clearTimer(event.boutId);
     await this.poll(event.boutId, "boundary", event.round);
+  }
+
+  private async onRoundEnded(
+    event: Extract<CollectorEvent, { type: "ROUND_ENDED" }>,
+  ): Promise<void> {
+    // "fight_completed" is always paired with a FIGHT_ENDED event in the same
+    // lifecycle transition, which already takes the final snapshot — fetching
+    // again here would double up the request for the same round.
+    if (event.confirmation !== "period_transition") return;
+    if (!this.activeBouts.has(event.boutId) || this.halted) return;
+    this.clearTimer(event.boutId);
+    await this.poll(event.boutId, "confirmed-boundary", event.round);
   }
 
   private async onFightEnded(
@@ -276,7 +341,10 @@ export class OddsApiIoPoller {
     const remaining = await this.quota.remaining(
       ODDS_API_IO_QUOTA_SOURCE,
     );
-    const policy = oddsApiIoPollingPolicy(remaining);
+    const policy = oddsApiIoPollingPolicy(
+      remaining,
+      this.targetIntervalMs(boutId),
+    );
     if (reason === "periodic" && policy.mode === "boundary-only") {
       return;
     }
@@ -369,6 +437,7 @@ export class OddsApiIoPoller {
     this.clearTimer(boutId);
     const policy = oddsApiIoPollingPolicy(
       await this.quota.remaining(ODDS_API_IO_QUOTA_SOURCE),
+      this.targetIntervalMs(boutId),
     );
     if (
       policy.mode === "boundary-only" ||
@@ -383,6 +452,12 @@ export class OddsApiIoPoller {
       this.enqueue(() => this.poll(boutId, "periodic"));
     }, policy.intervalMs);
     this.timers.set(boutId, handle);
+  }
+
+  private targetIntervalMs(boutId: string): number {
+    return this.activeBouts.get(boutId) === "live"
+      ? this.activePollMs
+      : this.betweenFightsPollMs;
   }
 
   private clearTimer(boutId: string): void {

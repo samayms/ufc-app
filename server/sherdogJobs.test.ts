@@ -10,11 +10,11 @@ import type {
 } from "./roundJobs.ts";
 import { RoundStatsPipeline } from "./roundStats.ts";
 import {
+  createLiveSherdogFetcher,
+  SHERDOG_ROUND_ATTEMPT_DELAYS_MS,
   SHERDOG_FINAL_JOB_TYPE,
-  SHERDOG_ROUND_JOB_TYPE,
   SherdogRoundJobs,
-  sherdogInitialDelayMs,
-  sherdogRetryDelayMs,
+  sherdogRoundJobType,
   type SherdogFetchResponse,
   type SherdogFetcher,
 } from "./sherdogJobs.ts";
@@ -113,11 +113,14 @@ async function setup(
   options: {
     dataMode?: "fixture" | "live";
     permissionScope?: string;
+    requestIntervalMs?: number;
+    storage?: MemoryStorage;
+    time?: ManualTime;
   } = {},
 ) {
   const eventBus = new CollectorEventBus();
-  const storage = new MemoryStorage();
-  const time = new ManualTime();
+  const storage = options.storage ?? new MemoryStorage();
+  const time = options.time ?? new ManualTime();
   const roundStats = await RoundStatsPipeline.create({
     eventBus,
     storage,
@@ -135,9 +138,8 @@ async function setup(
       boutId === bout.id ? bout : undefined,
     dataMode: options.dataMode ?? "fixture",
     permissionScope: options.permissionScope ?? "none",
-    requestIntervalMs: 0,
+    requestIntervalMs: options.requestIntervalMs ?? 0,
     clock: time,
-    random: () => 0,
   });
   return { eventBus, storage, time, roundStats, jobs };
 }
@@ -152,45 +154,84 @@ function roundEnded(eventBus: CollectorEventBus, round = 1): void {
 }
 
 describe("SherdogRoundJobs", () => {
-  it("keeps both scheduling windows inside the specified bounds", () => {
-    expect([
-      sherdogInitialDelayMs(0),
-      sherdogInitialDelayMs(1),
-    ]).toEqual([10_000, 15_000]);
-    expect([
-      sherdogInitialDelayMs(0) + sherdogRetryDelayMs(0),
-      sherdogInitialDelayMs(1) + sherdogRetryDelayMs(1),
-    ]).toEqual([30_000, 45_000]);
-  });
-
-  it("schedules at T+10–15 seconds and retries an absent round once inside T+30–45", async () => {
-    const fetchBout = vi
-      .fn<SherdogFetcher["fetchBout"]>()
-      .mockResolvedValueOnce(response(html(2, "Later round")))
-      .mockResolvedValueOnce(response(html(1, "Round arrived")));
-    const setupValue = await setup({ fetchBout });
-    const { eventBus, time, roundStats, jobs } = setupValue;
+  it("schedules three independent attempts at exactly T+15s, T+30s, and T+60s", async () => {
+    const fetchBout = vi.fn<SherdogFetcher["fetchBout"]>();
+    const { eventBus, time, roundStats, jobs } = await setup({
+      fetchBout,
+    });
 
     roundEnded(eventBus);
     await jobs.idle();
+
     const scheduled = roundStats.scheduler
       .getJobs()
-      .find((job) => job.jobType === SHERDOG_ROUND_JOB_TYPE);
-    expect(scheduled).toBeDefined();
-    expect(scheduled!.dueAt - time.now()).toBe(10_000);
+      .filter((job) => job.jobType.startsWith("sherdog_round_"));
+    expect(scheduled).toHaveLength(3);
+    expect(
+      scheduled.map((job) => [
+        job.jobType,
+        job.dueAt - time.now(),
+        job.retryPolicy,
+      ]),
+    ).toEqual([
+      [
+        sherdogRoundJobType(1),
+        SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0],
+        { delayMs: 0, maxAttempts: 1 },
+      ],
+      [
+        sherdogRoundJobType(2),
+        SHERDOG_ROUND_ATTEMPT_DELAYS_MS[1],
+        { delayMs: 0, maxAttempts: 1 },
+      ],
+      [
+        sherdogRoundJobType(3),
+        SHERDOG_ROUND_ATTEMPT_DELAYS_MS[2],
+        { delayMs: 0, maxAttempts: 1 },
+      ],
+    ]);
+    await jobs.close();
+    await roundStats.close();
+  });
 
-    time.advance(9_999);
+  it("keeps later attempts scheduled after a terminal first attempt", async () => {
+    const fetchBout = vi
+      .fn<SherdogFetcher["fetchBout"]>()
+      .mockResolvedValueOnce(
+        response("<html><body>no round headings</body></html>"),
+      )
+      .mockResolvedValueOnce(response(html(1, "Round arrived")));
+    const { eventBus, time, roundStats, jobs } = await setup({
+      fetchBout,
+    });
+
+    roundEnded(eventBus);
     await jobs.idle();
-    expect(fetchBout).not.toHaveBeenCalled();
-    time.advance(1);
+
+    time.advance(SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0]);
     await jobs.idle();
     expect(fetchBout).toHaveBeenCalledTimes(1);
     expect(jobs.getObservation(bout.id, 1)).toBeUndefined();
+    expect(
+      roundStats.scheduler.getJob(
+        bout.id + ":1:" + sherdogRoundJobType(1),
+      ),
+    ).toMatchObject({ status: "failed", attemptCount: 1 });
+    expect(
+      roundStats.scheduler.getJob(
+        bout.id + ":1:" + sherdogRoundJobType(2),
+      ),
+    ).toMatchObject({ status: "pending", attemptCount: 0 });
+    expect(
+      roundStats.scheduler.getJob(
+        bout.id + ":1:" + sherdogRoundJobType(3),
+      ),
+    ).toMatchObject({ status: "pending", attemptCount: 0 });
 
-    time.advance(19_999);
-    await jobs.idle();
-    expect(fetchBout).toHaveBeenCalledTimes(1);
-    time.advance(1);
+    time.advance(
+      SHERDOG_ROUND_ATTEMPT_DELAYS_MS[1] -
+        SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0],
+    );
     await jobs.idle();
     expect(fetchBout).toHaveBeenCalledTimes(2);
     expect(jobs.getObservation(bout.id, 1)).toMatchObject({
@@ -208,30 +249,140 @@ describe("SherdogRoundJobs", () => {
     await roundStats.close();
   });
 
-  it("omits an absent round after the single retry", async () => {
+  it("records an absent round when the second attempt finds it", async () => {
     const fetchBout = vi
       .fn<SherdogFetcher["fetchBout"]>()
-      .mockResolvedValue(response(html(2, "Wrong round")));
+      .mockResolvedValueOnce(response(html(2, "Wrong round")))
+      .mockResolvedValueOnce(response(html(1, "Round arrived")));
     const { eventBus, time, roundStats, jobs } = await setup({
       fetchBout,
     });
 
     roundEnded(eventBus);
     await jobs.idle();
-    time.advance(10_000);
+    time.advance(SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0]);
     await jobs.idle();
-    time.advance(20_000);
+    time.advance(
+      SHERDOG_ROUND_ATTEMPT_DELAYS_MS[1] -
+        SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0],
+    );
     await jobs.idle();
 
     expect(fetchBout).toHaveBeenCalledTimes(2);
-    expect(jobs.getObservation(bout.id, 1)).toBeUndefined();
+    expect(jobs.getObservation(bout.id, 1)).toMatchObject({
+      revision: 1,
+      observation: { commentary: "Round arrived" },
+    });
+    expect(jobs.getRevisionHistory(bout.id, 1)).toHaveLength(1);
+    expect(
+      roundStats.scheduler.getJob(
+        bout.id + ":1:" + sherdogRoundJobType(1),
+      ),
+    ).toMatchObject({ status: "failed", attemptCount: 1 });
+    expect(
+      roundStats.scheduler.getJob(
+        bout.id + ":1:" + sherdogRoundJobType(2),
+      ),
+    ).toMatchObject({ status: "completed", attemptCount: 1 });
+    await jobs.close();
+    await roundStats.close();
+  });
+
+  it("deduplicates identical payloads across all three attempts", async () => {
+    const fetchBout = vi
+      .fn<SherdogFetcher["fetchBout"]>()
+      .mockResolvedValue(response(html(1, "Same payload")));
+    const { eventBus, time, roundStats, jobs } = await setup({
+      fetchBout,
+    });
+
+    roundEnded(eventBus);
+    await jobs.idle();
+    time.advance(SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0]);
+    await jobs.idle();
+    time.advance(
+      SHERDOG_ROUND_ATTEMPT_DELAYS_MS[1] -
+        SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0],
+    );
+    await jobs.idle();
+    time.advance(
+      SHERDOG_ROUND_ATTEMPT_DELAYS_MS[2] -
+        SHERDOG_ROUND_ATTEMPT_DELAYS_MS[1],
+    );
+    await jobs.idle();
+
+    expect(fetchBout).toHaveBeenCalledTimes(3);
+    expect(jobs.getObservation(bout.id, 1)).toMatchObject({ revision: 1 });
+    expect(jobs.getRevisionHistory(bout.id, 1)).toHaveLength(1);
     expect(
       roundStats.scheduler
         .getJobs()
-        .find((job) => job.jobType === SHERDOG_ROUND_JOB_TYPE),
-    ).toMatchObject({ status: "failed", attemptCount: 2 });
+        .filter((job) => job.jobType.startsWith("sherdog_round_")),
+    ).toHaveLength(3);
     await jobs.close();
     await roundStats.close();
+  });
+
+  it("does not duplicate attempts when the round event is redelivered", async () => {
+    const fetchBout = vi.fn<SherdogFetcher["fetchBout"]>();
+    const { eventBus, roundStats, jobs } = await setup({
+      fetchBout,
+    });
+
+    roundEnded(eventBus);
+    roundEnded(eventBus);
+    await jobs.idle();
+
+    expect(
+      roundStats.scheduler
+        .getJobs()
+        .filter((job) => job.jobType.startsWith("sherdog_round_")),
+    ).toHaveLength(3);
+    await jobs.close();
+    await roundStats.close();
+  });
+
+  it("restores all pending attempts after scheduler restart", async () => {
+    const storage = new MemoryStorage();
+    const time = new ManualTime();
+    const first = await setup(
+      { fetchBout: vi.fn<SherdogFetcher["fetchBout"]>() },
+      { storage, time },
+    );
+    roundEnded(first.eventBus);
+    await first.jobs.idle();
+    await first.jobs.close();
+    await first.roundStats.close();
+
+    const second = await setup(
+      { fetchBout: vi.fn<SherdogFetcher["fetchBout"]>() },
+      { storage, time },
+    );
+    expect(
+      second.roundStats.scheduler
+        .getJobs()
+        .filter((job) => job.jobType.startsWith("sherdog_round_")),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          jobType: sherdogRoundJobType(1),
+          status: "pending",
+          dueAt: time.now() + SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0],
+        }),
+        expect.objectContaining({
+          jobType: sherdogRoundJobType(2),
+          status: "pending",
+          dueAt: time.now() + SHERDOG_ROUND_ATTEMPT_DELAYS_MS[1],
+        }),
+        expect.objectContaining({
+          jobType: sherdogRoundJobType(3),
+          status: "pending",
+          dueAt: time.now() + SHERDOG_ROUND_ATTEMPT_DELAYS_MS[2],
+        }),
+      ]),
+    );
+    await second.jobs.close();
+    await second.roundStats.close();
   });
 
   it("reconciles once after fight end and revises only a changed payload", async () => {
@@ -245,7 +396,7 @@ describe("SherdogRoundJobs", () => {
 
     roundEnded(eventBus);
     await jobs.idle();
-    time.advance(10_000);
+    time.advance(SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0]);
     await jobs.idle();
     const firstHash = jobs.getObservation(bout.id, 1)?.observation.payloadHash;
 
@@ -306,7 +457,7 @@ describe("SherdogRoundJobs", () => {
       dueAt: time.now() + 10_000,
       retryPolicy: { delayMs: 0, maxAttempts: 1 },
     });
-    time.advance(10_000);
+    time.advance(SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0]);
     await jobs.idle();
 
     expect(jobs.getHealth()).toMatchObject({
@@ -318,7 +469,7 @@ describe("SherdogRoundJobs", () => {
 
     roundEnded(eventBus, 2);
     await jobs.idle();
-    time.advance(10_000);
+    time.advance(SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0]);
     await jobs.idle();
     expect(fetchBout).toHaveBeenCalledTimes(1);
     await jobs.close();
@@ -336,15 +487,54 @@ describe("SherdogRoundJobs", () => {
 
     roundEnded(eventBus);
     await jobs.idle();
-    time.advance(10_000);
+    time.advance(SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0]);
     await jobs.idle();
 
     expect(fetchBout).not.toHaveBeenCalled();
     expect(
       roundStats.scheduler
         .getJobs()
-        .find((job) => job.jobType === SHERDOG_ROUND_JOB_TYPE),
+        .find((job) => job.jobType === sherdogRoundJobType(1)),
     ).toMatchObject({ status: "failed", attemptCount: 1 });
+    await jobs.close();
+    await roundStats.close();
+  });
+
+  it("enforces the configured request interval through the existing guard", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(html(1, "Interval-limited"), { status: 200 }));
+    const fetcher = createLiveSherdogFetcher({
+      permissionScope: "sherdog-read",
+      resolveBoutUrl: () => "/news/news/live-card",
+      baseUrl: "https://sherdog.example.invalid",
+      fetchImpl,
+    });
+    const { eventBus, time, roundStats, jobs } = await setup(fetcher, {
+      dataMode: "live",
+      permissionScope: "sherdog-read",
+      requestIntervalMs: 60_000,
+    });
+
+    roundEnded(eventBus);
+    await jobs.idle();
+    time.advance(SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0]);
+    await jobs.idle();
+    time.advance(
+      SHERDOG_ROUND_ATTEMPT_DELAYS_MS[1] -
+        SHERDOG_ROUND_ATTEMPT_DELAYS_MS[0],
+    );
+    await jobs.idle();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(
+      roundStats.scheduler.getJob(
+        bout.id + ":1:" + sherdogRoundJobType(2),
+      ),
+    ).toMatchObject({
+      status: "failed",
+      lastError: expect.stringContaining("request interval has not elapsed"),
+    });
     await jobs.close();
     await roundStats.close();
   });

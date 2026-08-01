@@ -24,7 +24,9 @@ function observation(
     state: "in",
     period: 1,
     completed: false,
-    clockSeconds: 300,
+    // ESPN's clock counts up toward 5:00, so a mid-round reading sits below
+    // ROUND_LENGTH_SECONDS; 300 is a round that has just ended.
+    clockSeconds: 120,
     sourceUpdatedAt: at(seconds),
     receivedAt: at(seconds),
     ...values,
@@ -67,20 +69,20 @@ describe("FightLifecycleMachine", () => {
       observation(0, { state: "pre", clockSeconds: undefined }),
     );
     await machine.observe(observation(1));
-    await machine.observe(observation(2, { clockSeconds: 0 }));
+    await machine.observe(observation(2, { clockSeconds: 300 }));
     await machine.observe(
-      observation(3, { period: 2, clockSeconds: 300 }),
+      observation(3, { period: 2, clockSeconds: 0 }),
     );
-    await machine.observe(observation(4, { period: 2, clockSeconds: 0 }));
+    await machine.observe(observation(4, { period: 2, clockSeconds: 300 }));
     await machine.observe(
-      observation(5, { period: 3, clockSeconds: 300 }),
+      observation(5, { period: 3, clockSeconds: 0 }),
     );
-    await machine.observe(observation(6, { period: 3, clockSeconds: 0 }));
+    await machine.observe(observation(6, { period: 3, clockSeconds: 300 }));
     await machine.observe(
       observation(7, {
         state: "post",
         period: 3,
-        clockSeconds: 0,
+        clockSeconds: 300,
         completed: true,
       }),
     );
@@ -142,7 +144,7 @@ describe("FightLifecycleMachine", () => {
       state: "post",
       period: 3,
       completed: true,
-      clockSeconds: 0,
+      clockSeconds: 300,
       sourceUpdatedAt: at(7),
       receivedAt: at(7),
     });
@@ -159,7 +161,7 @@ describe("FightLifecycleMachine", () => {
     let seconds = 2;
     for (let round = 1; round <= 5; round += 1) {
       await machine.observe(
-        observation(seconds, { period: round, clockSeconds: 0 }),
+        observation(seconds, { period: round, clockSeconds: 300 }),
       );
       seconds += 1;
 
@@ -167,7 +169,7 @@ describe("FightLifecycleMachine", () => {
         await machine.observe(
           observation(seconds, {
             period: round + 1,
-            clockSeconds: 300,
+            clockSeconds: 0,
           }),
         );
         seconds += 1;
@@ -178,7 +180,7 @@ describe("FightLifecycleMachine", () => {
       observation(seconds, {
         state: "post",
         period: 5,
-        clockSeconds: 0,
+        clockSeconds: 300,
         completed: true,
       }),
     );
@@ -232,13 +234,13 @@ describe("FightLifecycleMachine", () => {
     ]);
   });
 
-  it("supersedes clock-zero when the clock resumes and can re-emit it", async () => {
+  it("supersedes a full-clock boundary when the clock resumes and can re-emit it", async () => {
     const onProvisionalSuperseded = vi.fn();
     const { bus, machine } = await createMachine({
       onProvisionalSuperseded,
     });
-    const firstZero = observation(2, {
-      clockSeconds: 0,
+    const firstFull = observation(2, {
+      clockSeconds: 300,
       sourceUpdatedAt: at(1),
     });
 
@@ -246,13 +248,13 @@ describe("FightLifecycleMachine", () => {
       observation(0, { state: "pre", clockSeconds: undefined }),
     );
     await machine.observe(observation(1));
-    await machine.observe(firstZero);
+    await machine.observe(firstFull);
     await machine.observe(
-      observation(3, { clockSeconds: 1, sourceUpdatedAt: at(1) }),
+      observation(3, { clockSeconds: 299, sourceUpdatedAt: at(1) }),
     );
-    await machine.observe(firstZero);
+    await machine.observe(firstFull);
     await machine.observe(
-      observation(4, { clockSeconds: 0, sourceUpdatedAt: at(1) }),
+      observation(4, { clockSeconds: 300, sourceUpdatedAt: at(1) }),
     );
 
     expect(
@@ -288,10 +290,10 @@ describe("FightLifecycleMachine", () => {
     const { bus, machine } = await createMachine();
     const pre = observation(0, { state: "pre", clockSeconds: undefined });
     const active = observation(1);
-    const zero = observation(2, { clockSeconds: 0 });
+    const full = observation(2, { clockSeconds: 300 });
     const completed = observation(3, {
       state: "post",
-      clockSeconds: 0,
+      clockSeconds: 300,
       completed: true,
     });
 
@@ -300,12 +302,12 @@ describe("FightLifecycleMachine", () => {
       pre,
       active,
       active,
-      zero,
-      zero,
+      full,
+      full,
       completed,
       completed,
       active,
-      zero,
+      full,
     ]) {
       await machine.observe(current);
     }
@@ -326,8 +328,8 @@ describe("FightLifecycleMachine", () => {
       observation(0, { state: "pre", clockSeconds: undefined }),
     );
     await first.machine.observe(observation(1));
-    await first.machine.observe(observation(2, { clockSeconds: 0 }));
-    const roundTwo = observation(3, { period: 2, clockSeconds: 300 });
+    await first.machine.observe(observation(2, { clockSeconds: 300 }));
+    const roundTwo = observation(3, { period: 2, clockSeconds: 0 });
     await first.machine.observe(roundTwo);
 
     const restored = await createMachine({ storage });
@@ -336,7 +338,7 @@ describe("FightLifecycleMachine", () => {
       state: "in",
       period: 2,
       completed: false,
-      clockSeconds: 300,
+      clockSeconds: 0,
       sourceUpdatedAt: at(3),
       receivedAt: at(3),
     });
@@ -346,10 +348,10 @@ describe("FightLifecycleMachine", () => {
 
     await restored.machine.observe(roundTwo);
     await restored.machine.observe(
-      observation(4, { period: 2, clockSeconds: 0 }),
+      observation(4, { period: 2, clockSeconds: 300 }),
     );
     await restored.machine.observe(
-      observation(5, { period: 3, clockSeconds: 300 }),
+      observation(5, { period: 3, clockSeconds: 0 }),
     );
 
     expect(restored.bus.getEventLog()).toEqual([
@@ -369,7 +371,7 @@ describe("FightLifecycleMachine", () => {
     ]);
   });
 
-  it("does nothing when a clock is stopped above zero", async () => {
+  it("does nothing while the clock is below the round length", async () => {
     const { bus, machine } = await createMachine();
 
     await machine.observe(
@@ -377,7 +379,7 @@ describe("FightLifecycleMachine", () => {
     );
     await machine.observe(observation(1, { clockSeconds: 17 }));
     await machine.observe(observation(2, { clockSeconds: 17 }));
-    await machine.observe(observation(3, { clockSeconds: 16 }));
+    await machine.observe(observation(3, { clockSeconds: 18 }));
 
     expect(bus.getEventLog()).toEqual([
       {
@@ -420,13 +422,13 @@ describe("FightLifecycleMachine", () => {
     await machine.observe(
       observation(20, {
         source: "cito",
-        clockSeconds: 0,
+        clockSeconds: 300,
       }),
     );
     await machine.observe(
       observation(23, {
         source: "cito",
-        clockSeconds: 0,
+        clockSeconds: 300,
       }),
     );
 

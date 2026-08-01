@@ -22,6 +22,10 @@
   transform: translateY(-50%);
 }
 
+.event-subheader-title-hidden {
+  visibility: hidden;
+}
+
 /* Fighter-photo image fill — layered on top of the existing
    .fighter-photo/.fighter-photo-red/.fighter-photo-blue circle so a real
    headshot can fill the circle instead of initials. */
@@ -32,43 +36,12 @@
   border-radius: 50%;
 }
 
-/* Small rail-row photo circles (CardRail / ScheduledCardRail) — same
-   bordered-circle treatment as .fighter-photo, scaled down, replacing the
-   purely decorative .rail-corners color blocks. */
-.rail-photos {
-  flex: none;
-  display: flex;
-  gap: 4px;
-}
-
-.rail-photo {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border: 2px solid;
-  border-radius: 50%;
-  font-family: var(--font-data);
-  font-size: 0.5rem;
-  color: var(--text-faint);
-  background: var(--surface-2);
-}
-
-.rail-photo-red {
-  border-color: var(--red-corner);
-  background: radial-gradient(circle at 65% 20%, var(--red-corner-dim), var(--surface-2) 68%);
-}
-
-.rail-photo-blue {
-  border-color: var(--blue-corner);
-  background: radial-gradient(circle at 35% 20%, var(--blue-corner-dim), var(--surface-2) 68%);
-}
-
-/* EventList ---------------------------------------------------------------
- * A visually heavier card-style row than the thin .rail-bout rows, for the
- * top-level "browse events" screen. Reuses .rail/.rail-segment/.rail-heading
- * for section structure, but each entry is its own bigger card. */
+/* MatchupCard (EventList / CardRail / ScheduledCardRail) ------------------
+ * The shared "red fighter vs blue fighter" card: the top-level browse-events
+ * screen and every bout-list row render the exact same markup, so a fight
+ * looks identical wherever it's shown. Only the center column differs — an
+ * event card puts "vs" there, a bout row puts its live/upcoming/final chip
+ * there instead. */
 
 .event-card {
   width: 100%;
@@ -91,6 +64,12 @@
 
 .event-card.is-selected {
   border-color: var(--border-strong);
+}
+
+.event-card.is-live,
+.event-card.is-live:hover,
+.event-card.is-live.is-selected {
+  border-color: var(--red-corner-strong);
 }
 
 .event-card-matchup {
@@ -119,7 +98,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  border: 2px solid;
+  border: 1px solid;
   border-radius: 50%;
   font-family: var(--font-data);
   font-size: 0.54rem;
@@ -127,20 +106,94 @@
   background: var(--surface-2);
 }
 
-.event-card-fighter-name {
+.event-card-fighter-names {
+  min-width: 0;
+  width: 100%;
   overflow: hidden;
-  font-family: var(--font-display);
-  font-size: 0.86rem;
-  font-weight: 600;
-  line-height: 1.2;
-  text-overflow: ellipsis;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1;
+}
+
+.event-card-fighter-names.is-blue {
+  align-items: flex-end;
+}
+
+.event-card-fighter-firstname {
+  width: 100%;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-family: var(--font-ui);
+  font-size: 0.66rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
+.event-card-fighter-firstname.is-blue {
+  text-align: right;
+}
+
+.event-card-fighter-firstname.is-loser {
+  color: var(--text-ghost);
+}
+
+.event-card-fighter-lastname {
+  width: 100%;
+  overflow: hidden;
+  color: var(--red-corner-strong);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.08;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.event-card-fighter-lastname.is-blue {
+  color: var(--blue-corner-strong);
+  text-align: right;
+}
+
+.event-card-fighter-lastname.is-loser {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+/* Center column — "vs" on the events screen, a status chip + weight class
+   on bout rows. Always centered between the two fighters. */
 .event-card-vs {
   color: var(--text-ghost);
   font-family: var(--font-data);
   font-size: 0.55rem;
+}
+
+.event-card-center {
+  flex: none;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.event-card-center-weight {
+  /* A target width, not a hard clip — FitText shrinks the font to fit this
+     when it can without going unreadably small, but never truncates. On the
+     rare label too wide even at the smallest readable size, it just spills
+     past this width instead of getting cut off (overflow: visible below). */
+  width: 92px;
+  overflow: visible;
+  color: var(--text-faint);
+  font-family: var(--font-data);
+  font-size: 0.5rem;
+  letter-spacing: 0.03em;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .event-card-header {
@@ -152,12 +205,17 @@
 
 .event-card-name {
   overflow: hidden;
-  color: var(--text);
+  color: color-mix(in srgb, var(--text) 85%, transparent);
   font-family: var(--font-event-title);
   font-size: 0.92rem;
   font-weight: 400;
+  letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.event-card.is-selected .event-card-name {
+  color: var(--text);
 }
 
 .event-card-date {
@@ -182,6 +240,11 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* Extra breathing room before the stat rows that follow the outlook text. */
+.outlook-panel + .profile-rows {
+  margin-top: 10px;
 }
 
 .outlook-heading {

@@ -20,6 +20,7 @@ export default defineConfig({
       "src/**/*.test.ts",
       "src/**/*.test.tsx",
       "server/**/*.test.ts",
+      "server/**/*.test.tsx",
     ],
   },
 });

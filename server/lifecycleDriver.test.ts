@@ -85,7 +85,8 @@ function observationInput(
     state: "in",
     period: 1,
     completed: false,
-    clockSeconds: 300,
+    // Mid-round: ESPN's clock counts up toward 5:00 (ROUND_LENGTH_SECONDS).
+    clockSeconds: 120,
     receivedAt: new Date(time.now()).toISOString(),
     ...overrides,
   };
@@ -107,7 +108,7 @@ describe("boutLifecycleEntry", () => {
       state: "in",
       period: 2,
       completed: false,
-      clockSeconds: 0,
+      clockSeconds: 300,
     });
     expect(boutLifecycleEntry(comain!)).toEqual({
       externalId: "bout-comain",
@@ -140,7 +141,7 @@ describe("createFixtureLifecycleProvider", () => {
       state: "in",
       period: 2,
       completed: false,
-      clockSeconds: 0,
+      clockSeconds: 300,
       receivedAt: at(0),
     });
   });
@@ -226,14 +227,14 @@ describe("LifecycleDriver", () => {
     await driver.idle();
     expect(bus.getEventLog()).toEqual([]);
 
-    // Prime the next two responses to report the clock hitting 0:00 twice
+    // Prime the next two responses to report the clock hitting 5:00 twice
     // in a row (simulating ESPN reporting the same "round just ended" state
     // on consecutive polls).
     responses[2] = [
-      observationInput(time, { clockSeconds: 0, receivedAt: at(10) }),
+      observationInput(time, { clockSeconds: 300, receivedAt: at(10) }),
     ];
     responses[3] = [
-      observationInput(time, { clockSeconds: 0, receivedAt: at(15) }),
+      observationInput(time, { clockSeconds: 300, receivedAt: at(15) }),
     ];
 
     time.advance(5_000);
@@ -258,6 +259,58 @@ describe("LifecycleDriver", () => {
         round: 1,
         detectedAt: at(10),
       },
+    ]);
+
+    await driver.close();
+  });
+
+  it("publishes every successful observation batch as a fresh clock synchronization", async () => {
+    const { machine } = await createMachine();
+    const time = new ManualDriverTime();
+    const batches: unknown[] = [];
+    const espnProvider: LifecycleObservationProvider = {
+      fetchObservations: async () => [
+        observationInput(time, {
+          clockSeconds: 197,
+          receivedAt: new Date(time.now()).toISOString(),
+        }),
+      ],
+    };
+    const driver = new LifecycleDriver({
+      machine,
+      espnProvider,
+      espnPollingMs: 5_000,
+      citoPollingMs: 15_000,
+      clock: time,
+      timer: time,
+      onObservations: (observations) => {
+        batches.push(observations);
+      },
+    });
+
+    await driver.start();
+    time.advance(5_000);
+    await driver.idle();
+
+    expect(batches).toEqual([
+      [
+        expect.objectContaining({
+          boutId: BOUT_ID,
+          source: "espn",
+          period: 1,
+          clockSeconds: 197,
+          receivedAt: at(0),
+        }),
+      ],
+      [
+        expect.objectContaining({
+          boutId: BOUT_ID,
+          source: "espn",
+          period: 1,
+          clockSeconds: 197,
+          receivedAt: at(5),
+        }),
+      ],
     ]);
 
     await driver.close();

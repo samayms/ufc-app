@@ -33,10 +33,25 @@ export interface TheOddsApiRoundJobOptions {
   random?: () => number;
   publishTick?: (tick: MarketTick) => Promise<void>;
   metrics?: Metrics;
+  /**
+   * Gates round-end snapshot collection. The Odds API must run only as part
+   * of the twice-daily upcoming-fights sync, never on the calendar day of
+   * the event, so the integrator passes `false` (or a live "is it event
+   * day" predicate) on event day. Defaults to always-enabled so existing
+   * callers keep their current behaviour.
+   */
+  enabled?: boolean | (() => boolean);
 }
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function normalizeEnabled(
+  enabled: boolean | (() => boolean) | undefined,
+): () => boolean {
+  if (enabled === undefined) return () => true;
+  return typeof enabled === "function" ? enabled : () => enabled;
 }
 
 export function theOddsApiDelayMs(random: number): number {
@@ -73,6 +88,8 @@ export class TheOddsApiRoundJob {
 
   private readonly metrics: Metrics;
 
+  private readonly enabled: () => boolean;
+
   private readonly unsubscribe: () => void;
 
   private eventQueue: Promise<void> = Promise.resolve();
@@ -87,6 +104,7 @@ export class TheOddsApiRoundJob {
     this.random = options.random ?? Math.random;
     this.publishTick = options.publishTick;
     this.metrics = options.metrics ?? NOOP_METRICS;
+    this.enabled = normalizeEnabled(options.enabled);
     this.scheduler.registerHandler(
       THE_ODDS_API_ROUND_JOB_TYPE,
       (job) => this.run(job),
@@ -95,7 +113,10 @@ export class TheOddsApiRoundJob {
       "ROUND_ENDED",
       (event) => {
         this.eventQueue = this.eventQueue
-          .then(() => this.schedule(event))
+          .then(() => {
+            if (!this.enabled()) return undefined;
+            return this.schedule(event);
+          })
           .catch(() => undefined);
       },
     );

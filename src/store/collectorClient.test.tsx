@@ -60,7 +60,11 @@ function bootstrapResponse(payload: unknown): Response {
   });
 }
 
-function roundRecord(provisional: boolean, revision: number) {
+function roundRecord(
+  provisional: boolean,
+  revision: number,
+  aiSummary?: string,
+) {
   return {
     boutId: "bout-main",
     round: 2,
@@ -97,6 +101,7 @@ function roundRecord(provisional: boolean, revision: number) {
       boutId: "bout-main",
       round: 2,
       commentary: "Collector-delivered commentary.",
+      ...(aiSummary === undefined ? {} : { aiSummary }),
       scorerCards: [
         {
           scorer: "Sherdog",
@@ -110,19 +115,6 @@ function roundRecord(provisional: boolean, revision: number) {
       parserVersion: "test",
       payloadHash: `hash-${revision}`,
     },
-    xScores: [
-      {
-        source: "x",
-        sourcePostId: "12345",
-        scorer: "MMAJunkie",
-        round: 2,
-        score: { red: 9, blue: 10 },
-        fetchedAt: "2026-07-28T01:02:40Z",
-        parseConfidence: 1,
-        mode: "embed",
-        postUrl: "https://x.com/MMAJunkie/status/12345",
-      },
-    ],
     expertConsensus: {
       sherdog: {
         source: "sherdog",
@@ -165,7 +157,13 @@ describe("collector browser client", () => {
 
     expect(snapshot.connection).toBe("unavailable");
     expect(snapshot.dashboard).toBeNull();
-    expect(resolveDashboardData(fixture, snapshot)).toBe(fixture);
+    // Never having received real data yet is a loading state — the fixture
+    // is a reasonable instant-paint placeholder for it.
+    expect(resolveDashboardData(fixture, snapshot, false)).toBe(fixture);
+    // Once the collector delivered real data at least once, a later null
+    // must never fall back to the fixture — that would show fake prices as
+    // though they were live.
+    expect(resolveDashboardData(fixture, snapshot, true)).toBeNull();
 
     const sources = renderToStaticMarkup(
       <SourceStatus state={fixture} collector={snapshot} />,
@@ -226,16 +224,8 @@ describe("collector browser client", () => {
       bootstrapped.dashboard?.boutViews["bout-main"]?.rounds.sherdog
         ?.find((update) => update.round === 2)?.summary,
     ).toBe("Collector-delivered commentary.");
-    expect(
-      bootstrapped.dashboard?.boutViews["bout-main"]?.scorecards,
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ postId: "12345", round: 2 }),
-      ]),
-    );
     expect(bootstrapped.unifiedRounds[0]?.expertConsensus).toMatchObject({
       sherdog: { source: "sherdog" },
-      x: { source: "x" },
     });
     expect(
       getCollectorRoundDelivery(bootstrapped, "bout-main", 2),
@@ -326,6 +316,136 @@ describe("collector browser client", () => {
     ).toBe(42);
     client.close();
     expect(events?.closed).toBe(true);
+  });
+
+  it("hydrates and refreshes ESPN clock synchronization points", async () => {
+    const fixture = await assembleDashboard();
+    let nowCall = 0;
+    const receivedTimes = [
+      "2026-07-28T01:00:01Z",
+      "2026-07-28T01:00:06Z",
+    ];
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [],
+          lifecycleObservations: [
+            {
+              boutId: "bout-main",
+              source: "espn",
+              state: "in",
+              period: 2,
+              completed: false,
+              clockSeconds: 197,
+              receivedAt: "2026-07-28T01:00:00Z",
+            },
+          ],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+      now: () => receivedTimes[nowCall++] ?? receivedTimes.at(-1)!,
+    });
+
+    await client.start();
+    expect(client.getSnapshot().clocks["bout-main"]).toEqual({
+      boutId: "bout-main",
+      source: "espn",
+      state: "in",
+      period: 2,
+      completed: false,
+      clockSeconds: 197,
+      sourceReceivedAt: "2026-07-28T01:00:00Z",
+      receivedAt: "2026-07-28T01:00:01Z",
+    });
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-main"]?.bout,
+    ).toMatchObject({
+      status: "in-round",
+      currentRound: 2,
+    });
+
+    MockEventSource.latest?.emit("update", {
+      kind: "lifecycle-observations",
+      observations: [
+        {
+          boutId: "bout-main",
+          source: "espn",
+          state: "in",
+          period: 2,
+          completed: false,
+          clockSeconds: 192,
+          receivedAt: "2026-07-28T01:00:05Z",
+        },
+      ],
+    });
+
+    expect(client.getSnapshot().clocks["bout-main"]).toMatchObject({
+      source: "espn",
+      period: 2,
+      clockSeconds: 192,
+      sourceReceivedAt: "2026-07-28T01:00:05Z",
+      receivedAt: "2026-07-28T01:00:06Z",
+    });
+    client.close();
+  });
+
+  it("renders the model's summary in place of the raw play-by-play", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test/",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [
+            roundRecord(false, 1, "Volkov takes the round behind the jab."),
+          ],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+      now: () => "2026-07-28T01:00:00Z",
+    });
+
+    await client.start();
+    MockEventSource.latest?.open();
+
+    expect(
+      client
+        .getSnapshot()
+        .dashboard?.boutViews["bout-main"]?.rounds.sherdog?.find(
+          (update) => update.round === 2,
+        )?.summary,
+    ).toBe("Volkov takes the round behind the jab.");
+  });
+
+  it("falls back to the raw play-by-play when no summary was produced", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test/",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [roundRecord(false, 1)],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+      now: () => "2026-07-28T01:00:00Z",
+    });
+
+    await client.start();
+    MockEventSource.latest?.open();
+
+    expect(
+      client
+        .getSnapshot()
+        .dashboard?.boutViews["bout-main"]?.rounds.sherdog?.find(
+          (update) => update.round === 2,
+        )?.summary,
+    ).toBe("Collector-delivered commentary.");
   });
 
   it("hydrates latestOdds from bootstrap latestMarkets, replacing fixture odds", async () => {

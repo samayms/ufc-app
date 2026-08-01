@@ -1,0 +1,56 @@
+{
+  "success": true,
+  "data": [
+    {
+      "id": "9a856f45-15f0-42e9-bd03-bd20d5d83246",
+      "boutId": "9009ec7b91f2be14",
+      "fighterSlug": "bogdan-guskov",
+      "fighterName": "Bogdan Guskov",
+      "round": 1,
+      "knockdowns": 0,
+      "significantStrikes": "11 of 22",
+      "totalStrikes": "11 of 22",
+      "takedowns": "0 of 0",
+      "submissionAttempts": 0,
+      "reversals": 0,
+      "controlTime": "0:00",
+      "head": "0 of 7",
+      "body": "1 of 1",
+      "leg": "10 of 14",
+      "distance": "11 of 22",
+      "clinch": "0 of 0",
+      "ground": "0 of 0",
+      "lastSyncedAt": "2026-07-29T18:50:55.459Z"
+    },
+    {
+      "id": "fb647560-eb38-413d-90a4-4928e0f890ad",
+      "boutId": "9009ec7b91f2be14",
+      "fighterSlug": "magomed-ankalaev",
+      "fighterName": "Magomed Ankalaev",
+      "round": 1,
+      "knockdowns": 0,
+      "significantStrikes": "19 of 39",
+      "totalStrikes": "19 of 39",
+      "takedowns": "0 of 1",
+      "submissionAttempts": 0,
+      "reversals": 0,
+      "controlTime": "0:00",
+      "head": "2 of 18",
+      "body": "13 of 16",
+      "leg": "4 of 5",
+      "distance": "19 of 39",
+      "clinch": "0 of 0",
+      "ground": "0 of 0",
+      "lastSyncedAt": "2026-07-29T18:50:55.145Z"
+    }
+  ],
+  "meta": {
+    "count": 2,
+    "requestedIdentifier": "9009ec7b91f2be14",
+    "resolved": {
+      "id": "9009ec7b91f2be14",
+      "dataId": "9009ec7b91f2be14"
+    },
+    "round": 1
+  }
+}

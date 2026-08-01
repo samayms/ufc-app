@@ -1,13 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import canonicalFixture from "../fixtures/event.json";
 import citoLiveLiveFixture from "../fixtures/citoLiveLive.json";
 import {
   buildCitoLiveStateUrl,
+  buildCitoRoundRowsUrl,
+  buildCitoRoundStatsUrl,
   createCitoSource,
   createFixtureCitoRoundStatsFetcher,
   createLiveCitoLifecycleFetcher,
   createLiveCitoRoundStatsFetcher,
+  parseCitoRoundStatsResponse,
   parseCitoLiveStateLifecycle,
 } from "./cito.ts";
 
@@ -109,10 +112,16 @@ describe("createCitoSource", () => {
     ).toEqual([]);
   });
 
-  it("rejects live mode at the factory boundary", () => {
-    expect(() => createCitoSource({ mode: "live" })).toThrow(
-      "cito live mode not available yet",
-    );
+  it("constructs fail-closed in live mode", async () => {
+    const live = createCitoSource({ mode: "live" });
+
+    await expect(
+      live.getEvent({ source: "cito", id: "event" }),
+    ).resolves.toBeNull();
+    await expect(live.getRoundUpdates({} as never)).resolves.toEqual([]);
+    await expect(
+      live.getFighter({ source: "cito", id: "fighter" }),
+    ).resolves.toBeNull();
   });
 
   it("provides exact fixture-backed round fetches for the collector pipeline", async () => {
@@ -138,15 +147,331 @@ describe("createCitoSource", () => {
     ).resolves.toBeNull();
   });
 
-  it("leaves live round fetching as a typed fail-closed hook", async () => {
-    const fetcher = createLiveCitoRoundStatsFetcher();
+  it("requires both live round-stats transport credentials", () => {
+    expect(() =>
+      createLiveCitoRoundStatsFetcher({
+        baseUrl: "https://cito.example.invalid",
+        apiKey: "",
+      }),
+    ).toThrow(/CITO_API_KEY/);
+    expect(() =>
+      createLiveCitoRoundStatsFetcher({ baseUrl: "", apiKey: "secret" }),
+    ).toThrow(/base URL/);
+  });
+});
 
-    await expect(fetcher.fetchRound("bout-main", 1)).rejects.toThrow(
-      "not installed",
+describe("Cito exact-round URLs", () => {
+  it("builds the documented stats and rows paths with a round filter", () => {
+    expect(
+      buildCitoRoundStatsUrl(
+        "https://api.citoapi.com/api/v1",
+        "bout-123",
+        3,
+      ),
+    ).toBe("https://api.citoapi.com/api/v1/ufc/bouts/bout-123/stats?round=3");
+    expect(
+      buildCitoRoundRowsUrl(
+        "https://api.citoapi.com/api/v1",
+        "bout-123",
+        3,
+      ),
+    ).toBe("https://api.citoapi.com/api/v1/ufc/bouts/bout-123/rounds?round=3");
+  });
+
+  it("preserves the configured base path with or without a trailing slash", () => {
+    expect(
+      buildCitoRoundStatsUrl("https://cito.example.invalid/v1/", "b", 1),
+    ).toBe(buildCitoRoundStatsUrl("https://cito.example.invalid/v1", "b", 1));
+    expect(
+      buildCitoRoundRowsUrl("https://cito.example.invalid/v1/", "b", 1),
+    ).toBe(buildCitoRoundRowsUrl("https://cito.example.invalid/v1", "b", 1));
+  });
+});
+
+describe("parseCitoRoundStatsResponse", () => {
+  const expected = {
+    round: 2,
+    fighterA: {
+      significantStrikes: 11,
+      totalStrikes: 22,
+      takedowns: 1,
+      takedownsAttempted: 2,
+      controlTimeSeconds: 35,
+      knockdowns: 0,
+    },
+    fighterB: {
+      significantStrikes: 9,
+      totalStrikes: 18,
+      takedowns: 0,
+      takedownsAttempted: 1,
+      controlTimeSeconds: 12,
+      knockdowns: 1,
+    },
+  };
+
+  it("normalizes a single round object without claiming a real vendor shape", () => {
+    expect(
+      parseCitoRoundStatsResponse(
+        {
+          round: 2,
+          red: {
+            significant_strikes: 11,
+            total_strikes: 22,
+            takedowns: 1,
+            takedowns_attempted: 2,
+            control_time_seconds: 35,
+            knockdowns: 0,
+          },
+          blue: {
+            significant_strikes: 9,
+            total_strikes: 18,
+            takedowns: 0,
+            takedowns_attempted: 1,
+            control_time_seconds: 12,
+            knockdowns: 1,
+          },
+        },
+        2,
+      ),
+    ).toEqual(expected);
+  });
+
+  it("normalizes a data wrapper and nested stats object", () => {
+    expect(
+      parseCitoRoundStatsResponse(
+        {
+          data: {
+            round: 2,
+            stats: {
+              fighterA: {
+                significantStrikes: 11,
+                totalStrikes: 22,
+                takedowns: 1,
+                takedownsAttempted: 2,
+                controlTimeSeconds: 35,
+                knockdowns: 0,
+              },
+              fighterB: {
+                significantStrikes: 9,
+                totalStrikes: 18,
+                takedowns: 0,
+                takedownsAttempted: 1,
+                controlTimeSeconds: 12,
+                knockdowns: 1,
+              },
+            },
+          },
+        },
+        2,
+      ),
+    ).toEqual(expected);
+  });
+
+  it("selects only explicitly corner-labeled rows for the requested round", () => {
+    expect(
+      parseCitoRoundStatsResponse(
+        [
+          { round: 1, corner: "red", significant_strikes: 100 },
+          { round: 2, corner: "red", ...expected.fighterA },
+          { round: 2, corner: "blue", ...expected.fighterB },
+        ],
+        2,
+      ),
+    ).toEqual(expected);
+  });
+
+  it("leaves an unmapped fighter absent instead of zero-filling it", () => {
+    const parsed = parseCitoRoundStatsResponse(
+      {
+        round: 1,
+        red: {
+          significantStrikes: 0,
+          totalStrikes: 0,
+          takedowns: 0,
+          takedownsAttempted: 0,
+          controlTimeSeconds: 0,
+          knockdowns: 0,
+        },
+      },
+      1,
     );
-    await expect(fetcher.fetchAllRounds("bout-main")).rejects.toThrow(
-      "not installed",
-    );
+
+    expect(parsed?.fighterA).toEqual({
+      significantStrikes: 0,
+      totalStrikes: 0,
+      takedowns: 0,
+      takedownsAttempted: 0,
+      controlTimeSeconds: 0,
+      knockdowns: 0,
+    });
+    expect(parsed).not.toHaveProperty("fighterB");
+    expect(parsed?.fighterB).not.toEqual(expect.objectContaining({
+      significantStrikes: 0,
+    }));
+  });
+
+  it("does not subtract cumulative totals into a per-round result", () => {
+    expect(
+      parseCitoRoundStatsResponse(
+        {
+          round: 2,
+          cumulative: {
+            red: { significantStrikes: 40, totalStrikes: 80 },
+            blue: { significantStrikes: 30, totalStrikes: 70 },
+          },
+        },
+        2,
+      ),
+    ).toEqual({ round: 2 });
+  });
+
+  it("returns null for garbage or a payload with no requested round", () => {
+    expect(parseCitoRoundStatsResponse({ nope: true }, 1)).toBeNull();
+    expect(parseCitoRoundStatsResponse([{ round: 2 }], 1)).toBeNull();
+  });
+});
+
+describe("createLiveCitoRoundStatsFetcher", () => {
+  function response(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), { status });
+  }
+
+  const roundBody = {
+    round: 2,
+    red: {
+      significantStrikes: 11,
+      totalStrikes: 22,
+      takedowns: 1,
+      takedownsAttempted: 2,
+      controlTimeSeconds: 35,
+      knockdowns: 0,
+    },
+    blue: {
+      significantStrikes: 9,
+      totalStrikes: 18,
+      takedowns: 0,
+      takedownsAttempted: 1,
+      controlTimeSeconds: 12,
+      knockdowns: 1,
+    },
+  };
+
+  it("sends x-api-key and fetches the bout plus one exact-round endpoint", async () => {
+    const calls: Array<{ url: string; headers: Headers }> = [];
+    const fetchImpl = vi.fn(async (input, init) => {
+      calls.push({ url: String(input), headers: new Headers(init?.headers) });
+      return String(input).endsWith("/ufc/bouts/bout-123")
+        ? response({ data: { fighters: [] } })
+        : response(roundBody);
+    }) as unknown as typeof fetch;
+    const fetcher = createLiveCitoRoundStatsFetcher({
+      baseUrl: "https://cito.example.invalid/api/v1/",
+      apiKey: "test-secret",
+      fetchImpl,
+    });
+
+    await expect(fetcher.fetchRound("bout-123", 2)).resolves.toMatchObject({
+      boutId: "bout-123",
+      round: 2,
+      fighterA: { significantStrikes: 11 },
+      fighterB: { knockdowns: 1 },
+    });
+    expect(calls.map(({ url }) => url)).toEqual([
+      "https://cito.example.invalid/api/v1/ufc/bouts/bout-123",
+      "https://cito.example.invalid/api/v1/ufc/bouts/bout-123/stats?round=2",
+    ]);
+    expect(calls.every(({ headers }) => headers.get("x-api-key") === "test-secret")).toBe(true);
+  });
+
+  it.each([401, 403, 429] as const)(
+    "classifies HTTP %s as terminal without exposing the key",
+    async (status) => {
+      const fetchImpl = vi.fn(async () => response({}, status)) as unknown as typeof fetch;
+      const fetcher = createLiveCitoRoundStatsFetcher({
+        baseUrl: "https://cito.example.invalid/api/v1",
+        apiKey: "secret-key",
+        fetchImpl,
+      });
+      const result = fetcher.fetchRound("bout-123", 1);
+
+      await expect(result).rejects.toMatchObject({
+        kind: status === 429 ? "quota" : "auth",
+        status,
+      });
+      await expect(result).rejects.not.toThrow("secret-key");
+    },
+  );
+
+  it("classifies HTTP 500 as transient", async () => {
+    const fetchImpl = vi.fn(async () => response({}, 500)) as unknown as typeof fetch;
+    const fetcher = createLiveCitoRoundStatsFetcher({
+      baseUrl: "https://cito.example.invalid/api/v1",
+      apiKey: "secret-key",
+      fetchImpl,
+    });
+
+    await expect(fetcher.fetchRound("bout-123", 1)).rejects.toMatchObject({
+      kind: "transient",
+      status: 500,
+    });
+  });
+
+  it("classifies an aborted request as transient timeout", async () => {
+    const fetchImpl = (async (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      })) as typeof fetch;
+    const fetcher = createLiveCitoRoundStatsFetcher({
+      baseUrl: "https://cito.example.invalid/api/v1",
+      apiKey: "secret-key",
+      fetchImpl,
+      timeoutMs: 1,
+    });
+
+    await expect(fetcher.fetchRound("bout-123", 1)).rejects.toMatchObject({
+      kind: "transient",
+    });
+  });
+
+  it("rejects an oversized response before parsing it", async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ round: 1, red: {} }))) as typeof fetch;
+    const fetcher = createLiveCitoRoundStatsFetcher({
+      baseUrl: "https://cito.example.invalid/api/v1",
+      apiKey: "secret-key",
+      fetchImpl,
+      maxBytes: 4,
+    });
+
+    await expect(fetcher.fetchRound("bout-123", 1)).rejects.toMatchObject({
+      kind: "unavailable",
+    });
+  });
+
+  it("serializes five documented round-filtered reconciliation requests", async () => {
+    let active = 0;
+    let maximumActive = 0;
+    const rounds: number[] = [];
+    const fetchImpl = vi.fn(async (input) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      const round = Number(new URL(String(input)).searchParams.get("round"));
+      rounds.push(round);
+      const result = response({ ...roundBody, round });
+      active -= 1;
+      return result;
+    }) as unknown as typeof fetch;
+    const fetcher = createLiveCitoRoundStatsFetcher({
+      baseUrl: "https://cito.example.invalid/api/v1",
+      apiKey: "secret-key",
+      fetchImpl,
+    });
+
+    await expect(fetcher.fetchAllRounds("bout-123")).resolves.toHaveLength(5);
+    expect(maximumActive).toBe(1);
+    expect(rounds).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });
 

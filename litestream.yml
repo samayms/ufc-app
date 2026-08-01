@@ -1,0 +1,31 @@
+# Litestream replication config for the SQLite volume.
+#
+# Run as: litestream replicate -config /app/litestream.yml -exec "node server/main.ts"
+#
+# In `-exec` mode litestream restores /data/ufc.db from the replica
+# automatically when the file is absent (fresh volume, disaster recovery)
+# and otherwise leaves an existing database alone, then execs the app and
+# keeps replicating alongside it. On SIGTERM/SIGINT it stops the exec'd
+# process and performs one final sync before exiting, so a graceful Fly
+# deploy/restart never loses the last few writes.
+#
+# Credentials are read only from the environment — nothing here is
+# hard-coded:
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
+
+# DB_PATH must be set in the environment (fly.toml sets it to /data/ufc.db).
+dbs:
+  - path: ${DB_PATH}
+    replicas:
+      - type: s3
+        bucket: ${R2_BUCKET}
+        path: ufc-db
+        endpoint: https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+        region: auto
+        access-key-id: ${R2_ACCESS_KEY_ID}
+        secret-access-key: ${R2_SECRET_ACCESS_KEY}
+        # Frequent, cheap snapshots; short retention since R2 storage isn't free
+        # and this is a hot-standby backup, not a long-term archive.
+        sync-interval: 1s
+        retention: 72h
+        retention-check-interval: 1h

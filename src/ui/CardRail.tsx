@@ -1,45 +1,7 @@
-import { useState } from "react";
-import type { Bout, Corner, Fighter } from "../schema.ts";
+import type { Bout } from "../schema.ts";
+import { FitText, MatchupCard } from "./MatchupCard.tsx";
 import { fmtMethod, WEIGHT_LABEL } from "./format.ts";
 import "./newComponents.css";
-
-function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2);
-}
-
-function RailPhoto({
-  fighter,
-  corner,
-  photoUrl,
-}: {
-  fighter: Fighter;
-  corner: Corner;
-  photoUrl?: string;
-}) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const showImg = photoUrl && !imgFailed;
-  return (
-    <span
-      className={`rail-photo rail-photo-${corner}`}
-      aria-hidden={showImg ? undefined : "true"}
-    >
-      {showImg ? (
-        <img
-          className="fighter-photo-img"
-          src={photoUrl}
-          alt={fighter.name}
-          onError={() => setImgFailed(true)}
-        />
-      ) : (
-        initialsOf(fighter.name)
-      )}
-    </span>
-  );
-}
 
 const SEGMENT_LABEL = {
   "main-card": "Main card",
@@ -55,9 +17,19 @@ function StatusChip({ bout }: { bout: Bout }) {
       return <span className="chip chip-live">END R{bout.currentRound}</span>;
     case "final": {
       const r = bout.result;
+      const winner =
+        r?.winner === "red" || r?.winner === "blue"
+          ? bout.fighters[r.winner].name.split(" ").at(-1)
+          : r?.winner === "draw"
+            ? "DRAW"
+            : r?.winner === "nc"
+              ? "NO CONTEST"
+              : undefined;
       return (
         <span className="chip chip-final">
-          {r ? `${fmtMethod(r.method)}${r.round ? ` R${r.round}` : ""}` : "FINAL"}
+          {r
+            ? `${winner ?? "FINAL"} · ${fmtMethod(r.method)}${r.round ? ` R${r.round}` : ""}`
+            : "FINAL"}
         </span>
       );
     }
@@ -100,37 +72,33 @@ export function CardRail({
                   ? bout.result.winner
                   : null;
               return (
-                <button
+                <MatchupCard
                   key={bout.id}
-                  className={`rail-bout${bout.id === selectedId ? " is-selected" : ""}`}
-                  onClick={() => onSelect(bout.id)}
-                  aria-current={bout.id === selectedId ? "true" : undefined}
-                >
-                  <span className="rail-photos">
-                    <RailPhoto
-                      fighter={bout.fighters.red}
-                      corner="red"
-                      photoUrl={photosByBoutId?.[bout.id]?.red}
-                    />
-                    <RailPhoto
-                      fighter={bout.fighters.blue}
-                      corner="blue"
-                      photoUrl={photosByBoutId?.[bout.id]?.blue}
-                    />
-                  </span>
-                  <span className="rail-names">
-                    <span className={`rail-name corner-red${winner === "blue" ? " is-loser" : ""}`}>
-                      {bout.fighters.red.name}
+                  isSelected={bout.id === selectedId}
+                  onSelect={() => onSelect(bout.id)}
+                  red={{
+                    name: bout.fighters.red.name,
+                    photoUrl: photosByBoutId?.[bout.id]?.red,
+                  }}
+                  blue={{
+                    name: bout.fighters.blue.name,
+                    photoUrl: photosByBoutId?.[bout.id]?.blue,
+                  }}
+                  redIsLoser={winner === "blue"}
+                  blueIsLoser={winner === "red"}
+                  isLive={
+                    bout.status === "in-round" || bout.status === "between-rounds"
+                  }
+                  center={
+                    <span className="event-card-center">
+                      <StatusChip bout={bout} />
+                      <FitText
+                        className="event-card-center-weight"
+                        text={WEIGHT_LABEL[bout.weightClass] ?? ""}
+                      />
                     </span>
-                    <span className={`rail-name corner-blue${winner === "red" ? " is-loser" : ""}`}>
-                      {bout.fighters.blue.name}
-                    </span>
-                  </span>
-                  <span className="rail-meta">
-                    <StatusChip bout={bout} />
-                    <span className="rail-weight">{WEIGHT_LABEL[bout.weightClass]}</span>
-                  </span>
-                </button>
+                  }
+                />
               );
             })}
           </section>

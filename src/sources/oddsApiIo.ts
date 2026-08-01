@@ -15,6 +15,16 @@ import type {
   MarketTick,
   SourceConfig,
 } from "./contract.ts";
+import {
+  fetchProviderJson,
+  type UpcomingFetchOptions,
+} from "./upcoming/types.ts";
+import {
+  buildOddsApiIoEventsUrl,
+  buildOddsApiIoOddsUrl,
+  parseOddsApiIoUpcomingEvents,
+  parseOddsApiIoUpcomingOdds,
+} from "./upcoming/oddsApiIoUpcoming.ts";
 
 interface FixtureOutcome {
   name: string;
@@ -97,6 +107,10 @@ export interface OddsApiIoLiveHook {
     apiKey: string,
     query: OddsApiIoBoutQuery,
   ): Promise<OddsSnapshot | null>;
+}
+
+export interface OddsApiIoLiveHookOptions extends UpcomingFetchOptions {
+  bookmakers: readonly string[];
 }
 
 export interface OddsApiIoSource {
@@ -431,6 +445,171 @@ function requiredApiKey(config: SourceConfig): string {
     );
   }
   return key;
+}
+
+function liveDiscoveryId(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase("en-US")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function discoveredEventsFromUpcoming(
+  events: ReturnType<typeof parseOddsApiIoUpcomingEvents>,
+): OddsApiIoDiscoveredEvent[] {
+  const grouped = new Map<string, OddsApiIoDiscoveredEvent>();
+  for (const event of events) {
+    const name = event.leagueName ?? "MMA";
+    const id = liveDiscoveryId(name) || "mma";
+    const existing = grouped.get(id);
+    const bout = {
+      externalRef: externalRef(event.eventId),
+      redFighter: event.firstFighter,
+      blueFighter: event.secondFighter,
+    } satisfies OddsApiIoDiscoveredBout;
+
+    if (existing === undefined) {
+      grouped.set(id, {
+        externalRef: externalRef(id),
+        name,
+        startsAt: event.startsAt ?? "",
+        bouts: [bout],
+      });
+      continue;
+    }
+
+    existing.bouts.push(bout);
+    if (
+      event.startsAt !== undefined &&
+      (existing.startsAt.length === 0 || event.startsAt < existing.startsAt)
+    ) {
+      existing.startsAt = event.startsAt;
+    }
+  }
+  return [...grouped.values()];
+}
+
+function errorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  // Fetch implementations are outside this module's control. Keep even a
+  // badly behaved transport error from echoing an API key query parameter.
+  return message.replace(/([?&]apiKey=)[^&\s]*/giu, "$1…");
+}
+
+function liveRequestError(error: unknown): OddsApiIoRequestError {
+  if (error instanceof OddsApiIoRequestError) return error;
+
+  const status =
+    error && typeof error === "object" && "status" in error &&
+    typeof error.status === "number"
+      ? error.status
+      : undefined;
+  const message = errorMessage(error);
+  const lower = message.toLowerCase();
+
+  if (status === 401 || status === 403 || lower.includes("unauthorized")) {
+    return new OddsApiIoRequestError("auth", message);
+  }
+  if (
+    status === 402 ||
+    status === 429 ||
+    lower.includes("quota") ||
+    lower.includes("rate limit")
+  ) {
+    return new OddsApiIoRequestError("quota", message);
+  }
+  if (
+    status === 408 ||
+    status === 425 ||
+    (status !== undefined && status >= 500) ||
+    lower.includes("timed out") ||
+    lower.includes("timeout")
+  ) {
+    return new OddsApiIoRequestError("transient", message);
+  }
+  return new OddsApiIoRequestError("unavailable", message);
+}
+
+export function createOddsApiIoLiveHook(
+  options: OddsApiIoLiveHookOptions,
+): OddsApiIoLiveHook {
+  return {
+    async discoverEvents(apiKey: string): Promise<OddsApiIoDiscoveredEvent[]> {
+      try {
+        const payload = await fetchProviderJson(
+          "odds-api-io",
+          buildOddsApiIoEventsUrl(apiKey),
+          options,
+        );
+        return discoveredEventsFromUpcoming(
+          parseOddsApiIoUpcomingEvents(payload),
+        );
+      } catch (error) {
+        throw liveRequestError(error);
+      }
+    },
+    async getBoutOdds(
+      apiKey: string,
+      query: OddsApiIoBoutQuery,
+    ): Promise<OddsSnapshot | null> {
+      try {
+        const payload = await fetchProviderJson(
+          "odds-api-io",
+          buildOddsApiIoOddsUrl(
+            apiKey,
+            query.externalBoutId,
+            options.bookmakers,
+          ),
+          options,
+        );
+        const parsed = parseOddsApiIoUpcomingOdds(
+          payload,
+          options.bookmakers,
+        );
+        if (
+          parsed.firstFighter === undefined ||
+          parsed.secondFighter === undefined
+        ) {
+          return null;
+        }
+        const corners = cornersForLiveOdds(
+          query.bout,
+          parsed.firstFighter,
+          parsed.secondFighter,
+        );
+        if (corners === null || parsed.quotes.length === 0) return null;
+
+        const quotes = parsed.quotes.flatMap((quote) => {
+          const corner = quote.side === "first" ? corners.home : corners.away;
+          return [{
+            corner,
+            native: quote.native,
+            impliedProbability: quote.impliedProbability,
+          } satisfies OddsQuote];
+        });
+        if (quotes.length === 0) return null;
+
+        const fetchedAt = new Date().toISOString();
+        return {
+          boutId: query.bout.id,
+          market: "sportsbook",
+          quotes,
+          ...(parsed.marketUpdatedAt === undefined
+            ? {}
+            : { marketUpdatedAt: parsed.marketUpdatedAt }),
+          provenance: {
+            source: "odds-api-io",
+            fetchedAt,
+            synthetic: false,
+          },
+        };
+      } catch (error) {
+        throw liveRequestError(error);
+      }
+    },
+  };
 }
 
 export function createOddsApiIoSource(

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { BoutView } from "../schema.ts";
 import {
   assembleDashboard,
+  collectorDisabled,
   dashboardDemoState,
 } from "../store/useDashboard.ts";
 import { FightSummary } from "./FightSummary.tsx";
@@ -15,6 +16,7 @@ import {
 import { RoundStatsPanel } from "./RoundStatsPanel.tsx";
 import { ScorecardFeed } from "./ScorecardFeed.tsx";
 import { SourceStatus } from "./SourceStatus.tsx";
+import { SectionTabs } from "./SectionTabs.tsx";
 import { EventSubheader, TopBar } from "./TopBar.tsx";
 
 function toOddsPanelProps(view: BoutView) {
@@ -38,7 +40,26 @@ describe("dashboard state surfaces", () => {
   it("parses only supported visual demo states", () => {
     expect(dashboardDemoState("?demo=stale")).toBe("stale");
     expect(dashboardDemoState("?demo=error")).toBe("error");
+    expect(dashboardDemoState("?demo=live")).toBe("live");
     expect(dashboardDemoState("?demo=unknown")).toBe("default");
+  });
+
+  it("lets a link ignore a running collector so the fixture bout shows", () => {
+    // A collector serving a real card shadows the fixture entirely, which
+    // hides the fixture's only live bout.
+    expect(collectorDisabled("?collector=off")).toBe(true);
+    expect(collectorDisabled("")).toBe(false);
+    expect(collectorDisabled("?collector=on")).toBe(false);
+  });
+
+  it("keeps the fight navigation focused on the remaining views", () => {
+    const tabs = renderToStaticMarkup(
+      <SectionTabs active="summary" onChange={() => undefined} />,
+    );
+    expect(tabs).toContain(">Fight</button>");
+    expect(tabs).toContain(">Odds</button>");
+    expect(tabs).toContain(">Tale</button>");
+    expect(tabs).not.toContain(">Stats</button>");
   });
 
   it("switches the selected round without enabling future rounds", async () => {
@@ -76,7 +97,7 @@ describe("dashboard state surfaces", () => {
     if (!upcoming) return;
 
     const missing = renderToStaticMarkup(
-      <FightSummary view={upcoming} selection={1} />,
+      <FightSummary view={upcoming} eventStartsAt={state.event.startsAt} selection={1} />,
     );
     expect(missing).toContain("Stats lock in after each completed round.");
     expect(missing).toContain(
@@ -91,6 +112,20 @@ describe("dashboard state surfaces", () => {
     expect(stale).toContain("Last synced");
     expect(stale).toContain("On dashboard refresh");
     expect(stale).toContain("completed-round data stays");
+  });
+
+  it("uses the fixture market snapshot to preview round odds", async () => {
+    const state = await assembleDashboard();
+    const main = state.boutViews["bout-main"];
+    expect(main).toBeDefined();
+    if (!main) return;
+
+    const html = renderToStaticMarkup(
+      <FightSummary view={main} eventStartsAt={state.event.startsAt} selection={2} />,
+    );
+    expect(html).toContain('data-market-accent="kalshi"');
+    expect(html).toContain(">Odds<");
+    expect(html).not.toContain("round-end odds will appear");
   });
 
   it("keeps diagnostics in Data and the UFC masthead clear", async () => {
@@ -120,17 +155,13 @@ describe("dashboard state surfaces", () => {
     expect(view).toBeDefined();
     if (!view) return;
 
-    const scorecards = renderToStaticMarkup(
-      <ScorecardFeed view={view} accounts={state.scorecardAccounts} />,
-    );
-    expect(scorecards).toContain(
-      "No configured X scorecard posts for this round.",
-    );
+    const scorecards = renderToStaticMarkup(<ScorecardFeed view={view} />);
+    expect(scorecards).toContain("No Sherdog scorecard for this round.");
     expect(scorecards).not.toContain('class="media-scorecard"');
     expect(scorecards).not.toContain("10–9");
   });
 
-  it("renders collector-delivered Sherdog and X values with separate provenance", async () => {
+  it("renders collector-delivered Sherdog values with provenance", async () => {
     const state = await assembleDashboard();
     const view = state.boutViews["bout-main"];
     expect(view).toBeDefined();
@@ -139,7 +170,6 @@ describe("dashboard state surfaces", () => {
     const scorecards = renderToStaticMarkup(
       <ScorecardFeed
         view={view}
-        accounts={state.scorecardAccounts}
         round={1}
         records={[
           {
@@ -164,31 +194,10 @@ describe("dashboard state surfaces", () => {
               parserVersion: "test",
               payloadHash: "hash",
             },
-            xScores: [
-              {
-                source: "x",
-                sourcePostId: "123",
-                scorer: "MMAJunkie",
-                round: 1,
-                score: { red: 10, blue: 9 },
-                fetchedAt: "2026-07-28T00:00:40Z",
-                parseConfidence: 1,
-                mode: "embed",
-                postUrl: "https://x.com/MMAJunkie/status/123",
-              },
-            ],
             marketAtEnd: {},
             expertConsensus: {
               sherdog: {
                 source: "sherdog",
-                redVotes: 1,
-                blueVotes: 0,
-                drawVotes: 0,
-                total: 1,
-                leader: "red",
-              },
-              x: {
-                source: "x",
                 redVotes: 1,
                 blueVotes: 0,
                 drawVotes: 0,
@@ -204,9 +213,6 @@ describe("dashboard state surfaces", () => {
 
     expect(scorecards).toContain("Measured exchanges.");
     expect(scorecards).toContain("Sherdog");
-    expect(scorecards).toContain("X scorecards");
-    expect(scorecards).toContain("official-x-embed");
-    expect(scorecards).toContain("Sherdog and X stay separate");
   });
 
   it("renders fixture-only odds unchanged when no collector deliveries are supplied", async () => {

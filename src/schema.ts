@@ -156,6 +156,14 @@ export interface Bout {
   scheduledRounds: 3 | 5;
   titleFight: boolean;
   fighters: Record<Corner, Fighter>;
+  /**
+   * Pre-fight outlook paragraph, summarized from Sherdog's written preview.
+   * One source, no provenance tracking needed (unlike round data on
+   * `BoutView`, which is per-source by design). Absent until Sherdog
+   * publishes a preview and the summarizer runs; the UI falls back to a
+   * placeholder when it's missing.
+   */
+  outlook?: string;
   status: BoutStatus;
   /** Current round while live; the round just completed while between rounds. */
   currentRound?: number;
@@ -219,6 +227,12 @@ export interface SherdogRoundObservation {
   round: number;
   commentary: string;
   scorerCards: SherdogScorerCard[];
+  /**
+   * A model-written condensation of `commentary`, sized for the dashboard's
+   * five-line summary box. Absent when summarizing is off or failed; the raw
+   * commentary is always kept and is what the UI falls back to.
+   */
+  aiSummary?: string;
   sourceUrl: string;
   publishedAt?: string;
   fetchedAt: string;
@@ -293,6 +307,13 @@ export interface OddsSnapshot {
   quotes: OddsQuote[];
   /** When the market itself says it was last updated, if it says. */
   marketUpdatedAt?: string;
+  /**
+   * Market trading volume in USD, when the source reports one. Kalshi's
+   * volume is a contract count (each contract settles $0 or $1, so ~1
+   * contract ≈ $1) and is stored here directly, with no unit conversion.
+   * Absent for sportsbook snapshots and anywhere volume is unknown.
+   */
+  volume?: number;
   provenance: Provenance;
 }
 
@@ -318,33 +339,6 @@ export interface MarketMove {
 }
 
 // ---------------------------------------------------------------------------
-// Journalist scorecards (X embeds, not paid API search)
-// ---------------------------------------------------------------------------
-
-/** A known journalist/outlet account whose scorecards we embed. */
-export interface ScorecardAccount {
-  /** X handle without the @. */
-  handle: string;
-  displayName: string;
-  /** Set false once an account proves inactive; UI drops it quietly. */
-  active: boolean;
-}
-
-/**
- * A pointer to one embeddable post (round score or fight commentary).
- * We store only the reference; rendering uses X's embed widget.
- */
-export interface ScorecardEmbed {
-  boutId: string;
-  handle: string;
-  /** X post id, enough to render the official embed. */
-  postId: string;
-  /** Round the post scores, when parseable; absent for general commentary. */
-  round?: number;
-  provenance: Provenance;
-}
-
-// ---------------------------------------------------------------------------
 // Dashboard aggregate — what the UI actually consumes
 // ---------------------------------------------------------------------------
 
@@ -365,12 +359,10 @@ export interface BoutView {
    * render absence, never substitute the current price as if it were opening.
    */
   preFightOdds: Partial<Record<OddsSnapshot["market"], OddsSnapshot>>;
-  scorecards: ScorecardEmbed[];
 }
 
 export interface DashboardState {
   event: UfcEvent;
   /** BoutView per bout id. */
   boutViews: Record<string, BoutView>;
-  scorecardAccounts: ScorecardAccount[];
 }

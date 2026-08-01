@@ -8,6 +8,7 @@ import liveOdds from "../fixtures/oddsApiIoOddsLive.json" with {
   type: "json",
 };
 import {
+  createOddsApiIoLiveHook,
   createOddsApiIoSource,
   decimalToAmerican,
   OddsApiIoRequestError,
@@ -15,6 +16,10 @@ import {
   parseOddsApiIoEvents,
   sportsbookSnapshotToMarketTicks,
 } from "./oddsApiIo.ts";
+import {
+  fetchProviderJson,
+  MAX_DISCOVERY_BYTES,
+} from "./upcoming/types.ts";
 
 function fixtureBout(id: string): Bout {
   const raw = eventFixture.bouts.find((bout) => bout.id === id);
@@ -284,5 +289,181 @@ describe("Odds-API.io live shapes", () => {
     expect(decimalToAmerican(1.5)).toBe(-200);
     expect(decimalToAmerican(1)).toBeNull();
     expect(decimalToAmerican(Number.NaN)).toBeNull();
+  });
+
+  it("uses the shared live transport for discovery and active-bout odds", async () => {
+    const payload = {
+      ...liveOdds,
+      bookmakers: {
+        ...liveOdds.bookmakers,
+        DraftKings: liveOdds.bookmakers.Bet365,
+      },
+    };
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      urls.push(url.toString());
+      return new Response(
+        url.pathname.endsWith("/events")
+          ? JSON.stringify(liveEvents)
+          : JSON.stringify(payload),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const hook = createOddsApiIoLiveHook({
+      bookmakers: ["Bet365"],
+      fetchImpl,
+    });
+
+    const discovered = await hook.discoverEvents("server-only");
+    expect(discovered).toHaveLength(1);
+    expect(discovered[0]).toEqual(
+      expect.objectContaining({
+        name: "UFC - UFC Fight Night: Medic vs. Rodriguez",
+      }),
+    );
+    const firstBout = discovered[0]?.bouts[0];
+    expect(firstBout?.externalRef.id).toBe(String(liveEvents[0]?.id));
+
+    const snapshot = await hook.getBoutOdds("server-only", {
+      bout: liveBout,
+      externalBoutId: String(liveOdds.id),
+      bookmakers: ["Bet365"],
+    });
+    expect(snapshot?.quotes).toHaveLength(2);
+    expect(
+      snapshot?.quotes.every(
+        (quote) =>
+          quote.native.kind === "american-moneyline" &&
+          quote.native.book === "bet365",
+      ),
+    ).toBe(true);
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain("sport=mixed-martial-arts");
+    expect(urls[1]).toContain("eventId=73240944");
+    expect(urls[1]).toContain("bookmakers=Bet365");
+    expect(urls[1]).not.toContain("DraftKings");
+  });
+
+  it("returns null when live odds do not list the active bout", async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify(liveOdds), { status: 200 })) as typeof fetch;
+    const hook = createOddsApiIoLiveHook({
+      bookmakers: ["Bet365"],
+      fetchImpl,
+    });
+
+    await expect(
+      hook.getBoutOdds("server-only", {
+        bout: base,
+        externalBoutId: String(liveOdds.id),
+        bookmakers: ["Bet365"],
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it.each([
+    [401, "auth"],
+    [429, "quota"],
+  ] as const)(
+    "classifies HTTP %s as terminal %s without retrying",
+    async (status, kind) => {
+      const fetchImpl = vi.fn(async () =>
+        new Response("{}", { status }),
+      ) as unknown as typeof fetch;
+      const hook = createOddsApiIoLiveHook({
+        bookmakers: ["Bet365"],
+        fetchImpl,
+      });
+
+      await expect(hook.discoverEvents("server-only")).rejects.toMatchObject({
+        kind,
+      });
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("maps a live timeout to a transient request error", async () => {
+    const fetchImpl = (async (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      })) as typeof fetch;
+    const hook = createOddsApiIoLiveHook({
+      bookmakers: ["Bet365"],
+      fetchImpl,
+      timeoutMs: 1,
+    });
+
+    await expect(hook.discoverEvents("server-only")).rejects.toMatchObject({
+      kind: "transient",
+    });
+  });
+
+  it("rejects timeout and oversized bodies through the shared helper", async () => {
+    const timeoutFetch = (async (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () =>
+          reject(new DOMException("aborted", "AbortError")),
+        );
+      })) as typeof fetch;
+    await expect(
+      fetchProviderJson(
+        "odds-api-io",
+        "https://api.odds-api.io/v3/events?apiKey=server-only",
+        { fetchImpl: timeoutFetch, timeoutMs: 1 },
+      ),
+    ).rejects.toMatchObject({ provider: "odds-api-io" });
+
+    const oversizedFetch = (async () =>
+      new Response("x".repeat(MAX_DISCOVERY_BYTES + 1), { status: 200 })) as
+      typeof fetch;
+    await expect(
+      fetchProviderJson(
+        "odds-api-io",
+        "https://api.odds-api.io/v3/events?apiKey=server-only",
+        { fetchImpl: oversizedFetch },
+      ),
+    ).rejects.toMatchObject({ provider: "odds-api-io" });
+  });
+
+  it("keeps native prices, implied probabilities, and paired-only no-vig on live ticks", async () => {
+    const hook = createOddsApiIoLiveHook({
+      bookmakers: ["Bet365"],
+      fetchImpl: (async () =>
+        new Response(JSON.stringify(liveOdds), { status: 200 })) as typeof fetch,
+    });
+    const snapshot = await hook.getBoutOdds("server-only", {
+      bout: liveBout,
+      externalBoutId: String(liveOdds.id),
+      bookmakers: ["Bet365"],
+    });
+    if (snapshot === null) throw new Error("Expected live odds");
+
+    expect(snapshot.quotes[0]?.native.kind).toBe("american-moneyline");
+    expect(snapshot.quotes[0]?.impliedProbability).toBeGreaterThan(0);
+    const ticks = sportsbookSnapshotToMarketTicks(
+      liveBout,
+      snapshot,
+      "odds-api-io",
+      "2026-07-28T14:05:00.000Z",
+    );
+    expect(ticks).toHaveLength(2);
+    expect(ticks.every((tick) => tick.noVigProbability !== undefined)).toBe(
+      true,
+    );
+    expect(
+      (ticks[0]?.noVigProbability ?? 0) +
+        (ticks[1]?.noVigProbability ?? 0),
+    ).toBeCloseTo(1);
+    expect(
+      sportsbookSnapshotToMarketTicks(
+        liveBout,
+        { ...snapshot, quotes: snapshot.quotes.slice(0, 1) },
+        "odds-api-io",
+        "2026-07-28T14:05:00.000Z",
+      )[0]?.noVigProbability,
+    ).toBeUndefined();
   });
 });

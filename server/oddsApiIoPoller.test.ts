@@ -97,13 +97,25 @@ async function createPoller(options?: {
 
 describe("Odds-API.io adaptive polling", () => {
   it.each([
-    [{ hour: 31, day: 30 }, { mode: "periodic", intervalMs: 30_000 }],
-    [{ hour: 30, day: 30 }, { mode: "periodic", intervalMs: 45_000 }],
-    [{ hour: 15, day: 30 }, { mode: "periodic", intervalMs: 45_000 }],
-    [{ hour: 14, day: 30 }, { mode: "periodic", intervalMs: 60_000 }],
-    [{ hour: 90, day: 29 }, { mode: "boundary-only" }],
-  ])("uses the exact quota boundary for %o", (remaining, expected) => {
-    expect(oddsApiIoPollingPolicy(remaining)).toEqual(expected);
+    [{ hour: 31, day: 30 }, 20_000, { mode: "periodic", intervalMs: 20_000 }],
+    [{ hour: 30, day: 30 }, 20_000, { mode: "periodic", intervalMs: 45_000 }],
+    [{ hour: 15, day: 30 }, 20_000, { mode: "periodic", intervalMs: 45_000 }],
+    [{ hour: 14, day: 30 }, 20_000, { mode: "periodic", intervalMs: 60_000 }],
+    [{ hour: 90, day: 29 }, 20_000, { mode: "boundary-only" }],
+  ])(
+    "uses the exact quota boundary for %o with an explicit target",
+    (remaining, targetIntervalMs, expected) => {
+      expect(oddsApiIoPollingPolicy(remaining, targetIntervalMs)).toEqual(
+        expected,
+      );
+    },
+  );
+
+  it("falls back to the between-fights target (5 minutes) when no target is given", () => {
+    expect(oddsApiIoPollingPolicy({ hour: 31, day: 30 })).toEqual({
+      mode: "periodic",
+      intervalMs: 300_000,
+    });
   });
 
   it("enters daily-cap boundary-only mode", async () => {
@@ -115,12 +127,12 @@ describe("Odds-API.io adaptive polling", () => {
         "odds-api-io": {
           perMinute: 1_000,
           perHour: 1_000,
-          perDay: 450,
+          perDay: 400,
         },
       },
       clock: time,
     });
-    for (let request = 0; request < 421; request += 1) {
+    for (let request = 0; request < 371; request += 1) {
       await quota.tryAcquire("odds-api-io");
     }
     const { eventBus, poller, time: pollTime } = await createPoller({
@@ -183,6 +195,19 @@ describe("Odds-API.io adaptive polling", () => {
       detectedAt: new Date(time.now()).toISOString(),
       confirmation: "period_transition",
     });
+    await poller.idle();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(snapshotSource).toHaveBeenCalledWith(
+      "bout-main",
+      1,
+      "odds-api-io",
+      "confirmed",
+      expect.any(String),
+    );
+
+    // The confirmed round-end fetch above must have reset the periodic timer:
+    // advancing only partway into the 60s active-fight interval must not
+    // trigger another fetch on top of the immediate one.
     time.advance(30_000);
     await poller.idle();
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -243,8 +268,8 @@ describe("Odds-API.io adaptive polling", () => {
 
     expect(getBoutOdds).toHaveBeenCalledTimes(2);
     expect(await poller.quota.remaining("odds-api-io")).toMatchObject({
-      hour: 88,
-      day: 448,
+      hour: 73,
+      day: 398,
     });
     await poller.close();
   });
@@ -271,6 +296,46 @@ describe("Odds-API.io adaptive polling", () => {
     await poller.idle();
 
     expect(getBoutOdds).toHaveBeenCalledTimes(1);
+    await poller.close();
+  });
+
+  it("tracks a not-yet-live bout at the 5-minute between-fights cadence, then promotes it to the 60s active-fight cadence on FIGHT_STARTED", async () => {
+    const source = createOddsApiIoSource({ mode: "fixture" });
+    const fetch = vi.spyOn(source, "getBoutOdds");
+    const { eventBus, poller, time } = await createPoller({ source });
+
+    poller.trackBout("bout-main");
+    await poller.idle();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(poller.isTracked("bout-main")).toBe(true);
+    expect(poller.isActive("bout-main")).toBe(false);
+
+    // Well short of the 5-minute between-fights interval: no extra fetch.
+    time.advance(60_000);
+    await poller.idle();
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    // The full 5-minute between-fights interval: one more scheduled fetch.
+    time.advance(240_000);
+    await poller.idle();
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    eventBus.emit({
+      type: "FIGHT_STARTED",
+      boutId: "bout-main",
+      detectedAt: new Date(time.now()).toISOString(),
+    });
+    await poller.idle();
+    // FIGHT_STARTED fetches immediately rather than waiting out whatever was
+    // left of the between-fights timer, and promotes tracking to "live".
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(poller.isActive("bout-main")).toBe(true);
+
+    // Now on the 60s active-fight cadence, not the 5-minute one: advancing
+    // only 60s (which would have been a no-op under the old timer) fetches.
+    time.advance(60_000);
+    await poller.idle();
+    expect(fetch).toHaveBeenCalledTimes(4);
     await poller.close();
   });
 });

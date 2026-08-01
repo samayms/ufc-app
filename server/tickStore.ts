@@ -29,9 +29,16 @@ export const MARKET_TICKS_STORAGE_STREAM = "market-ticks";
 export const MARKET_SNAPSHOTS_STORAGE_STREAM = "market-snapshots";
 export const MARKET_FRESHNESS_STORAGE_STREAM = "market-freshness";
 export const DEFAULT_MARKET_STALE_AFTER_MS = 30_000;
+/** Persist sampled state: durable writes are throttled to roughly once per key. */
+export const DEFAULT_PERSIST_INTERVAL_MS = 1_000;
 
 export interface TickStoreClock {
   now(): number;
+}
+
+export interface TickStoreTimer {
+  setTimeout(callback: () => void, delayMs: number): unknown;
+  clearTimeout(handle: unknown): void;
 }
 
 export interface LocalOrderBookState extends MarketSnapshotOutcome {
@@ -50,6 +57,16 @@ export interface MarketTickStoreOptions {
   storage: Storage;
   staleAfterMs?: number;
   clock?: TickStoreClock;
+  /**
+   * Throttles durable persistence of ticks to roughly once per this many
+   * milliseconds, per book key (source/boutId/bookmaker/marketType/outcome).
+   * In-memory state (`latest`, `history`) is always applied immediately for
+   * UI freshness; only the write to `storage` is sampled. The most recent
+   * tick for a key is never dropped — a trailing write is scheduled so it
+   * eventually lands even without further ticks. `0` disables sampling.
+   */
+  persistIntervalMs?: number;
+  timer?: TickStoreTimer;
   publish?: (snapshot: MarketSnapshot) => Promise<void>;
   onSnapshot?: (snapshot: MarketSnapshot) => Promise<void>;
   onSnapshotsRemoved?: (
@@ -132,6 +149,12 @@ const TICK_KEYS = new Set([
   "receivedAt",
   "stale",
 ]);
+
+const DEFAULT_TICK_STORE_TIMER: TickStoreTimer = {
+  setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+  clearTimeout: (handle) =>
+    clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -730,6 +753,16 @@ export class MarketTickStore implements TickHistorySource {
 
   private readonly clock: TickStoreClock;
 
+  private readonly persistIntervalMs: number;
+
+  private readonly timer: TickStoreTimer;
+
+  private readonly lastPersistedAt = new Map<string, number>();
+
+  private readonly pendingPersist = new Map<string, MarketTick>();
+
+  private readonly persistTimers = new Map<string, unknown>();
+
   private readonly metrics: Metrics;
 
   private readonly publish:
@@ -768,10 +801,17 @@ export class MarketTickStore implements TickHistorySource {
     if (!Number.isFinite(staleAfterMs) || staleAfterMs < 0) {
       throw new TypeError("staleAfterMs must be a non-negative number");
     }
+    const persistIntervalMs =
+      options.persistIntervalMs ?? DEFAULT_PERSIST_INTERVAL_MS;
+    if (!Number.isFinite(persistIntervalMs) || persistIntervalMs < 0) {
+      throw new TypeError("persistIntervalMs must be a non-negative number");
+    }
     this.eventBus = options.eventBus;
     this.storage = options.storage;
     this.staleAfterMs = staleAfterMs;
     this.clock = options.clock ?? { now: () => Date.now() };
+    this.persistIntervalMs = persistIntervalMs;
+    this.timer = options.timer ?? DEFAULT_TICK_STORE_TIMER;
     this.metrics = options.metrics ?? NOOP_METRICS;
     this.publish = options.publish;
     this.onSnapshot = options.onSnapshot;
@@ -806,18 +846,18 @@ export class MarketTickStore implements TickHistorySource {
       await this.restore();
       validateTick(tick);
       const accepted = copyTick(tick);
-      await this.storage.append(MARKET_TICKS_STORAGE_STREAM, {
-        version: 1,
-        tick: accepted,
-      } satisfies PersistedTick);
       this.metrics.recordPayload(
         accepted.source,
         accepted.sourceUpdatedAt,
         accepted.receivedAt,
       );
+      // In-memory state is always applied immediately, for UI freshness and
+      // for accurate round-boundary reconstruction; only the durable write
+      // below is sampled.
       this.history.push(accepted);
       const state = applyTick(this.latest, accepted);
       result = this.toLocalState(state, this.clock.now());
+      await this.persistSampled(accepted);
     });
     return operation.then(() => result as LocalOrderBookState);
   }
@@ -977,6 +1017,11 @@ export class MarketTickStore implements TickHistorySource {
   async close(): Promise<void> {
     for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
     await this.operationQueue;
+    for (const handle of this.persistTimers.values()) {
+      this.timer.clearTimeout(handle);
+    }
+    this.persistTimers.clear();
+    await this.enqueue(() => this.flushAllPending());
   }
 
   private enqueue(operation: () => Promise<void>): Promise<void> {
@@ -1225,6 +1270,66 @@ export class MarketTickStore implements TickHistorySource {
       await this.publish?.(copySnapshot(snapshot)).catch(() => undefined);
     }
     return produced;
+  }
+
+  /**
+   * Throttles durable writes to roughly once per `persistIntervalMs` per
+   * book key. A tick within the window is held in `pendingPersist`; a
+   * trailing flush is scheduled so the latest sample still lands even if no
+   * further tick arrives, rather than being dropped on the floor.
+   */
+  private async persistSampled(accepted: MarketTick): Promise<void> {
+    const key = bookKey(accepted);
+    if (this.persistIntervalMs === 0) {
+      await this.writeTick(key, accepted);
+      return;
+    }
+    const now = this.clock.now();
+    const lastPersisted = this.lastPersistedAt.get(key);
+    if (
+      lastPersisted === undefined ||
+      now - lastPersisted >= this.persistIntervalMs
+    ) {
+      await this.writeTick(key, accepted);
+      return;
+    }
+    this.pendingPersist.set(key, accepted);
+    this.scheduleTrailingFlush(key, this.persistIntervalMs - (now - lastPersisted));
+  }
+
+  private async writeTick(key: string, tick: MarketTick): Promise<void> {
+    await this.storage.append(MARKET_TICKS_STORAGE_STREAM, {
+      version: 1,
+      tick,
+    } satisfies PersistedTick);
+    this.lastPersistedAt.set(key, this.clock.now());
+    this.pendingPersist.delete(key);
+    const handle = this.persistTimers.get(key);
+    if (handle !== undefined) {
+      this.timer.clearTimeout(handle);
+      this.persistTimers.delete(key);
+    }
+  }
+
+  private scheduleTrailingFlush(key: string, delayMs: number): void {
+    if (this.persistTimers.has(key)) return;
+    const handle = this.timer.setTimeout(() => {
+      this.persistTimers.delete(key);
+      this.enqueue(() => this.flushPending(key));
+    }, delayMs);
+    this.persistTimers.set(key, handle);
+  }
+
+  private async flushPending(key: string): Promise<void> {
+    const pending = this.pendingPersist.get(key);
+    if (pending === undefined) return;
+    await this.writeTick(key, pending);
+  }
+
+  private async flushAllPending(): Promise<void> {
+    for (const key of [...this.pendingPersist.keys()]) {
+      await this.flushPending(key);
+    }
   }
 
   private async persistSnapshots(): Promise<void> {

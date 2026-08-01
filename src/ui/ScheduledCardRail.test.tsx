@@ -98,10 +98,12 @@ describe("ScheduledCardRail", () => {
     const markup = renderToStaticMarkup(
       <ScheduledCardRail card={card} onSelect={() => undefined} />,
     );
-    const mainRedIndex = markup.indexOf("Main Red");
-    const coRedIndex = markup.indexOf("Co Red");
-    const prelimRedIndex = markup.indexOf("Prelim Red");
-    const earlyRedIndex = markup.indexOf("Early Red");
+    // Fighter names render as separate first/last spans, so look for the
+    // (uniquely identifying) first name rather than the full string.
+    const mainRedIndex = markup.indexOf(">Main<");
+    const coRedIndex = markup.indexOf(">Co<");
+    const prelimRedIndex = markup.indexOf(">Prelim<");
+    const earlyRedIndex = markup.indexOf(">Early<");
 
     expect(mainRedIndex).toBeGreaterThan(-1);
     expect(mainRedIndex).toBeLessThan(coRedIndex);
@@ -173,7 +175,8 @@ describe("ScheduledCardRail", () => {
     );
 
     expect(markup).toContain(">LIVE R2<");
-    expect(markup).toContain(">KO/TKO R1<");
+    expect(markup).toContain(">Red · KO/TKO R1<");
+    expect(markup).toContain('class="event-card is-live"');
     expect(markup).not.toContain(">UPCOMING<");
   });
 
@@ -202,5 +205,32 @@ describe("ScheduledCardRail", () => {
     );
     const buttonCount = (markup.match(/<button/g) ?? []).length;
     expect(buttonCount).toBe(4);
+  });
+
+  it("renders a long surname intact for measured fitting instead of clipping the text", () => {
+    const longNameCard: EspnScheduledCard = {
+      ...card,
+      sections: [
+        {
+          ...card.sections[0]!,
+          fights: [
+            fight({
+              competitionId: "long-name",
+              matchNumber: 1,
+              red: fighter("Umar Nurmagomedov"),
+              blue: fighter("Song Yadong"),
+            }),
+          ],
+        },
+      ],
+    };
+
+    const markup = renderToStaticMarkup(
+      <ScheduledCardRail card={longNameCard} onSelect={() => undefined} />,
+    );
+
+    expect(markup).toContain(">Nurmagomedov</span>");
+    expect(markup).not.toContain("event-card-fighter-lastname-compact");
+    expect(markup).not.toContain("event-card-fighter-lastname-tight");
   });
 });

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDashboard } from "./store/useDashboard.ts";
 import {
-  getCollectorMarketDelivery,
   getCollectorRoundDelivery,
   type CollectorValueDelivery,
 } from "./store/collectorClient.ts";
@@ -12,19 +11,20 @@ import { CardRail } from "./ui/CardRail.tsx";
 import { DeliveryFreshness } from "./ui/DeliveryFreshness.tsx";
 import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
-import { FighterProfile } from "./ui/FighterProfile.tsx";
+import { withoutSportsbookOnEventDay } from "./lib/marketPriority.ts";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
-import { OddsPanel } from "./ui/OddsPanel.tsx";
-import { RecentForm } from "./ui/RecentForm.tsx";
-import { RoundGrid } from "./ui/RoundGrid.tsx";
 import {
   defaultRoundSelection,
   RoundSelector,
   type RoundSelection,
 } from "./ui/RoundSelector.tsx";
-import { RoundStatsPanel } from "./ui/RoundStatsPanel.tsx";
 import { ScheduledCardRail } from "./ui/ScheduledCardRail.tsx";
-import { ScheduledFightPreview } from "./ui/ScheduledFightPreview.tsx";
+import {
+  boutToScheduledFight,
+  UpcomingOddsSection,
+  UpcomingTaleSection,
+  ScheduledFightPreview,
+} from "./ui/ScheduledFightPreview.tsx";
 import { ScorecardFeed } from "./ui/ScorecardFeed.tsx";
 import {
   SectionTabs,
@@ -33,14 +33,36 @@ import {
 import { SourceStatus } from "./ui/SourceStatus.tsx";
 import { EventSubheader, TopBar } from "./ui/TopBar.tsx";
 import { WEIGHT_LABEL } from "./ui/format.ts";
+import { hasEventStarted, sameEvent } from "./lib/eventIdentity.ts";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
+import { useUpcomingOdds } from "./store/useUpcomingOdds.ts";
 import {
   fighterEspnAthleteId,
   useCurrentEventAthletePhotos,
   useUpcomingEventPhotos,
 } from "./store/useEventPhotos.ts";
+import type { BoutView, OddsSnapshot } from "./schema.ts";
 import type { EspnScheduledFight } from "./sources/espnSchedule.ts";
 import "./ui/dashboard.css";
+
+export function LiveOddsSection({
+  view,
+  upcomingOdds,
+  deliveries,
+}: {
+  view: BoutView;
+  upcomingOdds: ReturnType<typeof useUpcomingOdds>;
+  deliveries?: Partial<Record<OddsSnapshot["market"], CollectorValueDelivery>>;
+}) {
+  void deliveries;
+  return (
+    <UpcomingOddsSection
+      fight={boutToScheduledFight(view.bout)}
+      upcoming={upcomingOdds}
+      liveView={view}
+    />
+  );
+}
 
 export default function App() {
   const dashboard = useDashboard();
@@ -59,6 +81,9 @@ export default function App() {
   const mainContentRef = useRef<HTMLElement>(null);
 
   const upcomingEspn = useUpcomingEspnEvents();
+  // Loaded at the app level rather than per preview: one document covers every
+  // upcoming card, so drilling between fights must not refetch it.
+  const upcomingOdds = useUpcomingOdds();
   const currentEventId = state?.event.id;
   // scheduleSelection only names a real ESPN event id once it's neither the
   // list screen (null) nor the current event's own internal id.
@@ -155,26 +180,6 @@ export default function App() {
           stale: dashboard.collector?.connection !== "connected",
           provisional: lifecycle.provisional,
         };
-  const marketDeliveries = view
-    ? {
-        kalshi: getCollectorMarketDelivery(
-          dashboard.collector,
-          view.bout.id,
-          "kalshi",
-        ),
-        polymarket: getCollectorMarketDelivery(
-          dashboard.collector,
-          view.bout.id,
-          "polymarket",
-        ),
-        sportsbook: getCollectorMarketDelivery(
-          dashboard.collector,
-          view.bout.id,
-          "sportsbook",
-        ),
-      }
-    : undefined;
-
   const selectBout = (id: string) => {
     setSelected(id);
     setTab("fight");
@@ -220,11 +225,19 @@ export default function App() {
     const athleteId = fighterEspnAthleteId(fighter.externalRefs);
     return athleteId ? currentEventAthletePhotos[athleteId] : undefined;
   };
+  const eventStarted = hasEventStarted(event.startsAt);
 
-  const currentEventEntry: EventListEntry = {
+  const dashboardEventEntry: EventListEntry = {
     id: event.id,
     name: event.name,
     startsAt: event.startsAt,
+    isLive: eventStarted &&
+      event.bouts.some(
+        (bout) =>
+          bout.status === "upcoming" ||
+          bout.status === "in-round" ||
+          bout.status === "between-rounds",
+      ),
     ...(mainBout
       ? {
           redFighter: {
@@ -238,23 +251,40 @@ export default function App() {
         }
       : {}),
   };
+  const currentEventEntry = eventStarted ? dashboardEventEntry : null;
 
   const upcomingEventEntries: EventListEntry[] = (
     upcomingEspn.status === "ready" ? upcomingEspn.events : []
-  ).map((upcomingEvent) => {
-    const corners = upcomingEventPhotos[upcomingEvent.eventId];
-    return {
-      id: upcomingEvent.eventId,
-      name: upcomingEvent.name,
-      startsAt: upcomingEvent.startsAt,
-      ...(corners?.red
-        ? { redFighter: { name: corners.red.name, photoUrl: corners.red.headshotUrl } }
-        : {}),
-      ...(corners?.blue
-        ? { blueFighter: { name: corners.blue.name, photoUrl: corners.blue.headshotUrl } }
-        : {}),
-    };
-  });
+  )
+    .filter(
+      (upcomingEvent) =>
+        !eventStarted ||
+        !sameEvent(
+          { id: event.id, name: event.name },
+          { id: upcomingEvent.eventId, name: upcomingEvent.name },
+        ),
+    )
+    .map((upcomingEvent) => {
+      const corners = upcomingEventPhotos[upcomingEvent.eventId];
+      return {
+        id: upcomingEvent.eventId,
+        name: upcomingEvent.name,
+        startsAt: upcomingEvent.startsAt,
+        isLive: hasEventStarted(upcomingEvent.startsAt),
+        ...(corners?.red
+          ? { redFighter: { name: corners.red.name, photoUrl: corners.red.headshotUrl } }
+          : {}),
+        ...(corners?.blue
+          ? { blueFighter: { name: corners.blue.name, photoUrl: corners.blue.headshotUrl } }
+          : {}),
+      };
+    });
+  if (
+    !eventStarted &&
+    !upcomingEventEntries.some((entry) => sameEvent(entry, dashboardEventEntry))
+  ) {
+    upcomingEventEntries.unshift(dashboardEventEntry);
+  }
 
   const photosByBoutId: Record<string, { red?: string; blue?: string }> = {};
   for (const bout of event.bouts) {
@@ -281,11 +311,29 @@ export default function App() {
             )
           : undefined;
 
+  const selectedScheduleEventName =
+    scheduleSelection === null
+      ? undefined
+      : scheduleSelection === event.id
+        ? event.name
+        : espnCard.card?.name ??
+          upcomingEventEntries.find((entry) => entry.id === scheduleSelection)
+            ?.name;
+
+  const subheaderEventName =
+    tab === "fight"
+      ? selectedFutureFight
+        ? (selectedScheduleEventName ?? event.name)
+        : event.name
+      : event.name;
+
   return (
     <div className="app">
       <TopBar />
       <EventSubheader
         event={event}
+        eventName={subheaderEventName}
+        hideTitle={tab !== "fight"}
         leading={
           tab === "event" && scheduleSelection !== null ? (
             <BackButton onClick={backToEventList} />
@@ -313,9 +361,19 @@ export default function App() {
         <main className="app-content" id="main-content" ref={mainContentRef}>
           {tab === "fight" &&
             (selectedFutureFight ? (
-              <ScheduledFightPreview fight={selectedFutureFight} />
+              <ScheduledFightPreview
+                fight={selectedFutureFight}
+                upcoming={upcomingOdds}
+              />
             ) : view ? (
-              <div className="fight-screen">
+              view.bout.status === "upcoming" ? (
+                <ScheduledFightPreview
+                  fight={boutToScheduledFight(view.bout)}
+                  upcoming={upcomingOdds}
+                  photosByCorner={photosByBoutId[view.bout.id]}
+                />
+              ) : (
+                <div className="fight-screen">
                 <BoutHeader
                   weightClassLabel={WEIGHT_LABEL[view.bout.weightClass] ?? ""}
                   titleFight={view.bout.titleFight}
@@ -324,6 +382,7 @@ export default function App() {
                   status={view.bout.status}
                   currentRound={view.bout.currentRound}
                   result={view.bout.result}
+                  clockSync={dashboard.collector?.clocks[view.bout.id]}
                 />
                 {lifecycleDelivery && (
                   <div className="delivery-notice" role="status">
@@ -339,12 +398,18 @@ export default function App() {
                   </div>
                 )}
                 <MarketStrip
-                  latestOdds={view.latestOdds}
-                  preFightOdds={view.preFightOdds}
+                  latestOdds={withoutSportsbookOnEventDay(
+                    view.latestOdds,
+                    state?.event.startsAt ?? "",
+                  )}
+                  preFightOdds={withoutSportsbookOnEventDay(
+                    view.preFightOdds,
+                    state?.event.startsAt ?? "",
+                  )}
                   onOpen={() => setSection("odds")}
                 />
                 <SectionTabs active={section} onChange={setSection} />
-                {(section === "summary" || section === "stats") && (
+                {section === "summary" && (
                   <RoundSelector
                     view={view}
                     value={round}
@@ -355,12 +420,13 @@ export default function App() {
                   <>
                     <FightSummary
                       view={view}
+                      eventStartsAt={state?.event.startsAt ?? ""}
                       selection={round}
                       delivery={roundDelivery}
+                      collectorRounds={dashboard.collector?.unifiedRounds}
                     />
                     <ScorecardFeed
                       view={view}
-                      accounts={state.scorecardAccounts}
                       records={
                         dashboard.collector?.unifiedRounds ?? []
                       }
@@ -369,39 +435,18 @@ export default function App() {
                     />
                   </>
                 )}
-                {section === "stats" && (
-                  <>
-                    <RoundStatsPanel
-                      view={view}
-                      selection={round}
-                      delivery={roundDelivery}
-                    />
-                    <RoundGrid view={view} />
-                  </>
-                )}
                 {section === "odds" && (
-                  <OddsPanel
-                    redName={view.bout.fighters.red.name.split(" ").at(-1) ?? view.bout.fighters.red.name}
-                    blueName={view.bout.fighters.blue.name.split(" ").at(-1) ?? view.bout.fighters.blue.name}
-                    latestOdds={view.latestOdds}
-                    preFightOdds={view.preFightOdds}
-                    emptyText={
-                      view.bout.status === "final"
-                        ? "Bout is final."
-                        : view.bout.status === "canceled" || view.bout.status === "postponed"
-                          ? `Bout ${view.bout.status}.`
-                          : undefined
-                    }
-                    deliveries={marketDeliveries}
+                  <UpcomingOddsSection
+                    fight={boutToScheduledFight(view.bout)}
+                    upcoming={upcomingOdds}
+                    liveView={view}
                   />
                 )}
                 {section === "tale" && (
-                  <>
-                    <FighterProfile fighters={view.bout.fighters} />
-                    <RecentForm fighters={view.bout.fighters} />
-                  </>
+                  <UpcomingTaleSection fighters={view.bout.fighters} />
                 )}
-              </div>
+                </div>
+              )
             ) : (
               <div className="empty-state">
                 <strong>No bouts on this card</strong>
@@ -413,8 +458,7 @@ export default function App() {
               <section className="card-screen" aria-labelledby="card-title">
                 <div className="page-heading">
                   <div>
-                    <span className="page-kicker">Browse</span>
-                    <h2 id="card-title">Events</h2>
+                    <h2 id="card-title" className="events-title">Events</h2>
                   </div>
                 </div>
                 {upcomingEspn.status === "error" && (

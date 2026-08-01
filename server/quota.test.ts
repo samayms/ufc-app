@@ -134,9 +134,9 @@ describe("RollingQuotaGuard", () => {
       clock,
     });
     await expect(restored.remaining("odds-api-io")).resolves.toEqual({
-      minute: 87,
-      hour: 87,
-      day: 447,
+      minute: 2,
+      hour: 72,
+      day: 397,
     });
   });
 

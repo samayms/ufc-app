@@ -23,7 +23,10 @@ tests or fixture mode.
 - ESPN controls fight lifecycle.
 - Cito supplies exact per-round statistics. Never derive a round by subtracting
   cumulative totals.
-- Kalshi and Polymarket are streamed continuously while relevant.
+- Kalshi, Polymarket, and The Odds API use the scheduled pre-event polling
+  cadence in §7: twice daily normally, and hourly on the event date. Once a
+  bout is active, source-specific live/round-boundary behavior below takes
+  precedence.
 - Odds-API.io is the primary sportsbook feed: two configurable books, initially
   DraftKings and FanDuel, polled only during an active bout.
 - The Odds API supplies one broader US `h2h` snapshot after each round.
@@ -295,6 +298,19 @@ insufficient. Provide multi-tick fixtures.
 
 ## 7. Source behavior
 
+### Pre-event market polling
+
+The collector refreshes upcoming-fight market data for Kalshi, Polymarket,
+Odds-API.io, and The Odds API on this schedule:
+
+- Twice per day on non-event days.
+- Once per hour on the calendar day of the event, using the event's scheduled
+  start date in its source timezone.
+- Do not run the pre-event poll more often than these intervals; deduplicate a
+  run after collector restarts with a persisted last-success timestamp.
+- When a bout becomes active, the source-specific active-bout rules below take
+  precedence over this schedule.
+
 ### ESPN
 
 - Discover card and bouts.
@@ -360,8 +376,11 @@ fewer than 30 daily remain:          boundary/final requests only
 
 ### Sherdog
 
-- Fetch at T+10–15 seconds after a round.
-- Retry once at T+30–45 seconds if the round is absent.
+- Schedule three post-round polls at exactly T+15 seconds, T+30 seconds, and
+  T+60 seconds after the round-end event.
+- Keep each delayed job idempotent and keyed by `{boutId}:{round}:{attempt}`;
+  a failed or absent response at one attempt must not cancel the later
+  attempts.
 - Fetch final result/scoring state after fight end.
 - Version the parser and retain payload hashes.
 - Apply configured permission constraints.
@@ -583,4 +602,3 @@ Report:
 - Deferred or blocked items
 - Live-card validation tasks
 - Final `git status --short --ignored`
-

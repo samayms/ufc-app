@@ -8,6 +8,18 @@ dist/
 tsconfig.tsbuildinfo
 __pycache__/
 
+# Local editor and language tooling
+/.vscode/
+/.idea/
+*.swp
+*.swo
+/.venv/
+/venv/
+/.pytest_cache/
+/.ruff_cache/
+/.mypy_cache/
+/design-system/
+
 # Local AI-agent tooling and configuration
 /.agents/
 /.claude/
@@ -27,8 +39,18 @@ __pycache__/
 /*NOTES*.md
 /*RESEARCH*.md
 /*ARCHITECTURE*.md
+/CLAUDE_*.md
+
+# Local agent run logs
+/claude-*.log
 
 # Local browser/UI test artifacts
 /playwright-report/
 /test-results/
 /coverage/
+
+# Unpacked brand source files; product copies live under src/assets/brand/
+/kalshi-logos/
+/pm-logos-and-fonts/
+/betmgm-logo.webp
+/Bet365-Logo.png

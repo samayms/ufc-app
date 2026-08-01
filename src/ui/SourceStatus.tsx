@@ -44,12 +44,6 @@ const SOURCES: {
     detail: "Sportsbook moneylines",
     cadence: "On dashboard refresh",
   },
-  {
-    id: "x-embed",
-    name: "Media embeds",
-    detail: "Optional scorecard posts",
-    cadence: "Loaded on demand",
-  },
 ];
 
 function sourceTimes(state: DashboardState, source: SourceId) {
@@ -71,11 +65,6 @@ function sourceTimes(state: DashboardState, source: SourceId) {
     }
     for (const odds of Object.values(view.latestOdds)) {
       if (odds.provenance.source === source) times.push(odds.provenance.fetchedAt);
-    }
-    for (const scorecard of view.scorecards) {
-      if (scorecard.provenance.source === source) {
-        times.push(scorecard.provenance.fetchedAt);
-      }
     }
   }
   return times.sort().at(-1);

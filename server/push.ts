@@ -8,6 +8,13 @@ export const DEFAULT_SSE_PATH = "/api/events";
 export const DEFAULT_SSE_STORAGE_STREAM = "sse-events";
 export const DEFAULT_SSE_BUFFER_SIZE = 256;
 export const DEFAULT_HEARTBEAT_MS = 15_000;
+/** UI flush cadence: client writes are coalesced to fire at most this often. */
+export const DEFAULT_FLUSH_MS = 500;
+
+export interface SsePushTimer {
+  setTimeout(callback: () => void, delayMs: number): unknown;
+  clearTimeout(handle: unknown): void;
+}
 
 export interface PersistedSseEvent {
   version: 1;
@@ -25,6 +32,14 @@ export interface SsePushOptions {
   storageStream?: string;
   bufferSize?: number;
   heartbeatMs?: number;
+  /**
+   * Coalescing window for client writes: publishes arriving within this
+   * window are batched into a single socket write per client. `0` disables
+   * batching and writes synchronously (used by tests asserting immediate
+   * delivery).
+   */
+  flushIntervalMs?: number;
+  timer?: SsePushTimer;
   now?: () => string;
 }
 
@@ -101,6 +116,12 @@ function formatEvent(event: {
   ].join("\n");
 }
 
+const DEFAULT_TIMER: SsePushTimer = {
+  setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+  clearTimeout: (handle) =>
+    clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+
 function parseLastEventId(request: IncomingMessage): number | undefined {
   const raw = request.headers["last-event-id"];
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -125,6 +146,10 @@ export class SsePush {
 
   private readonly now: () => string;
 
+  private readonly flushIntervalMs: number;
+
+  private readonly timer: SsePushTimer;
+
   private readonly clients = new Set<ServerResponse>();
 
   private buffer: PersistedSseEvent[] = [];
@@ -137,15 +162,23 @@ export class SsePush {
 
   private readonly heartbeat: ReturnType<typeof setInterval>;
 
+  private pendingOutbound: string[] = [];
+
+  private flushHandle: unknown;
+
   constructor(options: SsePushOptions) {
     const bufferSize = options.bufferSize ?? DEFAULT_SSE_BUFFER_SIZE;
     const heartbeatMs = options.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
+    const flushIntervalMs = options.flushIntervalMs ?? DEFAULT_FLUSH_MS;
 
     if (!Number.isSafeInteger(bufferSize) || bufferSize < 1) {
       throw new TypeError("bufferSize must be a positive integer");
     }
     if (!Number.isFinite(heartbeatMs) || heartbeatMs < 1) {
       throw new TypeError("heartbeatMs must be a positive number");
+    }
+    if (!Number.isFinite(flushIntervalMs) || flushIntervalMs < 0) {
+      throw new TypeError("flushIntervalMs must be a non-negative number");
     }
 
     this.storage = options.storage;
@@ -156,6 +189,8 @@ export class SsePush {
       options.storageStream ?? DEFAULT_SSE_STORAGE_STREAM;
     this.bufferSize = bufferSize;
     this.now = options.now ?? (() => new Date().toISOString());
+    this.flushIntervalMs = flushIntervalMs;
+    this.timer = options.timer ?? DEFAULT_TIMER;
     this.heartbeat = setInterval(() => {
       const comment = `: heartbeat ${this.now()}\n\n`;
       for (const client of this.clients) {
@@ -252,10 +287,7 @@ export class SsePush {
       this.buffer.push(published);
       this.trimBuffer();
 
-      const outbound = formatEvent(this.forClient(published));
-      for (const client of this.clients) {
-        client.write(outbound);
-      }
+      this.enqueueOutbound(formatEvent(this.forClient(published)));
     });
 
     this.publishQueue = operation.then(
@@ -282,10 +314,44 @@ export class SsePush {
   async close(): Promise<void> {
     clearInterval(this.heartbeat);
     await this.publishQueue;
+    if (this.flushHandle !== undefined) {
+      this.timer.clearTimeout(this.flushHandle);
+      this.flushHandle = undefined;
+    }
+    this.flushOutbound();
     for (const client of this.clients) {
       client.end();
     }
     this.clients.clear();
+  }
+
+  /**
+   * Batches client writes so a burst of publishes within `flushIntervalMs`
+   * costs one socket write per client instead of one per event. The append
+   * to storage and the buffer above still happen synchronously per publish,
+   * so replay/resume behavior is unaffected — only the live write is
+   * coalesced. `flushIntervalMs: 0` opts out and writes immediately.
+   */
+  private enqueueOutbound(formatted: string): void {
+    if (this.flushIntervalMs === 0) {
+      for (const client of this.clients) client.write(formatted);
+      return;
+    }
+    this.pendingOutbound.push(formatted);
+    if (this.flushHandle !== undefined) return;
+    this.flushHandle = this.timer.setTimeout(() => {
+      this.flushHandle = undefined;
+      this.flushOutbound();
+    }, this.flushIntervalMs);
+  }
+
+  private flushOutbound(): void {
+    if (this.pendingOutbound.length === 0) return;
+    const outbound = this.pendingOutbound.join("");
+    this.pendingOutbound = [];
+    for (const client of this.clients) {
+      client.write(outbound);
+    }
   }
 
   private async restoreFromStorage(): Promise<void> {

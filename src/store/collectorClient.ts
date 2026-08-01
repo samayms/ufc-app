@@ -19,8 +19,6 @@ import type {
   MarketSource,
   MarketTick,
 } from "../sources/contract.ts";
-import type { ParsedExpertScore } from "../sources/x.ts";
-
 export const DEFAULT_COLLECTOR_PORT = 8600;
 
 export type CollectorConnectionState =
@@ -74,7 +72,6 @@ export interface CollectorUnifiedRound {
     | "fight_completed";
   citoStats?: CollectorRoundStats;
   sherdog?: SherdogRoundObservation;
-  xScores?: ParsedExpertScore[];
   marketAtEnd: {
     kalshi?: MarketSnapshot;
     polymarket?: MarketSnapshot;
@@ -116,6 +113,19 @@ export interface CollectorLifecycleDelivery {
   provisional: boolean;
 }
 
+export interface CollectorClockSync {
+  boutId: string;
+  source: "espn" | "cito";
+  state: "pre" | "in" | "post";
+  period: number;
+  completed: boolean;
+  clockSeconds?: number;
+  /** When the collector received the source response. */
+  sourceReceivedAt: string;
+  /** When this browser received the synchronization point. */
+  receivedAt: string;
+}
+
 export interface CollectorValueDelivery {
   source: string;
   sourceUpdatedAt?: string;
@@ -131,6 +141,7 @@ export interface CollectorSnapshot {
   health: Readonly<Record<string, CollectorSourceHealth>>;
   unifiedRounds: readonly CollectorUnifiedRound[];
   lifecycle: Readonly<Record<string, CollectorLifecycleDelivery>>;
+  clocks: Readonly<Record<string, CollectorClockSync>>;
   /** Keyed by `${boutId}:${market}`; freshness for the latest odds shown per market. */
   marketDeliveries: Readonly<Record<string, CollectorValueDelivery>>;
   lastReceivedAt?: string;
@@ -146,8 +157,19 @@ export interface CollectorClient {
 interface CollectorBootstrap {
   state: DashboardState | null;
   health: Record<string, CollectorSourceHealth>;
+  lifecycleObservations: ParsedLifecycleObservation[];
   unifiedRounds: CollectorUnifiedRound[];
   latestMarkets: MarketTick[];
+}
+
+interface ParsedLifecycleObservation {
+  boutId: string;
+  source: "espn" | "cito";
+  state: "pre" | "in" | "post";
+  period: number;
+  completed: boolean;
+  clockSeconds?: number;
+  receivedAt: string;
 }
 
 interface EventSourceLike {
@@ -182,8 +204,7 @@ function isDashboardState(value: unknown): value is DashboardState {
     isRecord(value.event) &&
     typeof value.event.id === "string" &&
     Array.isArray(value.event.bouts) &&
-    isRecord(value.boutViews) &&
-    Array.isArray(value.scorecardAccounts)
+    isRecord(value.boutViews)
   );
 }
 
@@ -504,6 +525,9 @@ function parseSherdogObservation(
     (value.round as number) < 1 ||
     typeof value.commentary !== "string" ||
     /<[^>]*>/.test(value.commentary) ||
+    (value.aiSummary !== undefined &&
+      (typeof value.aiSummary !== "string" ||
+        /<[^>]*>/.test(value.aiSummary))) ||
     !Array.isArray(value.scorerCards) ||
     typeof value.sourceUrl !== "string" ||
     (value.publishedAt !== undefined &&
@@ -545,6 +569,9 @@ function parseSherdogObservation(
     boutId: value.boutId,
     round: value.round as number,
     commentary: value.commentary,
+    ...(value.aiSummary === undefined
+      ? {}
+      : { aiSummary: value.aiSummary as string }),
     scorerCards,
     sourceUrl: value.sourceUrl,
     ...(value.publishedAt === undefined
@@ -556,48 +583,10 @@ function parseSherdogObservation(
   };
 }
 
-function parseExpertScore(value: unknown): ParsedExpertScore | null {
-  if (
-    !isRecord(value) ||
-    value.source !== "x" ||
-    typeof value.sourcePostId !== "string" ||
-    typeof value.scorer !== "string" ||
-    !Number.isSafeInteger(value.round) ||
-    (value.round as number) < 1 ||
-    !isRecord(value.score) ||
-    !Number.isSafeInteger(value.score.red) ||
-    !Number.isSafeInteger(value.score.blue) ||
-    !isTimestamp(value.fetchedAt) ||
-    typeof value.parseConfidence !== "number" ||
-    value.parseConfidence < 0 ||
-    value.parseConfidence > 1 ||
-    (value.mode !== "embed" &&
-      value.mode !== "manual" &&
-      value.mode !== "api") ||
-    typeof value.postUrl !== "string"
-  ) {
-    return null;
-  }
-  return {
-    source: "x",
-    sourcePostId: value.sourcePostId,
-    scorer: value.scorer,
-    round: value.round as number,
-    score: {
-      red: value.score.red as number,
-      blue: value.score.blue as number,
-    },
-    fetchedAt: value.fetchedAt,
-    parseConfidence: value.parseConfidence,
-    mode: value.mode,
-    postUrl: value.postUrl,
-  };
-}
-
 function parseExpertConsensus(value: unknown): ExpertConsensus | null {
   if (!isRecord(value)) return null;
   const result: ExpertConsensus = {};
-  for (const source of ["sherdog", "x"] as const) {
+  for (const source of ["sherdog"] as const) {
     const candidate = value[source];
     if (candidate === undefined) continue;
     if (
@@ -642,16 +631,6 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
     value.sherdog === undefined
       ? undefined
       : parseSherdogObservation(value.sherdog);
-  const xScores =
-    value.xScores === undefined
-      ? undefined
-      : Array.isArray(value.xScores)
-        ? value.xScores
-            .map(parseExpertScore)
-            .filter(
-              (score): score is ParsedExpertScore => score !== null,
-            )
-        : null;
   const expertConsensus =
     value.expertConsensus === undefined
       ? undefined
@@ -667,9 +646,6 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
       value.endingSignal !== "fight_completed") ||
     (value.citoStats !== undefined && citoStats === null) ||
     (value.sherdog !== undefined && sherdog === null) ||
-    xScores === null ||
-    (Array.isArray(value.xScores) &&
-      (xScores?.length ?? 0) !== value.xScores.length) ||
     (value.expertConsensus !== undefined &&
       expertConsensus === null) ||
     !isRecord(value.marketAtEnd) ||
@@ -686,7 +662,6 @@ function parseUnifiedRound(value: unknown): CollectorUnifiedRound | null {
     endingSignal: value.endingSignal,
     ...(citoStats == null ? {} : { citoStats }),
     ...(sherdog == null ? {} : { sherdog }),
-    ...(xScores === undefined ? {} : { xScores }),
     marketAtEnd: value.marketAtEnd as CollectorUnifiedRound["marketAtEnd"],
     ...(expertConsensus == null ? {} : { expertConsensus }),
     provisional: value.provisional,
@@ -701,6 +676,8 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
     !isRecord(value) ||
     (value.state !== null && !isDashboardState(value.state)) ||
     !Array.isArray(value.unifiedRounds) ||
+    (value.lifecycleObservations !== undefined &&
+      !Array.isArray(value.lifecycleObservations)) ||
     (value.latestMarkets !== undefined && !Array.isArray(value.latestMarkets))
   ) {
     return null;
@@ -709,6 +686,16 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
   return {
     state: value.state,
     health: parseHealthMap(value.health),
+    lifecycleObservations: Array.isArray(value.lifecycleObservations)
+      ? value.lifecycleObservations
+          .map(parseLifecycleObservation)
+          .filter(
+            (
+              observation,
+            ): observation is ParsedLifecycleObservation =>
+              observation !== null,
+          )
+      : [],
     unifiedRounds: value.unifiedRounds
       .map(parseUnifiedRound)
       .filter(
@@ -720,6 +707,64 @@ function parseBootstrap(value: unknown): CollectorBootstrap | null {
           .filter((tick): tick is MarketTick => tick !== null)
       : [],
   };
+}
+
+function parseLifecycleObservation(
+  value: unknown,
+): ParsedLifecycleObservation | null {
+  if (
+    !isRecord(value) ||
+    typeof value.boutId !== "string" ||
+    (value.source !== "espn" && value.source !== "cito") ||
+    (value.state !== "pre" &&
+      value.state !== "in" &&
+      value.state !== "post") ||
+    !Number.isSafeInteger(value.period) ||
+    (value.period as number) < 0 ||
+    typeof value.completed !== "boolean" ||
+    (value.clockSeconds !== undefined &&
+      (typeof value.clockSeconds !== "number" ||
+        !Number.isFinite(value.clockSeconds) ||
+        value.clockSeconds < 0)) ||
+    !isTimestamp(value.receivedAt)
+  ) {
+    return null;
+  }
+
+  return {
+    boutId: value.boutId,
+    source: value.source,
+    state: value.state,
+    period: value.period as number,
+    completed: value.completed,
+    ...(value.clockSeconds === undefined
+      ? {}
+      : { clockSeconds: value.clockSeconds }),
+    receivedAt: value.receivedAt,
+  };
+}
+
+function clockSyncs(
+  observations: readonly ParsedLifecycleObservation[],
+  receivedAt: string,
+  current: Readonly<Record<string, CollectorClockSync>> = {},
+): Record<string, CollectorClockSync> {
+  const next = { ...current };
+  for (const observation of observations) {
+    next[observation.boutId] = {
+      boutId: observation.boutId,
+      source: observation.source,
+      state: observation.state,
+      period: observation.period,
+      completed: observation.completed,
+      ...(observation.clockSeconds === undefined
+        ? {}
+        : { clockSeconds: observation.clockSeconds }),
+      sourceReceivedAt: observation.receivedAt,
+      receivedAt,
+    };
+  }
+  return next;
 }
 
 function parseLifecycleEvent(
@@ -920,6 +965,7 @@ function applyMarketUpdateResult(
     ...(tick.sourceUpdatedAt === undefined
       ? {}
       : { marketUpdatedAt: tick.sourceUpdatedAt }),
+    ...(tick.volume === undefined ? {} : { volume: tick.volume }),
     provenance: {
       source: schemaSourceFor(tick.source),
       fetchedAt: tick.receivedAt,
@@ -1033,6 +1079,38 @@ export function applyCollectorLifecycle(
   });
 }
 
+function applyCollectorObservations(
+  dashboard: DashboardState,
+  observations: readonly ParsedLifecycleObservation[],
+): DashboardState {
+  return observations.reduce((current, observation) => {
+    return replaceBout(current, observation.boutId, (bout) => {
+      if (observation.state === "pre") {
+        return { ...bout, status: "upcoming" };
+      }
+      if (observation.state === "post" || observation.completed) {
+        return {
+          ...bout,
+          status: "final",
+          ...(observation.period > 0
+            ? { currentRound: observation.period }
+            : {}),
+        };
+      }
+      return {
+        ...bout,
+        status:
+          observation.clockSeconds === 0
+            ? "between-rounds"
+            : "in-round",
+        ...(observation.period > 0
+          ? { currentRound: observation.period }
+          : {}),
+      };
+    });
+  }, dashboard);
+}
+
 function applyCollectorRound(
   dashboard: DashboardState,
   record: CollectorUnifiedRound,
@@ -1104,12 +1182,14 @@ function applyCollectorRound(
         : (matchCorner(scoreCard.winner, view.bout) ?? undefined);
     const high = Number(scoreMatch?.[1]);
     const low = Number(scoreMatch?.[2]);
+    const summaryText =
+      observation.aiSummary?.trim() ?? observation.commentary;
     const update: RoundUpdate = {
       boutId: record.boutId,
       round: record.round,
-      ...(observation.commentary.length === 0
-        ? {}
-        : { summary: observation.commentary }),
+      // The condensed summary is what the five-line box is sized for; the raw
+      // commentary is the fallback when summarizing is off or failed.
+      ...(summaryText.length === 0 ? {} : { summary: summaryText }),
       ...(winner === undefined ||
       !Number.isFinite(high) ||
       !Number.isFinite(low)
@@ -1132,32 +1212,6 @@ function applyCollectorRound(
     ].sort((left, right) => left.round - right.round);
   }
 
-  const scorecards = [
-    ...view.scorecards,
-    ...(record.xScores ?? []).flatMap((score) =>
-      score.mode !== "embed"
-        ? []
-        : [
-            {
-              boutId: record.boutId,
-              handle: score.scorer.replace(/^@/, ""),
-              postId: score.sourcePostId,
-              round: score.round,
-              provenance: {
-                source: "x-embed" as const,
-                fetchedAt: score.fetchedAt,
-                synthetic: withLifecycle.event.provenance.synthetic,
-              },
-            },
-          ],
-    ),
-  ].filter(
-    (scorecard, index, all) =>
-      all.findIndex(
-        (candidate) => candidate.postId === scorecard.postId,
-      ) === index,
-  );
-
   return {
     ...withLifecycle,
     boutViews: {
@@ -1165,7 +1219,6 @@ function applyCollectorRound(
       [record.boutId]: {
         ...view,
         rounds: nextRounds,
-        scorecards,
       },
     },
   };
@@ -1199,7 +1252,7 @@ function upsertRound(
   );
 }
 
-function collectorBaseUrl(explicit?: string): string {
+export function collectorBaseUrl(explicit?: string): string {
   const configured =
     explicit ??
     import.meta.env.VITE_COLLECTOR_URL ??
@@ -1273,6 +1326,7 @@ export function createCollectorClient(
     health: {},
     unifiedRounds: [],
     lifecycle: {},
+    clocks: {},
     marketDeliveries: {},
   };
 
@@ -1289,8 +1343,15 @@ export function createCollectorClient(
       bootstrap.state,
       bootstrap.unifiedRounds,
     );
+    const dashboardWithLifecycle =
+      dashboardWithRounds === null
+        ? null
+        : applyCollectorObservations(
+            dashboardWithRounds,
+            bootstrap.lifecycleObservations,
+          );
     const { dashboard, deliveries } = applyMarketUpdates(
-      dashboardWithRounds,
+      dashboardWithLifecycle,
       bootstrap.latestMarkets,
       "seed",
     );
@@ -1299,6 +1360,7 @@ export function createCollectorClient(
       connection: "connected",
       dashboard,
       health: bootstrap.health,
+      clocks: clockSyncs(bootstrap.lifecycleObservations, receivedAt),
       unifiedRounds: bootstrap.unifiedRounds,
       marketDeliveries: deliveries,
       lastReceivedAt: receivedAt,
@@ -1345,6 +1407,39 @@ export function createCollectorClient(
               event.type === "PROVISIONAL_ROUND_ENDED",
           },
         },
+        lastReceivedAt: receivedAt,
+      });
+      return;
+    }
+
+    if (
+      value.kind === "lifecycle-observations" &&
+      Array.isArray(value.observations)
+    ) {
+      const observations = value.observations
+        .map(parseLifecycleObservation)
+        .filter(
+          (
+            observation,
+          ): observation is ParsedLifecycleObservation =>
+            observation !== null,
+        );
+      if (observations.length === 0) return;
+      publish({
+        ...snapshot,
+        connection: "connected",
+        dashboard:
+          snapshot.dashboard === null
+            ? null
+            : applyCollectorObservations(
+                snapshot.dashboard,
+                observations,
+              ),
+        clocks: clockSyncs(
+          observations,
+          receivedAt,
+          snapshot.clocks,
+        ),
         lastReceivedAt: receivedAt,
       });
       return;

@@ -11,6 +11,8 @@ import type { CollectorConfig } from "./config.ts";
 import {
   adaptWebSocket,
   FixtureReplayTransport,
+  type MarketRestFallbackOptions,
+  type MarketReconciliationOptions,
   type MarketSocketFactory,
   type MarketSubscription,
   type MarketTransportClock,
@@ -27,6 +29,15 @@ import type { ParserErrorSink } from "./review.ts";
 const KALSHI_SOCKET_URL =
   "wss://external-api-ws.kalshi.com/trade-api/ws/v2";
 const KALSHI_SOCKET_PATH = "/trade-api/ws/v2";
+export const KALSHI_REST_BASE_URL =
+  "https://api.elections.kalshi.com/trade-api/v2";
+
+interface KalshiOrderbookResponse {
+  orderbook?: {
+    yes?: unknown;
+    no?: unknown;
+  };
+}
 
 interface KalshiBook {
   bids: number[];
@@ -49,6 +60,11 @@ interface KalshiLiveDependencies {
   reconnect?: Partial<ReconnectPolicy>;
   metrics?: Metrics;
   review?: ParserErrorSink;
+  /** REST fetch used by both the disconnect fallback and reconciliation. */
+  fetchImpl?: typeof fetch;
+  restBaseUrl?: string;
+  restFallbackIntervalMs?: number;
+  reconciliationIntervalMs?: number;
 }
 
 interface KalshiLiveTransportOptions extends KalshiLiveDependencies {
@@ -485,6 +501,54 @@ export function kalshiSubscriptionMessage(
   });
 }
 
+/**
+ * REST order-book fetch, one ticker per subscription. Reused both for the
+ * 3s disconnect fallback (best bid/ask are enough to keep the UI moving)
+ * and the 60s full-book reconciliation (the same response already carries
+ * full depth), so an outage and routine drift correction share one code
+ * path against the same endpoint.
+ */
+export function createKalshiRestOrderbookFetcher(options: {
+  fetchImpl?: typeof fetch;
+  baseUrl?: string;
+  clock?: MarketTransportClock;
+}): (subscriptions: readonly MarketSubscription[]) => Promise<MarketTick[]> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const baseUrl = options.baseUrl ?? KALSHI_REST_BASE_URL;
+  const clock = options.clock ?? { now: () => Date.now() };
+
+  return async (subscriptions) => {
+    const receivedAt = new Date(clock.now()).toISOString();
+    const results = await Promise.all(
+      subscriptions.map(async (subscription) => {
+        const response = await fetchImpl(
+          `${baseUrl}/markets/${encodeURIComponent(subscription.externalId)}/orderbook`,
+        );
+        if (!response.ok) return [];
+        const payload = (await response.json()) as KalshiOrderbookResponse;
+        const bids = sortedUnique(
+          prices(payload.orderbook?.yes),
+          "descending",
+        );
+        const asks = sortedUnique(
+          prices(payload.orderbook?.no),
+          "ascending",
+        );
+        if (bids.length === 0 && asks.length === 0) return [];
+        const book: KalshiBook = { bids, asks };
+        return [
+          baseTick(subscription, receivedAt, receivedAt, {
+            ...(bids[0] === undefined ? {} : { bid: bids[0] }),
+            ...(asks[0] === undefined ? {} : { ask: asks[0] }),
+            depth: book,
+          }),
+        ];
+      }),
+    );
+    return results.flat();
+  };
+}
+
 class KalshiLiveTransport extends SupervisedMarketTransport {
   constructor(options: KalshiLiveTransportOptions) {
     const clock = options.clock ?? { now: () => Date.now() };
@@ -497,12 +561,35 @@ class KalshiLiveTransport extends SupervisedMarketTransport {
         readPrivateKey: options.readPrivateKey ?? ((path) => readFile(path, "utf8")),
         clock,
       });
+    const restOrderbookFetcher = createKalshiRestOrderbookFetcher({
+      ...(options.fetchImpl === undefined
+        ? {}
+        : { fetchImpl: options.fetchImpl }),
+      ...(options.restBaseUrl === undefined
+        ? {}
+        : { baseUrl: options.restBaseUrl }),
+      clock,
+    });
+    const restFallback: MarketRestFallbackOptions = {
+      fetchSnapshot: restOrderbookFetcher,
+      ...(options.restFallbackIntervalMs === undefined
+        ? {}
+        : { intervalMs: options.restFallbackIntervalMs }),
+    };
+    const reconciliation: MarketReconciliationOptions = {
+      fetchFullBook: restOrderbookFetcher,
+      ...(options.reconciliationIntervalMs === undefined
+        ? {}
+        : { intervalMs: options.reconciliationIntervalMs }),
+    };
 
     super({
       source: "kalshi",
       tickStore: options.tickStore,
       subscriptions: options.subscriptions,
       socketFactory,
+      restFallback,
+      reconciliation,
       subscribe: (socket, subscriptions) => {
         socket.send(kalshiSubscriptionMessage(subscriptions));
       },

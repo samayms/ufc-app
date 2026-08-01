@@ -111,6 +111,38 @@ const DEFAULT_TIMER: MarketTransportTimer = {
     clearTimeout(handle as ReturnType<typeof setTimeout>),
 };
 
+/** REST fallback while the WebSocket is down: `every 3 seconds` per the SLA. */
+export const DEFAULT_REST_FALLBACK_INTERVAL_MS = 3_000;
+/** Full-book reconciliation cadence, regardless of connection state. */
+export const DEFAULT_RECONCILIATION_INTERVAL_MS = 60_000;
+
+/**
+ * Polls a REST snapshot while the WebSocket is disconnected, so the book
+ * doesn't go stale during an outage. Only runs when the transport is not
+ * currently connected; a live socket already delivers continuously.
+ */
+export interface MarketRestFallbackOptions {
+  fetchSnapshot: (
+    subscriptions: readonly MarketSubscription[],
+  ) => Promise<readonly MarketTick[]>;
+  intervalMs?: number;
+}
+
+/**
+ * Periodically fetches the full order book over REST and ingests it
+ * regardless of connection state, correcting drift from any WS messages
+ * missed by the incremental delta application in tickStore's
+ * `LocalOrderBookState`. A correctness safety net, not a disconnect
+ * fallback — `shouldReplace`'s sourceUpdatedAt/receivedAt comparison means a
+ * stale REST read can never clobber a fresher WS tick.
+ */
+export interface MarketReconciliationOptions {
+  fetchFullBook: (
+    subscriptions: readonly MarketSubscription[],
+  ) => Promise<readonly MarketTick[]>;
+  intervalMs?: number;
+}
+
 function errorFrom(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }
@@ -173,6 +205,28 @@ export function resolveMarketSubscriptions(
   });
 }
 
+function subscriptionKey(subscription: MarketSubscription): string {
+  return [
+    subscription.source,
+    subscription.boutId,
+    subscription.externalId,
+    subscription.marketType,
+    subscription.outcome,
+  ].join("\u0000");
+}
+
+/** Order-insensitive set comparison, so a reordered list is not a change. */
+function subscriptionsEqual(
+  left: readonly MarketSubscription[],
+  right: readonly MarketSubscription[],
+): boolean {
+  if (left.length !== right.length) return false;
+  const leftKeys = new Set(left.map(subscriptionKey));
+  return right.every((subscription) =>
+    leftKeys.has(subscriptionKey(subscription)),
+  );
+}
+
 export function reconnectDelay(
   attempt: number,
   random: number,
@@ -227,6 +281,8 @@ export interface SupervisedMarketTransportOptions {
   reconnect?: Partial<ReconnectPolicy>;
   metrics?: Metrics;
   review?: ParserErrorSink;
+  restFallback?: MarketRestFallbackOptions;
+  reconciliation?: MarketReconciliationOptions;
 }
 
 /**
@@ -256,6 +312,16 @@ export class SupervisedMarketTransport implements MarketTransport {
   private readonly metrics: Metrics;
 
   private readonly review: ParserErrorSink | undefined;
+
+  private readonly restFallback: MarketRestFallbackOptions | undefined;
+
+  private readonly reconciliation: MarketReconciliationOptions | undefined;
+
+  private restFallbackHandle: unknown;
+
+  private reconciliationHandle: unknown;
+
+  private connectedState = false;
 
   private readonly listeners = new Set<MarketTransportListener>();
 
@@ -294,6 +360,8 @@ export class SupervisedMarketTransport implements MarketTransport {
     };
     this.metrics = options.metrics ?? NOOP_METRICS;
     this.review = options.review;
+    this.restFallback = options.restFallback;
+    this.reconciliation = options.reconciliation;
     this.currentSubscriptions = [...options.subscriptions];
     this.currentSubscriptions.forEach((subscription) =>
       validateSubscription(subscription, this.source),
@@ -306,15 +374,47 @@ export class SupervisedMarketTransport implements MarketTransport {
     }));
   }
 
+  /** True once every subscription has produced a fresh snapshot on the current socket. */
+  get connected(): boolean {
+    return this.connectedState;
+  }
+
+  /**
+   * Replaces what this transport is subscribed to — used to narrow the stream
+   * to the bout ESPN says is live, and to widen it again once that fight ends.
+   *
+   * When the set actually changes on a live socket, the socket is cycled
+   * rather than patched. The subscribe frame is only ever sent on open, so a
+   * changed set has to be re-sent; reconnecting re-runs the existing
+   * open-handshake path, which marks the source stale and buffers deltas until
+   * every subscription has produced a fresh snapshot. Patching the frame in
+   * place would leave a newly added market applying deltas to a book that was
+   * never rebuilt.
+   *
+   * An unchanged set is a no-op, so a lifecycle event that does not move the
+   * active bout never disturbs a healthy stream.
+   */
   setSubscriptions(
     subscriptions: readonly MarketSubscription[],
   ): void {
     subscriptions.forEach((subscription) =>
       validateSubscription(subscription, this.source),
     );
-    this.currentSubscriptions = subscriptions.map((subscription) => ({
-      ...subscription,
-    }));
+    const next = subscriptions.map((subscription) => ({ ...subscription }));
+    if (subscriptionsEqual(this.currentSubscriptions, next)) return;
+
+    this.currentSubscriptions = next;
+    if (this.socket === undefined || !this.desired) return;
+
+    const socket = this.socket;
+    this.clearSocketListeners();
+    this.socket = undefined;
+    this.connectedState = false;
+    socket.close(1000, "subscription change");
+    this.rebuilt.clear();
+    this.buffered.clear();
+    this.reconnectAttempt = 0;
+    void this.open().catch(() => undefined);
   }
 
   on(listener: MarketTransportListener): () => void {
@@ -328,11 +428,14 @@ export class SupervisedMarketTransport implements MarketTransport {
     }
     this.desired = true;
     await this.tickStore.markStale(this.source, this.nowIso());
+    this.startBackgroundLoops();
     await this.open();
   }
 
   async disconnect(): Promise<void> {
     this.desired = false;
+    this.connectedState = false;
+    this.stopBackgroundLoops();
     if (this.reconnectHandle !== undefined) {
       this.timer.clearTimeout(this.reconnectHandle);
       this.reconnectHandle = undefined;
@@ -538,6 +641,7 @@ export class SupervisedMarketTransport implements MarketTransport {
 
   private async completeRebuild(): Promise<void> {
     this.reconnectAttempt = 0;
+    this.connectedState = true;
     await this.tickStore.markFresh(this.source, this.nowIso());
   }
 
@@ -548,6 +652,7 @@ export class SupervisedMarketTransport implements MarketTransport {
     if (socket !== this.socket) return;
     this.clearSocketListeners();
     this.socket = undefined;
+    this.connectedState = false;
     this.onDisconnected();
     this.emit({ type: "close", source: this.source, ...(reason ? { reason } : {}) });
     this.scheduleReconnect();
@@ -577,6 +682,81 @@ export class SupervisedMarketTransport implements MarketTransport {
       this.reconnectHandle = undefined;
       void this.open();
     }, delay);
+  }
+
+  private startBackgroundLoops(): void {
+    if (
+      this.reconciliation !== undefined &&
+      this.reconciliationHandle === undefined
+    ) {
+      this.scheduleReconciliation();
+    }
+    if (
+      this.restFallback !== undefined &&
+      this.restFallbackHandle === undefined
+    ) {
+      this.scheduleRestFallback();
+    }
+  }
+
+  private stopBackgroundLoops(): void {
+    if (this.reconciliationHandle !== undefined) {
+      this.timer.clearTimeout(this.reconciliationHandle);
+      this.reconciliationHandle = undefined;
+    }
+    if (this.restFallbackHandle !== undefined) {
+      this.timer.clearTimeout(this.restFallbackHandle);
+      this.restFallbackHandle = undefined;
+    }
+  }
+
+  private scheduleReconciliation(): void {
+    const options = this.reconciliation;
+    if (options === undefined) return;
+    const intervalMs =
+      options.intervalMs ?? DEFAULT_RECONCILIATION_INTERVAL_MS;
+    this.reconciliationHandle = this.timer.setTimeout(() => {
+      this.reconciliationHandle = undefined;
+      void this.runReconciliation(options).finally(() => {
+        if (this.desired) this.scheduleReconciliation();
+      });
+    }, intervalMs);
+  }
+
+  private async runReconciliation(
+    options: MarketReconciliationOptions,
+  ): Promise<void> {
+    try {
+      const ticks = await options.fetchFullBook(this.subscriptions);
+      await this.ingestTicks(ticks);
+    } catch (error) {
+      this.emit({ type: "error", source: this.source, error: errorFrom(error) });
+    }
+  }
+
+  private scheduleRestFallback(): void {
+    const options = this.restFallback;
+    if (options === undefined) return;
+    const intervalMs =
+      options.intervalMs ?? DEFAULT_REST_FALLBACK_INTERVAL_MS;
+    this.restFallbackHandle = this.timer.setTimeout(() => {
+      this.restFallbackHandle = undefined;
+      void this.runRestFallback(options).finally(() => {
+        if (this.desired) this.scheduleRestFallback();
+      });
+    }, intervalMs);
+  }
+
+  private async runRestFallback(
+    options: MarketRestFallbackOptions,
+  ): Promise<void> {
+    if (this.connectedState) return;
+    try {
+      const ticks = await options.fetchSnapshot(this.subscriptions);
+      await this.ingestTicks(ticks);
+    } catch (error) {
+      this.emit({ type: "error", source: this.source, error: errorFrom(error) });
+    }
   }
 }
 

@@ -1,0 +1,192 @@
+import {
+  discoverSherdogLiveBlog,
+  type DiscoverSherdogLiveBlogOptions,
+  type SherdogLiveBlogTarget,
+  type SherdogNewsItem,
+} from "./sherdogDiscovery.ts";
+import type { RoundJobClock, RoundJobTimer } from "./roundJobs.ts";
+
+/**
+ * Fixed checkpoints for finding the Sherdog play-by-play link: T-2h, T-1h,
+ * T-30m, and T-0 (event start). Unlike the outlook watcher (which polls on a
+ * fixed interval starting whenever its window opens), the live-blog link is
+ * searched for at these exact offsets and never again after T-0.
+ */
+export const SHERDOG_LIVE_BLOG_CHECKPOINT_OFFSETS_MS = [
+  -2 * 60 * 60 * 1000,
+  -1 * 60 * 60 * 1000,
+  -30 * 60 * 1000,
+  0,
+] as const;
+
+/** The 4 fixed checkpoint times (T-2h, T-1h, T-30m, T-0), ascending. */
+export function sherdogLiveBlogCheckpoints(startsAt: string): Date[] {
+  const startMs = new Date(startsAt).getTime();
+  return SHERDOG_LIVE_BLOG_CHECKPOINT_OFFSETS_MS.map(
+    (offsetMs) => new Date(startMs + offsetMs),
+  );
+}
+
+/**
+ * The next checkpoint that hasn't been attempted yet, given how many
+ * checkpoints have already run (0-4, in order). Returns undefined once every
+ * checkpoint has been attempted — there is nothing scheduled past T-0.
+ */
+export function nextUnattemptedSherdogLiveBlogCheckpoint(
+  startsAt: string,
+  attemptedCount: number,
+): Date | undefined {
+  const checkpoints = sherdogLiveBlogCheckpoints(startsAt);
+  return checkpoints[attemptedCount];
+}
+
+/**
+ * Ms until the next unattempted checkpoint is due (0 if it is already due or
+ * past), or undefined once every checkpoint has been attempted.
+ */
+export function msUntilNextSherdogLiveBlogCheckpoint(
+  now: Date,
+  startsAt: string,
+  attemptedCount: number,
+): number | undefined {
+  const checkpoint = nextUnattemptedSherdogLiveBlogCheckpoint(
+    startsAt,
+    attemptedCount,
+  );
+  if (checkpoint === undefined) return undefined;
+  return Math.max(0, checkpoint.getTime() - now.getTime());
+}
+
+export interface SherdogLiveBlogWatcherOptions {
+  target: SherdogLiveBlogTarget;
+  startsAt: string;
+  discoverOptions: DiscoverSherdogLiveBlogOptions;
+  onFound: (match: SherdogNewsItem) => Promise<void> | void;
+  onCheckpointFailed?: (error: unknown, attemptNumber: number) => void;
+  onExhausted?: () => void;
+  discover?: (
+    target: SherdogLiveBlogTarget,
+    options: DiscoverSherdogLiveBlogOptions,
+  ) => Promise<SherdogNewsItem | undefined>;
+  clock?: RoundJobClock;
+  timer?: RoundJobTimer;
+}
+
+/**
+ * Drives the 4 fixed live-blog checkpoints (T-2h, T-1h, T-30m, T-0):
+ * searches Sherdog's news feed at each one until the link is found, then
+ * stops for good. If it is still not found at T-0, it stops there too — no
+ * checkpoints are ever scheduled past event start.
+ *
+ * Clock/timer are injectable (same shape as `RoundJobClock`/`RoundJobTimer`)
+ * so this is testable without waiting on real time, matching the rest of
+ * this codebase's scheduling code (see `RoundJobScheduler`).
+ */
+export class SherdogLiveBlogWatcher {
+  private readonly target: SherdogLiveBlogTarget;
+
+  private readonly startsAt: string;
+
+  private readonly discoverOptions: DiscoverSherdogLiveBlogOptions;
+
+  private readonly discover: NonNullable<
+    SherdogLiveBlogWatcherOptions["discover"]
+  >;
+
+  private readonly onFound: SherdogLiveBlogWatcherOptions["onFound"];
+
+  private readonly onCheckpointFailed:
+    | SherdogLiveBlogWatcherOptions["onCheckpointFailed"];
+
+  private readonly onExhausted: SherdogLiveBlogWatcherOptions["onExhausted"];
+
+  private readonly clock: RoundJobClock;
+
+  private readonly timer: RoundJobTimer;
+
+  private attemptedCount = 0;
+
+  private found = false;
+
+  private stopped = false;
+
+  private handle: unknown;
+
+  constructor(options: SherdogLiveBlogWatcherOptions) {
+    this.target = options.target;
+    this.startsAt = options.startsAt;
+    this.discoverOptions = options.discoverOptions;
+    this.discover = options.discover ?? discoverSherdogLiveBlog;
+    this.onFound = options.onFound;
+    this.onCheckpointFailed = options.onCheckpointFailed;
+    this.onExhausted = options.onExhausted;
+    this.clock = options.clock ?? { now: () => Date.now() };
+    this.timer =
+      options.timer ??
+      ({
+        setTimeout: (callback, delayMs) =>
+          globalThis.setTimeout(callback, delayMs),
+        clearTimeout: (handle) =>
+          globalThis.clearTimeout(
+            handle as ReturnType<typeof globalThis.setTimeout>,
+          ),
+      } satisfies RoundJobTimer);
+  }
+
+  /** Arms the next unattempted checkpoint (a no-op once found or stopped). */
+  start(): void {
+    this.armNext();
+  }
+
+  /** Cancels any pending checkpoint without marking the link as found. */
+  stop(): void {
+    this.stopped = true;
+    if (this.handle !== undefined) {
+      this.timer.clearTimeout(this.handle);
+      this.handle = undefined;
+    }
+  }
+
+  isFound(): boolean {
+    return this.found;
+  }
+
+  private armNext(): void {
+    if (this.stopped || this.found) return;
+    const delayMs = msUntilNextSherdogLiveBlogCheckpoint(
+      new Date(this.clock.now()),
+      this.startsAt,
+      this.attemptedCount,
+    );
+    if (delayMs === undefined) {
+      this.onExhausted?.();
+      return;
+    }
+    this.handle = this.timer.setTimeout(() => {
+      this.handle = undefined;
+      void this.runCheckpoint();
+    }, delayMs);
+  }
+
+  private async runCheckpoint(): Promise<void> {
+    if (this.stopped || this.found) return;
+    this.attemptedCount += 1;
+
+    let match: SherdogNewsItem | undefined;
+    try {
+      match = await this.discover(this.target, this.discoverOptions);
+    } catch (error) {
+      this.onCheckpointFailed?.(error, this.attemptedCount);
+      match = undefined;
+    }
+
+    if (this.stopped) return;
+    if (match !== undefined) {
+      this.found = true;
+      await this.onFound(match);
+      return;
+    }
+
+    this.armNext();
+  }
+}

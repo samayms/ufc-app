@@ -188,7 +188,7 @@ async function startCollector(
       ...extraEnv,
     },
     storage,
-    sse: { heartbeatMs: 50 },
+    sse: { heartbeatMs: 50, flushIntervalMs: 0 },
   });
   collectors.push(collector);
   return { collector, port: await collector.start() };
@@ -385,7 +385,7 @@ describe.skipIf(!localhostAvailable)(
     await collector.push.publish("update", {
       note: secretValues.join(" "),
       authorization: credentialEnv.CITO_API_KEY,
-      nested: { token: credentialEnv.X_BEARER_TOKEN },
+      nested: { token: credentialEnv.KALSHI_API_KEY_ID },
     });
     const update = await client.nextEvent();
     const bootstrapResponse = await fetch(
@@ -491,7 +491,7 @@ describe.skipIf(!localhostAvailable)(
     const collector = await createCollector({
       env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
       storage: new MemoryStorage(),
-      sse: { heartbeatMs: 50 },
+      sse: { heartbeatMs: 50, flushIntervalMs: 0 },
       lifecycle: { enabled: true, clock: time, timer: time },
     });
     collectors.push(collector);
@@ -503,7 +503,7 @@ describe.skipIf(!localhostAvailable)(
     expect(collector.lifecycle.getState("bout-main")).toMatchObject({
       state: "in",
       period: 2,
-      clockSeconds: 0,
+      clockSeconds: 300,
     });
     expect(collector.eventBus.getEventLog()).toEqual([]);
 
@@ -522,6 +522,45 @@ describe.skipIf(!localhostAvailable)(
     // Closing stops the poll loop; further time advances do nothing.
     time.advance(collector.config.pollingMs.espn * 5);
     expect(collector.eventBus.getEventLog()).toHaveLength(1);
+  });
+
+  it("starts and stops the collector-owned pre-event poller", async () => {
+    const time = new ManualRoundTime();
+    let syncCalls = 0;
+    const collector = await createCollector({
+      env: {
+        DATA_MODE: "fixture",
+        COLLECTOR_PORT: "0",
+        PRE_EVENT_POLL_NON_EVENT_DAY_MS: "1000",
+      },
+      storage: new MemoryStorage(),
+      sse: { heartbeatMs: 50, flushIntervalMs: 0 },
+      preEventPoll: {
+        enabled: true,
+        clock: time,
+        timer: time,
+        runSync: async () => {
+          syncCalls += 1;
+        },
+      },
+    });
+    collectors.push(collector);
+
+    await collector.start();
+    await collector.preEventPoller.idle();
+    expect(collector.preEventPoller.isStarted()).toBe(true);
+    expect(syncCalls).toBe(1);
+
+    // The injected timer proves the collector armed the next slot rather than
+    // running once at startup and going quiet.
+    time.advance(1_000);
+    await collector.preEventPoller.idle();
+    expect(syncCalls).toBe(2);
+
+    await collector.close();
+    time.advance(10_000);
+    await collector.preEventPoller.idle();
+    expect(syncCalls).toBe(2);
   });
   },
 );
@@ -725,7 +764,6 @@ describe("fixture collector loading", () => {
       },
       storage,
       roundStats: { clock: time, timer: time },
-      sherdog: { random: () => 0 },
     });
     collectors.push(collector);
 
@@ -736,7 +774,7 @@ describe("fixture collector loading", () => {
       detectedAt: "2026-07-28T00:00:00Z",
     });
     await collector.roundStats.idle();
-    time.advance(10_000);
+    time.advance(15_000);
     await collector.sherdogJobs.idle();
 
     expect(collector.getBootstrap().unifiedRounds).toEqual([
@@ -772,50 +810,137 @@ describe("fixture collector loading", () => {
     );
   });
 
-  it("wires configured manual X score links into the unified round", async () => {
-    const collector = await createCollector({
-      env: {
-        DATA_MODE: "fixture",
-        COLLECTOR_PORT: "0",
-        X_MODE: "manual",
-        X_MANUAL_SCORES_JSON: JSON.stringify([
+  it("keeps the live Sherdog transport fail-closed without permission and wires it when permitted", async () => {
+    const liveEnv = Object.fromEntries(
+      CREDENTIAL_ENV_NAMES.map((name) => [name, `secret-${name}`]),
+    );
+    const stateLoader = async () => {
+      const state = await loadFixtureState();
+      const fixtureBout = state.event.bouts.find(
+        (candidate) => candidate.id === "bout-main",
+      );
+      const fixtureView = state.boutViews["bout-main"];
+      if (fixtureBout === undefined || fixtureView === undefined) {
+        throw new Error("Missing fixture main bout");
+      }
+      const mappedBout = {
+        ...fixtureBout,
+        externalRefs: [
+          ...fixtureBout.externalRefs,
           {
-            boutId: "bout-main",
-            sourcePostId: "12345",
-            scorer: "MMAJunkie",
-            round: 1,
-            score: { red: 10, blue: 9 },
-            postUrl: "https://x.com/MMAJunkie/status/12345",
+            source: "sherdog" as const,
+            id: "/news/news/live-card",
           },
-        ]),
+        ],
+      };
+      return {
+        ...state,
+        event: {
+          ...state.event,
+          bouts: state.event.bouts.map((candidate) =>
+            candidate.id === mappedBout.id ? mappedBout : candidate,
+          ),
+        },
+        boutViews: {
+          ...state.boutViews,
+          "bout-main": { ...fixtureView, bout: mappedBout },
+        },
+      };
+    };
+
+    const blockedFetch = vi.fn<typeof fetch>();
+    const blockedCollector = await createCollector({
+      env: {
+        ...liveEnv,
+        DATA_MODE: "live",
+        COLLECTOR_PORT: "0",
+        CITO_API_BASE_URL: "https://cito.example.invalid/api/v1",
+        SHERDOG_PERMISSION_SCOPE: "none",
+        LIFECYCLE_DRIVER_ENABLED: "false",
+        PRE_EVENT_POLL_ENABLED: "false",
       },
       storage: new MemoryStorage(),
+      stateLoader,
+      cito: {
+        discoveryTransport: {
+          async get() {
+            return { data: [] };
+          },
+        },
+      },
+      market: { transports: [] },
+      sherdog: { fetchImpl: blockedFetch },
     });
-    collectors.push(collector);
-
-    collector.eventBus.emit({
-      type: "ROUND_ENDED",
+    collectors.push(blockedCollector);
+    blockedCollector.eventBus.emit({
+      type: "FIGHT_ENDED",
       boutId: "bout-main",
       round: 1,
       detectedAt: "2026-07-28T00:00:00Z",
-      confirmation: "period_transition",
     });
-    await collector.xJobs.idle();
+    await blockedCollector.sherdogJobs.idle();
+    expect(blockedFetch).not.toHaveBeenCalled();
 
-    expect(
-      collector.roundStats.getUnifiedRound("bout-main", 1),
-    ).toMatchObject({
-      xScores: [
-        {
-          source: "x",
-          sourcePostId: "12345",
-          mode: "manual",
-          postUrl: "https://x.com/MMAJunkie/status/12345",
+    const liveFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        new Response(
+          "<article><h3>Round 1</h3><p>Collector live transport</p><p>Sherdog scores the round 10-9 Reyes.</p></article>",
+          { status: 200 },
+        ),
+      );
+    const liveTime = new ManualRoundTime();
+    const liveCollector = await createCollector({
+      env: {
+        ...liveEnv,
+        DATA_MODE: "live",
+        COLLECTOR_PORT: "0",
+        CITO_API_BASE_URL: "https://cito.example.invalid/api/v1",
+        SHERDOG_PERMISSION_SCOPE: "sherdog-read",
+        LIFECYCLE_DRIVER_ENABLED: "false",
+        PRE_EVENT_POLL_ENABLED: "false",
+      },
+      storage: new MemoryStorage(),
+      stateLoader,
+      cito: {
+        discoveryTransport: {
+          async get() {
+            return { data: [] };
+          },
         },
-      ],
-      expertConsensus: {
-        x: expect.objectContaining({ source: "x", leader: "red" }),
+      },
+      market: { transports: [] },
+      roundStats: { clock: liveTime, timer: liveTime },
+      sherdog: {
+        fetchImpl: liveFetch,
+        baseUrl: "https://sherdog.example.invalid",
       },
     });
+    collectors.push(liveCollector);
+    liveCollector.eventBus.emit({
+      type: "FIGHT_ENDED",
+      boutId: "bout-main",
+      round: 1,
+      detectedAt: "2026-07-28T00:00:00Z",
+    });
+    await liveCollector.sherdogJobs.idle();
+    liveTime.advance(0);
+    await liveCollector.sherdogJobs.idle();
+
+    expect(
+      liveCollector.roundStats.scheduler.getJobs().find(
+        (job) => job.jobType === "sherdog_final",
+      ),
+    ).toMatchObject({ status: "completed" });
+    expect(liveFetch).toHaveBeenCalledWith(
+      "https://sherdog.example.invalid/news/news/live-card",
+      expect.objectContaining({
+        headers: {
+          "User-Agent":
+            "UFC Live Dashboard/1.0 (personal non-commercial dashboard)",
+        },
+      }),
+    );
   });
+
 });

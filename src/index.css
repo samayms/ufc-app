@@ -39,7 +39,7 @@
      plug in values, not redesign anything. */
   --market-color-kalshi: #00DD94;
   --market-color-polymarket: #2e5cff;
-  --market-color-sportsbook: #b19661;
+  --market-color-sportsbook: #13805F;
 
   /* Status */
   --live: #7fc79b;
@@ -47,9 +47,10 @@
   --danger: #e2603f;
 
   /* Type */
-  --font-ui: "Schibsted Grotesk", system-ui, sans-serif;
+  --font-ui: "Oswald", system-ui, sans-serif;
   --font-display: "Asap Condensed", "Arial Narrow", sans-serif;
   --font-data: "Schibsted Grotesk", system-ui, sans-serif;
+  --font-odds: "Barlow Condensed", "Arial Narrow", sans-serif;
   --font-stat-label: "Barlow Semi Condensed", system-ui, sans-serif;
   --font-event-title: "Bebas Neue", "Arial Narrow", sans-serif;
 
@@ -172,4 +173,3 @@ a:focus-visible {
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 }
-

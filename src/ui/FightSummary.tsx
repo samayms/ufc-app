@@ -4,9 +4,14 @@ import type {
   RoundStats,
   RoundUpdate,
 } from "../schema.ts";
-import type { CollectorValueDelivery } from "../store/collectorClient.ts";
+import type {
+  CollectorUnifiedRound,
+  CollectorValueDelivery,
+} from "../store/collectorClient.ts";
+import { withoutSportsbookOnEventDay } from "../lib/marketPriority.ts";
 import { DeliveryFreshness } from "./DeliveryFreshness.tsx";
 import type { RoundSelection } from "./RoundSelector.tsx";
+import { RoundOdds } from "./RoundOdds.tsx";
 
 const STAT_ROWS: {
   key: keyof RoundStats;
@@ -66,12 +71,16 @@ function preferredSummary(view: BoutView, selection: RoundSelection) {
 
 export function FightSummary({
   view,
+  eventStartsAt,
   selection,
   delivery,
+  collectorRounds,
 }: {
   view: BoutView;
+  eventStartsAt: string;
   selection: RoundSelection;
   delivery?: CollectorValueDelivery;
+  collectorRounds?: readonly CollectorUnifiedRound[];
 }) {
   const stats = updatesForSelection(view.rounds.cito ?? [], selection);
   const rows = STAT_ROWS.map((row) => ({
@@ -148,10 +157,21 @@ export function FightSummary({
             view.bout.status === "postponed"
               ? `This bout was ${view.bout.status}; no round statistics are expected.`
               : view.bout.status === "upcoming"
-              ? "Stats lock in after each completed round."
-              : "The latest valid snapshot is temporarily unavailable."}
+                ? "Stats lock in after each completed round."
+                : "The latest valid snapshot is temporarily unavailable."}
           </p>
         )}
+        <RoundOdds
+          boutId={view.bout.id}
+          redName={view.bout.fighters.red.name}
+          blueName={view.bout.fighters.blue.name}
+          selection={selection}
+          records={collectorRounds}
+          latestOdds={withoutSportsbookOnEventDay(
+            view.latestOdds,
+            eventStartsAt,
+          )}
+        />
       </section>
 
       <section className="round-summary" aria-label="Round summary">

@@ -6,7 +6,9 @@ import {
 import {
   createLiveEspnLifecycleFetcher,
 } from "../src/sources/espn.ts";
+import { espnPollDelayMs } from "./espnPollingSchedule.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
+import { ROUND_LENGTH_SECONDS } from "./lifecycle.ts";
 import type {
   FightLifecycleMachine,
   FightLifecycleObservation,
@@ -130,7 +132,9 @@ export function boutLifecycleEntry(bout: Bout): LifecycleScoreboardEntry {
       state: "in",
       period: bout.currentRound ?? 1,
       completed: false,
-      clockSeconds: 0,
+      // A finished round reads as a full clock, not an empty one — ESPN's
+      // clock counts up (see ROUND_LENGTH_SECONDS in lifecycle.ts).
+      clockSeconds: ROUND_LENGTH_SECONDS,
     };
   }
   if (bout.status === "in-round") {
@@ -224,11 +228,29 @@ export interface LifecycleDriverOptions {
   citoProvider?: LifecycleObservationProvider;
   espnPollingMs: number;
   citoPollingMs: number;
+  /**
+   * When set, ESPN's own polling interval switches to a tiered schedule
+   * (6a/6p ET on non-event days, 60s on the event's calendar day before it
+   * goes live, 5s once any bout is in progress, stopped once every bout is
+   * completed) instead of the flat `espnPollingMs` above. The Cito fallback
+   * path is unaffected — it always uses `citoPollingMs`. Omit to keep the
+   * flat-interval behavior (e.g. for fixture mode, where there's no real
+   * "event day" to schedule around).
+   */
+  eventStartsAt?: string;
   /** Consecutive ESPN failures before switching to the Cito provider. Default 3. */
   espnFailureThreshold?: number;
   clock?: LifecycleDriverClock;
   timer?: LifecycleDriverTimer;
   metrics?: Metrics;
+  /**
+   * Receives one normalized batch after every successful source poll. This is
+   * deliberately separate from transition events: an unchanged ESPN clock is
+   * still a fresh synchronization point for the browser's local countdown.
+   */
+  onObservations?: (
+    observations: readonly FightLifecycleObservation[],
+  ) => void | Promise<void>;
 }
 
 /**
@@ -250,6 +272,12 @@ export class LifecycleDriver {
 
   private readonly citoPollingMs: number;
 
+  private readonly eventStartsAt: Date | undefined;
+
+  private eventInProgress = false;
+
+  private eventCompleted = false;
+
   private readonly espnFailureThreshold: number;
 
   private readonly clock: LifecycleDriverClock;
@@ -257,6 +285,10 @@ export class LifecycleDriver {
   private readonly timer: LifecycleDriverTimer;
 
   private readonly metrics: Metrics;
+
+  private readonly onObservations:
+    | LifecycleDriverOptions["onObservations"]
+    | undefined;
 
   private activeSource: LifecycleSource = "espn";
 
@@ -300,10 +332,15 @@ export class LifecycleDriver {
     this.citoProvider = options.citoProvider;
     this.espnPollingMs = options.espnPollingMs;
     this.citoPollingMs = options.citoPollingMs;
+    this.eventStartsAt =
+      options.eventStartsAt === undefined
+        ? undefined
+        : new Date(options.eventStartsAt);
     this.espnFailureThreshold = threshold;
     this.clock = options.clock ?? defaultDriverClock();
     this.timer = options.timer ?? defaultDriverTimer();
     this.metrics = options.metrics ?? NOOP_METRICS;
+    this.onObservations = options.onObservations;
   }
 
   getActiveSource(): LifecycleSource {
@@ -385,8 +422,22 @@ export class LifecycleDriver {
     }
 
     if (observations !== undefined && usedSource !== undefined) {
+      const taggedObservations = observations.map((input) => ({
+        ...input,
+        source: usedSource,
+      }));
       for (const input of observations) {
         await this.machine.observe({ ...input, source: usedSource });
+      }
+      await this.onObservations?.(taggedObservations);
+
+      if (observations.length > 0) {
+        this.eventInProgress = observations.some(
+          (observation) => observation.state === "in",
+        );
+        this.eventCompleted = observations.every(
+          (observation) => observation.completed,
+        );
       }
     }
 
@@ -395,8 +446,23 @@ export class LifecycleDriver {
 
   private scheduleNext(): void {
     if (this.closed) return;
-    const delayMs =
-      this.activeSource === "cito" ? this.citoPollingMs : this.espnPollingMs;
+
+    let delayMs: number | null;
+    if (this.activeSource === "cito") {
+      delayMs = this.citoPollingMs;
+    } else if (this.eventStartsAt === undefined) {
+      delayMs = this.espnPollingMs;
+    } else {
+      delayMs = espnPollDelayMs({
+        now: new Date(this.clock.now()),
+        eventStartsAt: this.eventStartsAt,
+        eventInProgress: this.eventInProgress,
+        eventCompleted: this.eventCompleted,
+      });
+    }
+
+    if (delayMs === null) return; // event over — stop polling ESPN entirely
+
     this.timerHandle = this.timer.setTimeout(() => {
       this.timerHandle = undefined;
       this.enqueue(() => this.pollOnce());
