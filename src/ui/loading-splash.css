@@ -1,0 +1,36 @@
+.app-splash {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.loading-splash-mark {
+  width: 120px;
+  height: auto;
+  color: var(--red-corner-strong);
+  animation: loading-splash-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-splash-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-splash-mark {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

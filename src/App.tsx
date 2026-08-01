@@ -7,6 +7,7 @@ import { CardRail } from "./ui/CardRail.tsx";
 import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
 import { LiveStatsPanel } from "./ui/LiveStatsPanel.tsx";
+import { LoadingSplash } from "./ui/LoadingSplash.tsx";
 import { withoutSportsbookOnEventDay } from "./lib/marketPriority.ts";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
 import {
@@ -118,13 +119,7 @@ export default function App() {
   }, [tab, scheduleSelection, selected, selectedFutureFight]);
 
   if (dashboard.status === "loading") {
-    return (
-      <div className="app-state loading" role="status" aria-live="polite">
-        <span className="loading-mark" aria-hidden="true" />
-        <strong>Loading fight data</strong>
-        <span>Assembling the latest valid source snapshots…</span>
-      </div>
-    );
+    return <LoadingSplash />;
   }
 
   if (dashboard.status === "error" || !state) {
