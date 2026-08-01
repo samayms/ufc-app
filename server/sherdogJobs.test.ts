@@ -191,7 +191,7 @@ describe("SherdogRoundJobs", () => {
       { fetchBout: async () => response(html(1, "Round.")) },
       { storage, scorerProfileStore: { resolveScorerProfile } },
     );
-    await restored.jobs.idle();
+    await restored.jobs.profileBackfillIdle();
     expect(resolveScorerProfile).toHaveBeenCalledWith("Sherdog");
   });
 

@@ -416,6 +416,8 @@ export class SherdogRoundJobs {
   /** Best-effort profile recovery for observations restored after a restart. */
   private profileBackfill: Promise<void> = Promise.resolve();
 
+  private profilesClosed = false;
+
   private stopped = false;
 
   private stoppedAt: string | undefined;
@@ -536,10 +538,15 @@ export class SherdogRoundJobs {
   async idle(): Promise<void> {
     await this.eventQueue;
     await this.scheduler.idle();
+  }
+
+  /** Test/maintenance hook for callers that specifically need profile recovery complete. */
+  async profileBackfillIdle(): Promise<void> {
     await this.profileBackfill;
   }
 
   async close(): Promise<void> {
+    this.profilesClosed = true;
     for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
     await this.eventQueue;
   }
@@ -602,6 +609,7 @@ export class SherdogRoundJobs {
     if (boundedNames.length === 0) return;
     this.profileBackfill = (async () => {
       for (const scorerName of boundedNames) {
+        if (this.profilesClosed) return;
         try {
           await this.scorerProfileStore?.resolveScorerProfile(scorerName);
         } catch (error) {
@@ -611,6 +619,23 @@ export class SherdogRoundJobs {
         }
       }
     })();
+  }
+
+  private queueProfileResolution(scorerNames: Iterable<string>): void {
+    if (this.scorerProfileStore === undefined || this.profilesClosed) return;
+    const names = [...new Set(scorerNames)].filter((name) => name.trim().length > 0);
+    this.profileBackfill = this.profileBackfill.then(async () => {
+      for (const scorerName of names) {
+        if (this.profilesClosed) return;
+        try {
+          await this.scorerProfileStore?.resolveScorerProfile(scorerName);
+        } catch (error) {
+          console.warn(
+            `Sherdog scorer profile resolution failed for "${scorerName}": ${errorText(error)}`,
+          );
+        }
+      }
+    });
   }
 
   private async scheduleBaseline(
@@ -913,20 +938,7 @@ export class SherdogRoundJobs {
     // Best-effort: never let scorer-photo resolution block or delay
     // persisting the round observation itself. The store's own method is
     // designed to never throw; this try/catch is defense in depth.
-    if (this.scorerProfileStore !== undefined) {
-      const scorerNames = new Set(
-        observation.scorerCards.map((card) => card.scorer),
-      );
-      for (const scorerName of scorerNames) {
-        try {
-          await this.scorerProfileStore.resolveScorerProfile(scorerName);
-        } catch (error) {
-          console.warn(
-            `Sherdog scorer profile resolution failed for "${scorerName}": ${errorText(error)}`,
-          );
-        }
-      }
-    }
+    this.queueProfileResolution(observation.scorerCards.map((card) => card.scorer));
     if (
       previous === undefined ||
       previous.observation.payloadHash !== observation.payloadHash
