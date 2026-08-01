@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RoundJobClock, RoundJobTimer } from "./roundJobs.ts";
 import {
   SHERDOG_LIVE_BLOG_CHECKPOINT_OFFSETS_MS,
+  SHERDOG_LIVE_BLOG_MAX_ATTEMPTS,
   SherdogLiveBlogWatcher,
   msUntilNextSherdogLiveBlogCheckpoint,
   nextUnattemptedSherdogLiveBlogCheckpoint,
@@ -76,12 +77,20 @@ const match: SherdogNewsItem = {
 };
 
 describe("sherdogLiveBlogCheckpoints", () => {
-  it("returns the 4 fixed checkpoints: T-2h, T-1h, T-30m, T-0", () => {
+  it("keeps the pre-start checks and retries every 15 minutes through T+2h", () => {
     expect(SHERDOG_LIVE_BLOG_CHECKPOINT_OFFSETS_MS).toEqual([
       -2 * 60 * 60 * 1000,
       -1 * 60 * 60 * 1000,
       -30 * 60 * 1000,
       0,
+      15 * 60 * 1000,
+      30 * 60 * 1000,
+      45 * 60 * 1000,
+      60 * 60 * 1000,
+      75 * 60 * 1000,
+      90 * 60 * 1000,
+      105 * 60 * 1000,
+      120 * 60 * 1000,
     ]);
     expect(
       sherdogLiveBlogCheckpoints(startsAt).map((date) => date.toISOString()),
@@ -90,6 +99,14 @@ describe("sherdogLiveBlogCheckpoints", () => {
       "2026-08-01T16:00:00.000Z",
       "2026-08-01T16:30:00.000Z",
       "2026-08-01T17:00:00.000Z",
+      "2026-08-01T17:15:00.000Z",
+      "2026-08-01T17:30:00.000Z",
+      "2026-08-01T17:45:00.000Z",
+      "2026-08-01T18:00:00.000Z",
+      "2026-08-01T18:15:00.000Z",
+      "2026-08-01T18:30:00.000Z",
+      "2026-08-01T18:45:00.000Z",
+      "2026-08-01T19:00:00.000Z",
     ]);
   });
 });
@@ -102,10 +119,18 @@ describe("nextUnattemptedSherdogLiveBlogCheckpoint", () => {
     expect(
       nextUnattemptedSherdogLiveBlogCheckpoint(startsAt, 3)?.toISOString(),
     ).toBe("2026-08-01T17:00:00.000Z");
+    expect(
+      nextUnattemptedSherdogLiveBlogCheckpoint(startsAt, 4)?.toISOString(),
+    ).toBe("2026-08-01T17:15:00.000Z");
   });
 
-  it("returns undefined once all 4 checkpoints have been attempted", () => {
-    expect(nextUnattemptedSherdogLiveBlogCheckpoint(startsAt, 4)).toBeUndefined();
+  it("returns undefined once the bounded post-start window is exhausted", () => {
+    expect(
+      nextUnattemptedSherdogLiveBlogCheckpoint(
+        startsAt,
+        SHERDOG_LIVE_BLOG_MAX_ATTEMPTS,
+      ),
+    ).toBeUndefined();
   });
 });
 
@@ -135,7 +160,7 @@ describe("msUntilNextSherdogLiveBlogCheckpoint", () => {
       msUntilNextSherdogLiveBlogCheckpoint(
         new Date("2026-08-01T18:00:00.000Z"),
         startsAt,
-        4,
+        SHERDOG_LIVE_BLOG_MAX_ATTEMPTS,
       ),
     ).toBeUndefined();
   });
@@ -161,7 +186,7 @@ describe("SherdogLiveBlogWatcher", () => {
     expect(discover).not.toHaveBeenCalled();
   });
 
-  it("retries at T-1h, T-30m, and T-0, then stops after the final miss", async () => {
+  it("retries every 15 minutes after T-0 and stops at T+2h", async () => {
     const time = new ManualTime(Date.parse("2026-08-01T10:00:00.000Z"));
     const discover = vi.fn(async () => undefined);
     const onFound = vi.fn();
@@ -178,15 +203,40 @@ describe("SherdogLiveBlogWatcher", () => {
     });
 
     watcher.start();
-    await time.advance(Date.parse(startsAt) - time.now()); // fast-forward through all 4 checkpoints
-    // one more tick so the (already-armed-with-0-delay) final checkpoint runs
+    await time.advance(Date.parse(startsAt) + 2 * 60 * 60 * 1000 - time.now());
     await time.advance(0);
 
-    expect(discover).toHaveBeenCalledTimes(4);
+    expect(discover).toHaveBeenCalledTimes(SHERDOG_LIVE_BLOG_MAX_ATTEMPTS);
     expect(onFound).not.toHaveBeenCalled();
     expect(onExhausted).toHaveBeenCalledTimes(1);
     expect(watcher.isFound()).toBe(false);
     expect(time.pendingCount()).toBe(0);
+  });
+
+  it("stops immediately when a post-start retry finds the link", async () => {
+    const time = new ManualTime(Date.parse(startsAt));
+    const discover = vi.fn(async () => match);
+    const onFound = vi.fn();
+    const watcher = new SherdogLiveBlogWatcher({
+      target,
+      startsAt,
+      attemptedCount: 4,
+      discoverOptions: { permissionScope: "sherdog-read" },
+      discover,
+      onFound,
+      clock: time,
+      timer: time,
+    });
+
+    watcher.start();
+    await time.advance(15 * 60 * 1000);
+
+    expect(discover).toHaveBeenCalledTimes(1);
+    expect(onFound).toHaveBeenCalledExactlyOnceWith(match);
+    expect(time.pendingCount()).toBe(0);
+
+    await time.advance(2 * 60 * 60 * 1000);
+    expect(discover).toHaveBeenCalledTimes(1);
   });
 
   it("stops retrying once the link is found, without scheduling further checkpoints", async () => {

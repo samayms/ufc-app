@@ -15,6 +15,7 @@ import {
   msUntilOutlookWindowOpens,
 } from "./sherdogOutlookSchedule.ts";
 import {
+  SHERDOG_LIVE_BLOG_MAX_ATTEMPTS,
   SherdogLiveBlogWatcher,
   type SherdogLiveBlogWatcherOptions,
 } from "./sherdogLiveBlogSchedule.ts";
@@ -102,7 +103,8 @@ function isPersistedState(
     (value.value.liveBlogAttempts === undefined ||
       (Number.isSafeInteger(value.value.liveBlogAttempts) &&
         (value.value.liveBlogAttempts as number) >= 0 &&
-        (value.value.liveBlogAttempts as number) <= 4)) &&
+        (value.value.liveBlogAttempts as number) <=
+          SHERDOG_LIVE_BLOG_MAX_ATTEMPTS)) &&
     (value.value.mainOutlookUrl === undefined ||
       typeof value.value.mainOutlookUrl === "string") &&
     (value.value.prelimsOutlookUrl === undefined ||

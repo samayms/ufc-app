@@ -313,4 +313,54 @@ describe("SherdogEventDiscovery", () => {
     expect(restored.getLiveBlogUrl()).toBe(liveArticle.url);
     await restored.close();
   });
+
+  it("persists T-0 exhaustion and resumes with the first post-start retry", async () => {
+    const time = new ManualTime(Date.parse("2026-08-01T17:00:00.000Z"));
+    const storage = new MemoryStorage();
+    const firstFetch = vi.fn(async () => undefined);
+    const first = await SherdogEventDiscovery.create({
+      event: event(),
+      storage,
+      permissionScope: "sherdog-read",
+      baseUrl: "https://www.sherdog.com",
+      summarizer: { summarize: vi.fn(async () => "") },
+      discoverLiveBlog: firstFetch,
+      discoverOutlooks: vi.fn(async () => ({})),
+      collectOutlooks: vi.fn(async () => []),
+      clock: time,
+      timer: time,
+    });
+
+    first.start();
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await time.advance(0);
+      await first.idle();
+    }
+    expect(firstFetch).toHaveBeenCalledTimes(4);
+    await first.close();
+
+    const restoredFetch = vi.fn(async () => liveArticle);
+    const restored = await SherdogEventDiscovery.create({
+      event: event(),
+      storage,
+      permissionScope: "sherdog-read",
+      baseUrl: "https://www.sherdog.com",
+      summarizer: { summarize: vi.fn(async () => "") },
+      discoverLiveBlog: restoredFetch,
+      discoverOutlooks: vi.fn(async () => ({})),
+      collectOutlooks: vi.fn(async () => []),
+      clock: time,
+      timer: time,
+    });
+
+    restored.start();
+    await time.advance(0);
+    expect(restoredFetch).not.toHaveBeenCalled();
+
+    await time.advance(15 * 60 * 1000);
+    await restored.idle();
+    expect(restoredFetch).toHaveBeenCalledTimes(1);
+    expect(restored.getLiveBlogUrl()).toBe(liveArticle.url);
+    await restored.close();
+  });
 });

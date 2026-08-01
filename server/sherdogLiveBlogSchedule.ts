@@ -7,19 +7,29 @@ import {
 import type { RoundJobClock, RoundJobTimer } from "./roundJobs.ts";
 
 /**
- * Fixed checkpoints for finding the Sherdog play-by-play link: T-2h, T-1h,
- * T-30m, and T-0 (event start). Unlike the outlook watcher (which polls on a
- * fixed interval starting whenever its window opens), the live-blog link is
- * searched for at these exact offsets and never again after T-0.
+ * Fixed checkpoints for finding the Sherdog play-by-play link. The original
+ * pre-event checks remain sparse; if the link is late, discovery continues
+ * every 15 minutes for a bounded two-hour post-start recovery window.
  */
 export const SHERDOG_LIVE_BLOG_CHECKPOINT_OFFSETS_MS = [
   -2 * 60 * 60 * 1000,
   -1 * 60 * 60 * 1000,
   -30 * 60 * 1000,
   0,
+  15 * 60 * 1000,
+  30 * 60 * 1000,
+  45 * 60 * 1000,
+  60 * 60 * 1000,
+  75 * 60 * 1000,
+  90 * 60 * 1000,
+  105 * 60 * 1000,
+  120 * 60 * 1000,
 ] as const;
 
-/** The 4 fixed checkpoint times (T-2h, T-1h, T-30m, T-0), ascending. */
+export const SHERDOG_LIVE_BLOG_MAX_ATTEMPTS =
+  SHERDOG_LIVE_BLOG_CHECKPOINT_OFFSETS_MS.length;
+
+/** Every bounded discovery checkpoint, ascending from T-2h through T+2h. */
 export function sherdogLiveBlogCheckpoints(startsAt: string): Date[] {
   const startMs = new Date(startsAt).getTime();
   return SHERDOG_LIVE_BLOG_CHECKPOINT_OFFSETS_MS.map(
@@ -29,8 +39,8 @@ export function sherdogLiveBlogCheckpoints(startsAt: string): Date[] {
 
 /**
  * The next checkpoint that hasn't been attempted yet, given how many
- * checkpoints have already run (0-4, in order). Returns undefined once every
- * checkpoint has been attempted — there is nothing scheduled past T-0.
+ * checkpoints have already run, in order. Returns undefined once the bounded
+ * post-start recovery window has been exhausted.
  */
 export function nextUnattemptedSherdogLiveBlogCheckpoint(
   startsAt: string,
@@ -75,10 +85,9 @@ export interface SherdogLiveBlogWatcherOptions {
 }
 
 /**
- * Drives the 4 fixed live-blog checkpoints (T-2h, T-1h, T-30m, T-0):
- * searches Sherdog's news feed at each one until the link is found, then
- * stops for good. If it is still not found at T-0, it stops there too — no
- * checkpoints are ever scheduled past event start.
+ * Drives the fixed live-blog checkpoints from T-2h through T+2h: searches
+ * Sherdog's news feed at each one until the link is found, then stops for
+ * good. The persisted attempt count makes the schedule restart-safe.
  *
  * Clock/timer are injectable (same shape as `RoundJobClock`/`RoundJobTimer`)
  * so this is testable without waiting on real time, matching the rest of
@@ -128,9 +137,11 @@ export class SherdogLiveBlogWatcher {
     if (
       !Number.isSafeInteger(attemptedCount) ||
       attemptedCount < 0 ||
-      attemptedCount > SHERDOG_LIVE_BLOG_CHECKPOINT_OFFSETS_MS.length
+      attemptedCount > SHERDOG_LIVE_BLOG_MAX_ATTEMPTS
     ) {
-      throw new TypeError("Sherdog attempted checkpoint count must be 0-4");
+      throw new TypeError(
+        `Sherdog attempted checkpoint count must be 0-${SHERDOG_LIVE_BLOG_MAX_ATTEMPTS}`,
+      );
     }
     this.attemptedCount = attemptedCount;
     this.onAttempted = options.onAttempted;
