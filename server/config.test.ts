@@ -82,8 +82,6 @@ describe("loadConfig", () => {
   it("defaults the lifecycle driver on for live mode and off for fixture mode", () => {
     expect(loadConfig({}).lifecycleDriverEnabled).toBe(false);
     expect(loadConfig({}).preEventPollEnabled).toBe(false);
-    expect(loadConfig({}).lifecycleEspnFailureThreshold).toBe(3);
-    expect(loadConfig({}).citoApiBaseUrl).toBeUndefined();
 
     const base = Object.fromEntries(
       CREDENTIAL_ENV_NAMES.map((name) => [name, `secret-${name}`]),
@@ -121,21 +119,9 @@ describe("loadConfig", () => {
     ).toThrow(/LIFECYCLE_DRIVER_ENABLED/);
   });
 
-  it("parses the ESPN failure threshold and Cito base URL", () => {
-    const config = loadConfig({
-      LIFECYCLE_ESPN_FAILURE_THRESHOLD: "5",
-      CITO_API_BASE_URL: "https://cito.example.invalid",
-      CITO_EVENT_SLUG: " ufc-fight-night-august-01-2026 ",
-    });
-
-    expect(config.lifecycleEspnFailureThreshold).toBe(5);
-    expect(config.citoApiBaseUrl).toBe("https://cito.example.invalid");
-    expect(config.citoEventSlug).toBe("ufc-fight-night-august-01-2026");
-  });
-
   it("fails closed when live data credentials are absent", () => {
     expect(() => loadConfig({ DATA_MODE: "live" })).toThrow(
-      /CITO_API_KEY.*ODDS_API_IO_KEY.*THE_ODDS_API_KEY.*KALSHI_API_KEY_ID.*KALSHI_PRIVATE_KEY_PATH/,
+      /ODDS_API_IO_KEY.*THE_ODDS_API_KEY.*KALSHI_API_KEY_ID.*KALSHI_PRIVATE_KEY_PATH/,
     );
   });
 

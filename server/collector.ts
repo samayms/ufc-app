@@ -15,7 +15,6 @@ import type {
 import {
   createCitoSource,
   createFixtureCitoRoundStatsFetcher,
-  createLiveCitoRoundStatsFetcher,
   type CitoRoundStatsFetcher,
 } from "../src/sources/cito.ts";
 import type { SourceConfig } from "../src/sources/contract.ts";
@@ -40,11 +39,6 @@ import {
   createLiveGeminiSummarizer,
   type RoundSummarizer,
 } from "./geminiSummarizer.ts";
-import {
-  createLiveCitoDiscoveryTransport,
-  discoverCitoBouts,
-  type CitoDiscoveryTransport,
-} from "./citoDiscovery.ts";
 import { marketMovesForBout } from "../src/lib/oddsMath.ts";
 import { loadFixtureEvent } from "../src/store/fixtureEvent.ts";
 import {
@@ -70,7 +64,6 @@ import {
 } from "./lifecycle.ts";
 import {
   createFixtureLifecycleProvider,
-  createLiveCitoLifecycleProvider,
   createLiveEspnLifecycleProvider,
   LifecycleDriver,
   type LifecycleDriverClock,
@@ -171,11 +164,6 @@ export interface CollectorRoundStatsOptions {
   quotaPolicy?: QuotaPolicy;
 }
 
-export interface CollectorCitoOptions {
-  /** Test seam for captured discovery payloads; production defaults to Cito HTTP. */
-  discoveryTransport?: CitoDiscoveryTransport;
-}
-
 /** Keeps vendor ids at the source boundary; round jobs continue to use canonical ids. */
 export function createCitoRoundStatsRefTranslator(
   fetcher: CitoRoundStatsFetcher,
@@ -271,7 +259,6 @@ export interface CreateCollectorOptions {
     "bufferSize" | "heartbeatMs" | "now" | "flushIntervalMs"
   >;
   roundStats?: CollectorRoundStatsOptions;
-  cito?: CollectorCitoOptions;
   market?: CollectorMarketOptions;
   sportsbook?: CollectorSportsbookOptions;
   sherdog?: CollectorSherdogOptions;
@@ -763,29 +750,11 @@ export async function createCollector(
     roundStatsOptions?.clock ?? options.sportsbook?.clock;
   const roundJobTimer =
     roundStatsOptions?.timer ?? options.sportsbook?.timer;
-  const reportMissingCitoRef = (internalBoutId: string): void => {
-    healthRegistry.increment("source_errors_total", "cito");
-    console.warn(
-      `cito: missing bout ref for round stats (${internalBoutId}); returning no stats`,
-    );
-  };
-  const underlyingCitoRoundStatsFetcher =
-    roundStatsOptions?.fetcher ??
-    (config.dataMode === "fixture"
-      ? createFixtureCitoRoundStatsFetcher()
-      : createLiveCitoRoundStatsFetcher({
-          baseUrl: config.citoApiBaseUrl ?? "",
-          apiKey: config.credentials.CITO_API_KEY ?? "",
-        }));
+  // Cito remains a fixture-only compatibility source.  Live collection is
+  // ESPN-only: do not discover cards, construct a client, or issue a Cito
+  // request from the real app.
   const initializedCitoRoundStatsFetcher =
-    config.dataMode === "fixture"
-      ? underlyingCitoRoundStatsFetcher
-      : createCitoRoundStatsRefTranslator(
-          underlyingCitoRoundStatsFetcher,
-          (internalBoutId) =>
-            boutMappings?.getExternalRefs(internalBoutId) ?? [],
-          reportMissingCitoRef,
-        );
+    roundStatsOptions?.fetcher ?? createFixtureCitoRoundStatsFetcher();
   const initializedRoundStats = await RoundStatsPipeline.create({
     eventBus,
     storage,
@@ -812,6 +781,7 @@ export async function createCollector(
     ...(roundStatsOptions?.quotaPolicy === undefined
       ? {}
       : { quotaPolicy: roundStatsOptions.quotaPolicy }),
+    enableCitoJobs: config.dataMode === "fixture",
   });
   roundStats = initializedRoundStats;
   for (const snapshot of initializedTickStore.getSnapshots()) {
@@ -853,39 +823,8 @@ export async function createCollector(
     credentials: { ...config.credentials },
   };
 
-  if (config.dataMode === "live" && config.citoApiBaseUrl !== undefined) {
-    try {
-      const summary = await discoverCitoBouts({
-        event: loaded.event,
-        registry: initializedBoutMappings,
-        transport:
-          options.cito?.discoveryTransport ??
-          createLiveCitoDiscoveryTransport({
-            baseUrl: config.citoApiBaseUrl,
-            apiKey: config.credentials.CITO_API_KEY ?? "",
-          }),
-        ...(config.citoEventSlug === undefined
-          ? {}
-          : { configuredEventSlug: config.citoEventSlug }),
-      });
-      const total = summary.matched + summary.unmatched.length;
-      console.log(`cito: ${summary.matched}/${total} bouts mapped`);
-      if (loaded.event.externalRefs.some((ref) => ref.source === "cito")) {
-        await storage.append(COLLECTOR_STATE_STREAM, {
-          version: 1,
-          state: loaded,
-        } satisfies PersistedCollectorState);
-      }
-    } catch (error: unknown) {
-      console.warn(
-        "cito: card discovery failed; round stats may be unavailable",
-        error instanceof Error ? error.message : "unknown error",
-      );
-    }
-  }
-
   const lifecycleGetBouts = () => loaded.event.bouts;
-  const requiredEventExternalId = (source: "espn" | "cito"): string => {
+  const requiredEventExternalId = (source: "espn"): string => {
     const id = loaded.event.externalRefs.find(
       (ref) => ref.source === source,
     )?.id;
@@ -909,38 +848,10 @@ export async function createCollector(
           lifecycleGetBouts,
           { clock: options.lifecycle?.clock },
         ));
-  // Cito is the lifecycle fallback; discovery above adds its event ref before
-  // this provider is built, while a failed discovery still leaves ESPN able
-  // to drive the card.
-  const citoEventExternalId = loaded.event.externalRefs.find(
-    (ref) => ref.source === "cito",
-  )?.id;
-  const lifecycleCitoProvider =
-    options.lifecycle?.citoProvider ??
-    (config.dataMode === "live" &&
-    config.citoApiBaseUrl !== undefined &&
-    citoEventExternalId !== undefined
-      ? createLiveCitoLifecycleProvider(
-          sourceConfig,
-          citoEventExternalId,
-          lifecycleGetBouts,
-          { baseUrl: config.citoApiBaseUrl, clock: options.lifecycle?.clock },
-        )
-      : undefined);
   const lifecycleDriver = new LifecycleDriver({
     machine: lifecycle,
     espnProvider: lifecycleEspnProvider,
-    ...(lifecycleCitoProvider === undefined
-      ? {}
-      : { citoProvider: lifecycleCitoProvider }),
-    espnPollingMs: config.pollingMs.espn,
-    citoPollingMs: config.pollingMs.cito,
-    // Tiered ESPN polling (6a/6p ET non-event-day, 60s pre-start, 5s live,
-    // stopped after completion) only makes sense against a real event date.
-    ...(config.dataMode === "live"
-      ? { eventStartsAt: loaded.event.startsAt }
-      : {}),
-    espnFailureThreshold: config.lifecycleEspnFailureThreshold,
+    espnPollingMs: 2_500,
     ...(options.lifecycle?.clock === undefined
       ? {}
       : { clock: options.lifecycle.clock }),

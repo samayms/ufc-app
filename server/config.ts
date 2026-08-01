@@ -2,7 +2,6 @@ import { DEFAULT_GEMINI_MODEL } from "./geminiSummarizer.ts";
 import { DEFAULT_DATA_DIRECTORY } from "./storage.ts";
 
 export const CREDENTIAL_ENV_NAMES = [
-  "CITO_API_KEY",
   "ODDS_API_IO_KEY",
   "THE_ODDS_API_KEY",
   "KALSHI_API_KEY_ID",
@@ -52,12 +51,6 @@ export interface CollectorConfig {
   };
   /** Delay for a transient pre-event sync failure. */
   preEventPollRetryMs: number;
-  /** Consecutive ESPN failures before falling back to the Cito provider. */
-  lifecycleEspnFailureThreshold: number;
-  /** Base URL for Cito's (unverified) live-state endpoint; required to construct a live Cito lifecycle provider. */
-  citoApiBaseUrl?: string;
-  /** Optional hand-pinned Cito event slug for a card whose automatic lookup is inconclusive. */
-  citoEventSlug?: string;
   oddsApiIoBookmakers: readonly string[];
   sherdog: {
     permissionScope: string;
@@ -83,7 +76,6 @@ export type CollectorEnvironment = Readonly<
 >;
 
 const LIVE_REQUIRED_CREDENTIALS: readonly CredentialEnvName[] = [
-  "CITO_API_KEY",
   "ODDS_API_IO_KEY",
   "THE_ODDS_API_KEY",
   "KALSHI_API_KEY_ID",
@@ -320,17 +312,6 @@ export function loadConfig(
       "PRE_EVENT_POLL_RETRY_MS",
       900_000,
     ),
-    lifecycleEspnFailureThreshold: parsePositiveInteger(
-      env,
-      "LIFECYCLE_ESPN_FAILURE_THRESHOLD",
-      3,
-    ),
-    ...(env.CITO_API_BASE_URL?.trim()
-      ? { citoApiBaseUrl: env.CITO_API_BASE_URL.trim() }
-      : {}),
-    ...(env.CITO_EVENT_SLUG?.trim()
-      ? { citoEventSlug: env.CITO_EVENT_SLUG.trim() }
-      : {}),
     oddsApiIoBookmakers: parseBookmakers(env),
     sherdog: {
       permissionScope:

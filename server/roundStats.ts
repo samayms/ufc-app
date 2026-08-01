@@ -106,6 +106,7 @@ export interface RoundStatsPipelineOptions {
   quota?: RollingQuotaGuard;
   scheduler?: RoundJobScheduler;
   metrics?: Metrics;
+  enableCitoJobs?: boolean;
 }
 
 interface PersistedRoundStats {
@@ -443,6 +444,8 @@ export class RoundStatsPipeline {
 
   private readonly metrics: Metrics;
 
+  private readonly citoJobsEnabled: boolean;
+
   private readonly stats = new Map<string, RoundStatsRecord>();
 
   private readonly histories = new Map<string, RoundStatsRecord[]>();
@@ -479,6 +482,7 @@ export class RoundStatsPipeline {
     this.initialDelayMs = initialDelayMs;
     this.retryDelayMs = retryDelayMs;
     this.metrics = options.metrics ?? NOOP_METRICS;
+    this.citoJobsEnabled = options.enableCitoJobs ?? true;
     this.quota =
       options.quota ??
       new RollingQuotaGuard({
@@ -497,14 +501,12 @@ export class RoundStatsPipeline {
         ...(options.timer === undefined ? {} : { timer: options.timer }),
         metrics: this.metrics,
       });
-    this.scheduler.registerHandler(
-      CITO_ROUND_STATS_JOB_TYPE,
-      (job) => this.runRoundFetch(job),
-    );
-    this.scheduler.registerHandler(
-      CITO_RECONCILIATION_JOB_TYPE,
-      (job) => this.runReconciliation(job),
-    );
+    if (this.citoJobsEnabled) {
+      this.scheduler.registerHandler(CITO_ROUND_STATS_JOB_TYPE, (job) =>
+        this.runRoundFetch(job));
+      this.scheduler.registerHandler(CITO_RECONCILIATION_JOB_TYPE, (job) =>
+        this.runReconciliation(job));
+    }
 
     this.unsubscribers.push(
       this.eventBus.subscribe(
@@ -773,6 +775,7 @@ export class RoundStatsPipeline {
     }
 
     await this.updateUnifiedBoundary(event);
+    if (!this.citoJobsEnabled) return;
     await this.scheduler.schedule({
       boutId: event.boutId,
       round: event.round,
@@ -793,6 +796,7 @@ export class RoundStatsPipeline {
       this.confirmedRounds.add(roundKey(event.boutId, round));
     }
 
+    if (!this.citoJobsEnabled) return;
     await this.scheduler.schedule({
       boutId: event.boutId,
       round: event.round,

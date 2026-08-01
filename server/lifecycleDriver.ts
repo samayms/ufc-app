@@ -227,7 +227,7 @@ export interface LifecycleDriverOptions {
   espnProvider: LifecycleObservationProvider;
   citoProvider?: LifecycleObservationProvider;
   espnPollingMs: number;
-  citoPollingMs: number;
+  citoPollingMs?: number;
   /**
    * When set, ESPN's own polling interval switches to a tiered schedule
    * (6a/6p ET on non-event days, 60s on the event's calendar day before it
@@ -311,10 +311,8 @@ export class LifecycleDriver {
         "lifecycle driver espnPollingMs must be a positive number",
       );
     }
-    if (
-      !Number.isFinite(options.citoPollingMs) ||
-      options.citoPollingMs <= 0
-    ) {
+    if (options.citoPollingMs !== undefined &&
+      (!Number.isFinite(options.citoPollingMs) || options.citoPollingMs <= 0)) {
       throw new TypeError(
         "lifecycle driver citoPollingMs must be a positive number",
       );
@@ -331,7 +329,7 @@ export class LifecycleDriver {
     this.espnProvider = options.espnProvider;
     this.citoProvider = options.citoProvider;
     this.espnPollingMs = options.espnPollingMs;
-    this.citoPollingMs = options.citoPollingMs;
+    this.citoPollingMs = options.citoPollingMs ?? options.espnPollingMs;
     this.eventStartsAt =
       options.eventStartsAt === undefined
         ? undefined
