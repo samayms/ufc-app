@@ -207,6 +207,38 @@ describe("MarketTickStore", () => {
     await store.close();
   });
 
+  it("retains the last tradable Kalshi quote across a closed 0/100 ticker", async () => {
+    const { store } = await setup();
+    await store.appendTick(
+      tick("Uroš Medić", {
+        source: "kalshi",
+        bid: 99,
+        ask: 100,
+        lastTrade: 99,
+      }),
+    );
+    await store.appendTick(
+      tick("Uroš Medić", {
+        source: "kalshi",
+        bid: 0,
+        ask: 100,
+        lastTrade: 99,
+        impliedProbability: 0.5,
+        sourceUpdatedAt: at(1_000),
+        receivedAt: at(1_100),
+      }),
+    );
+
+    expect(store.getLatest(BOUT_ID, "kalshi")[0]).toMatchObject({
+      bid: 99,
+      ask: 100,
+      midpoint: 99.5,
+      impliedProbability: 0.995,
+      lastTrade: 99,
+    });
+    await store.close();
+  });
+
   it("keeps an out-of-order tick in history without overwriting newer source state", async () => {
     const { store } = await setup();
     await store.appendTick(

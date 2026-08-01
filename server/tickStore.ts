@@ -505,6 +505,17 @@ function applyTick(
   if (previous !== undefined && !shouldReplace(previous, tick)) {
     return previous;
   }
+  // Older persisted Kalshi ticker records may contain the post-close 0/100
+  // sentinel. It means there is no tradable quote; treating its midpoint as
+  // 50% corrupts the terminal market state. The transport now strips this
+  // pair, and this restore-time guard repairs data written before that fix.
+  const kalshiQuoteIsClosed =
+    tick.source === "kalshi" && tick.bid === 0 && tick.ask === 100;
+  const incomingBid = kalshiQuoteIsClosed ? undefined : tick.bid;
+  const incomingAsk = kalshiQuoteIsClosed ? undefined : tick.ask;
+  const incomingImpliedProbability = kalshiQuoteIsClosed
+    ? undefined
+    : tick.impliedProbability;
   const next: BookState = {
     ...(previous === undefined ? {} : copyBook(previous)),
     source: tick.source,
@@ -516,16 +527,16 @@ function applyTick(
       : { bookmaker: tick.bookmaker }),
     marketType: tick.marketType,
     outcome: tick.outcome,
-    ...(tick.bid === undefined
+    ...(incomingBid === undefined
       ? previous?.bid === undefined
         ? {}
         : { bid: previous.bid }
-      : { bid: tick.bid }),
-    ...(tick.ask === undefined
+      : { bid: incomingBid }),
+    ...(incomingAsk === undefined
       ? previous?.ask === undefined
         ? {}
         : { ask: previous.ask }
-      : { ask: tick.ask }),
+      : { ask: incomingAsk }),
     ...(tick.lastTrade === undefined
       ? previous?.lastTrade === undefined
         ? {}
@@ -536,14 +547,14 @@ function applyTick(
         ? {}
         : { rawOdds: previous.rawOdds }
       : { rawOdds: tick.rawOdds }),
-    ...(tick.impliedProbability === undefined
+    ...(incomingImpliedProbability === undefined
       ? previous?.suppliedImpliedProbability === undefined
         ? {}
         : {
             suppliedImpliedProbability:
               previous.suppliedImpliedProbability,
           }
-      : { suppliedImpliedProbability: tick.impliedProbability }),
+      : { suppliedImpliedProbability: incomingImpliedProbability }),
     ...(tick.depth === undefined
       ? previous?.depth === undefined
         ? {}

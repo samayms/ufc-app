@@ -116,6 +116,32 @@ describe("normalizeKalshiMessage", () => {
       ticks: [{ status: "closed" }],
     });
   });
+
+  it("does not turn Kalshi's closed 0/100 book into a 50% quote", () => {
+    const ticker = normalizeKalshiMessage(
+      {
+        type: "ticker",
+        msg: {
+          market_ticker: SUBSCRIPTION.externalId,
+          yes_bid: 0,
+          yes_ask: 100,
+          price: 99,
+        },
+      },
+      [SUBSCRIPTION],
+      RECEIVED_AT,
+    );
+
+    expect(ticker?.message).toMatchObject({
+      kind: "delta",
+      ticks: [{ lastTrade: 99 }],
+    });
+    expect(ticker?.message.ticks[0]).not.toHaveProperty("bid");
+    expect(ticker?.message.ticks[0]).not.toHaveProperty("ask");
+    expect(ticker?.message.ticks[0]).not.toHaveProperty(
+      "impliedProbability",
+    );
+  });
 });
 
 describe("KalshiFixtureTransport", () => {

@@ -364,9 +364,15 @@ export function normalizeKalshiMessage(
       "price_dollars_fp",
       "last_price_dollars",
     ]);
+    // Kalshi publishes 0/100 after a market stops trading. That pair is an
+    // empty/locked book, not a 50% market; retaining it would replace the last
+    // tradable quote with a fabricated midpoint. Keep the settlement trade and
+    // lifecycle data, but leave the quote absent so the store retains the last
+    // real bid/ask.
+    const quoteIsTradable = !(bid === 0 && ask === 100);
     const tick = baseTick(subscription, receivedAt, timestamp, {
-      ...(bid === undefined ? {} : { bid }),
-      ...(ask === undefined ? {} : { ask }),
+      ...(quoteIsTradable && bid !== undefined ? { bid } : {}),
+      ...(quoteIsTradable && ask !== undefined ? { ask } : {}),
       ...(lastTrade === undefined ? {} : { lastTrade }),
       ...(finite(message.volume) === undefined
         ? {}
