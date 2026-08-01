@@ -342,6 +342,134 @@ describe("LabWatcher CITO Live polling", () => {
 
     watcher.stop();
   });
+
+  it("requests the ufc-prefixed bout id, not the bare one", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TIME);
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(citoLiveStateResponse());
+    const timeline = new LabTimeline({ now: () => Date.now() });
+    const watcher = new LabWatcher({
+      timeline,
+      fetchImpl,
+      now: () => Date.now(),
+      env: {
+        CITO_API_BASE_URL: "https://cito.example.test/api/v1",
+        CITO_API_KEY: "test-key",
+      },
+    });
+
+    watcher.start({
+      boutId: "12995",
+      round: 1,
+      citoBoutIds: ["12995"],
+      citoIntervalMs: 5_000,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "https://cito.example.test/api/v1/ufc/live/ufc-12995/state",
+      expect.anything(),
+    );
+    watcher.stop();
+  });
+
+  it("reports a live snapshot before a method arrives, without repeating unchanged ones", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TIME);
+    let calls = 0;
+    const fetchImpl = vi.fn<typeof fetch>(async () => {
+      calls += 1;
+      // Same status/round/clock every time — an unchanged snapshot.
+      return citoLiveStateResponse({
+        status: "live",
+        currentRound: 1,
+        currentTime: calls <= 2 ? "4:30" : "3:00",
+      });
+    });
+    const timeline = new LabTimeline({ now: () => Date.now() });
+    const watcher = new LabWatcher({
+      timeline,
+      fetchImpl,
+      now: () => Date.now(),
+      env: {
+        CITO_API_BASE_URL: "https://cito.example.test/api/v1",
+        CITO_API_KEY: "test-key",
+      },
+    });
+
+    watcher.start({
+      boutId: "12995",
+      round: 1,
+      citoBoutIds: ["12995"],
+      citoIntervalMs: 5_000,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    const liveEntries = timeline
+      .since(0)
+      .filter(
+        (entry) => entry.source === "cito-live" && entry.kind === "observation",
+      );
+    // Three polls, but only two distinct snapshots (4:30 held for two polls).
+    expect(liveEntries).toHaveLength(2);
+    expect(liveEntries[0]).toMatchObject({ label: "live: live · round 1 · 4:30" });
+    expect(liveEntries[1]).toMatchObject({ label: "live: live · round 1 · 3:00" });
+
+    watcher.stop();
+  });
+
+  it("gives up after the poll budget so it never runs unbounded", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(BASE_TIME);
+    // A fresh Response per call — reusing one instance across many polls
+    // fails on the second `.text()` read ("Body has already been read").
+    const fetchImpl = vi.fn<typeof fetch>(async () => citoLiveStateResponse());
+    const timeline = new LabTimeline({ now: () => Date.now() });
+    const watcher = new LabWatcher({
+      timeline,
+      fetchImpl,
+      now: () => Date.now(),
+      env: {
+        CITO_API_BASE_URL: "https://cito.example.test/api/v1",
+        CITO_API_KEY: "test-key",
+      },
+    });
+
+    watcher.start({
+      boutId: "12995",
+      round: 1,
+      citoBoutIds: ["12995"],
+      citoIntervalMs: 5_000,
+    });
+
+    // MAX_PENDING_POLLS is 120 at a 5s cadence: polls land at t=0, 5s, ...,
+    // 595s (120 total). Advancing exactly 600s would tick a 121st.
+    await vi.advanceTimersByTimeAsync(119 * 5_000 + 1);
+
+    expect(fetchImpl).toHaveBeenCalledTimes(120);
+    expect(timeline.since(0)).toContainEqual(
+      expect.objectContaining({
+        kind: "note",
+        source: "cito-live",
+        boutId: "12995",
+        label: "gave up waiting for a method after 120 polls — stopped to protect quota",
+      }),
+    );
+    expect(watcher.status()).toMatchObject({
+      pollers: expect.arrayContaining([
+        expect.objectContaining({ name: "cito-live", active: false }),
+      ]),
+    });
+
+    // No further requests after giving up, however long more time passes.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(120);
+    watcher.stop();
+  });
 });
 
 describe("LabWatcher synchronized horn checks", () => {

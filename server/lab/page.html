@@ -905,10 +905,10 @@
       <div class="stats-heading">
         <div>
           <h2 id="cito-live-stats-title">CITO Live stats</h2>
-          <p>Direct from Cito's live-state endpoint, captured the moment it reported a method.</p>
+          <p>Direct from Cito's live-state endpoint. Updates when the snapshot changes; stops once a method arrives or the poll budget runs out.</p>
         </div>
         <div class="stats-badges" aria-label="CITO Live stats limitations">
-          <span class="stats-badge">One-shot, at finish</span>
+          <span class="stats-badge">Bounded polling</span>
           <span class="stats-badge is-warning" id="cito-live-stats-source-badge">source unknown</span>
         </div>
       </div>
@@ -1130,19 +1130,25 @@
       ) {
         return state.session.espnStatsLatest;
       }
+      // CITO Live reports continuously (round/clock/live stats) before it
+      // has a method, so its "latest" entry and its "final result" entry are
+      // different things — the source-status row shows the latest one.
+      if (name === "cito-live" && state.session && state.session.citoLiveLatest) {
+        return state.session.citoLiveLatest;
+      }
       return state.session && state.session.sources
         ? state.session.sources[name]
         : null;
     }
 
     function allCaptured() {
-      const citoLive = sourceEntry("cito-live");
+      const citoLiveFinal = state.session && state.session.sources["cito-live"];
       const espn = sourceEntry("espn");
       const kalshi = sourceEntry("kalshi");
       return Boolean(
         state.session &&
         state.session.mode === "round" &&
-        citoLive &&
+        citoLiveFinal &&
         state.session.sources.espn &&
         kalshi,
       );
@@ -1354,14 +1360,15 @@
         return;
       }
       if (name === "cito-live" && entry) {
-        status.textContent = "Result received";
-        status.classList.add("is-complete");
-        detail.textContent = entry.label.replace(/^live state: /, "");
+        const final = entry.detail && typeof entry.detail.method === "string";
+        status.textContent = final ? "Result received" : "Live";
+        status.classList.toggle("is-complete", Boolean(final));
+        detail.textContent = entry.label.replace(/^live(?: state)?: /, "");
         return;
       }
       if (poller && poller.active === false && name === "cito-live") {
         status.textContent = "Stopped";
-        detail.textContent = "CITO live-state polling stopped before a method was reported.";
+        detail.textContent = "CITO Live polling stopped before a method was reported.";
         return;
       }
       if (name === "kalshi" && entry) {
@@ -1390,7 +1397,7 @@
       } else if (name === "espn-stats") {
         detail.textContent = "Fetching both fighters’ fight-cumulative core stats every 2.5 seconds.";
       } else if (name === "cito-live") {
-        detail.textContent = "Watching Cito's live worker for a method — much faster than round-stat enrichment.";
+        detail.textContent = "Watching Cito's live worker for round/clock/stats updates and, eventually, a method.";
       } else {
         detail.textContent = "Capturing the matching fight market at the horn.";
       }
@@ -1665,9 +1672,11 @@
       if (!fight) return;
 
       $("cito-live-stats-method").textContent = text(data.method);
-      $("cito-live-stats-round").textContent = Number.isFinite(Number(data.currentRound))
-        ? `Round ${data.currentRound}`
-        : "—";
+      // `typeof` guards, not Number.isFinite(Number(...)) — currentRound and
+      // lagSeconds are frequently `null`, and Number(null) is 0 (finite),
+      // which would otherwise render as "Round null" / "nulls".
+      $("cito-live-stats-round").textContent =
+        typeof data.currentRound === "number" ? `Round ${data.currentRound}` : "—";
       const winnerEntry = Array.isArray(data.fighters)
         ? data.fighters.find((fighter) => fighter.outcome === "win")
         : undefined;
@@ -1675,9 +1684,8 @@
         text(data.winnerFighterSlug) !== "—"
           ? data.winnerFighterSlug
           : text(winnerEntry && winnerEntry.fighterName);
-      $("cito-live-stats-lag").textContent = Number.isFinite(Number(data.lagSeconds))
-        ? `${data.lagSeconds}s`
-        : "—";
+      $("cito-live-stats-lag").textContent =
+        typeof data.lagSeconds === "number" ? `${data.lagSeconds}s` : "—";
       $("cito-live-stats-source-badge").textContent = data.source
         ? `source: ${data.source}`
         : "source unknown";
@@ -1841,7 +1849,10 @@
       ) {
         return;
       } else if (entry.source === "cito-live") {
-        state.session.sources["cito-live"] = entry;
+        state.session.citoLiveLatest = entry;
+        if (entry.detail && typeof entry.detail.method === "string") {
+          state.session.sources["cito-live"] = entry;
+        }
         renderCitoLiveStats(entry);
       } else {
         state.session.sources.kalshi = entry;
@@ -1942,6 +1953,7 @@
           : null,
         espnStatsHistory,
         espnStatsFirstNonzeroAt,
+        citoLiveLatest: null,
         sources: {
           espn: null,
           "cito-live": null,
@@ -1999,6 +2011,7 @@
         espnStatsLatest: null,
         espnStatsHistory: [],
         espnStatsFirstNonzeroAt: null,
+        citoLiveLatest: null,
         sources: {
           espn: null,
           "cito-live": null,

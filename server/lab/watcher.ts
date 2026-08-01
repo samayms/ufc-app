@@ -145,6 +145,9 @@ export class LabWatcher {
 
   private citoLiveComplete = false;
 
+  /** Last recorded live-state snapshot, so unchanged polls stay quiet. */
+  private citoLiveFingerprint?: string;
+
   private sherdogPending: PendingRound[] = [];
 
   /** Poll bodies by name, so quota backoff can reschedule any of them. */
@@ -204,6 +207,7 @@ export class LabWatcher {
     this.foundSherdog.clear();
     this.kalshiComplete = false;
     this.citoLiveComplete = false;
+    this.citoLiveFingerprint = undefined;
     this.sherdogPending = [];
     if (target.round !== undefined) {
       this.markRoundEnded(target.round, target.boutId);
@@ -611,11 +615,21 @@ export class LabWatcher {
   // -- Cito -----------------------------------------------------------------
 
   /**
-   * `ufc/live/{boutId}/state` knows a fight's method, ending round, and
-   * winner within seconds of it happening. The full response is recorded on
-   * the timeline (not just method/round/winner) so the raw-JSON view shows
-   * everything Cito actually returned. Stops itself the moment a method is
-   * reported, or after giving up.
+   * `ufc/live/{boutId}/state` knows a fight's status, round, clock, and
+   * per-fighter live stats throughout the fight, and its method/winner within
+   * seconds of it ending. Cito's payload shape for this endpoint has proven
+   * inconsistent bout to bout — sometimes `winnerFighterSlug` is null on a
+   * decided fight, sometimes `liveStats` is absent — so this treats every
+   * field as optional rather than assuming one specific shape.
+   *
+   * The bout id in the URL must be `ufc-{boutId}` — that is the id format
+   * Cito's own responses use (`"boutId": "ufc-12995"`), and the bare numeric
+   * id was observed hitting a flakier upstream path (occasional 502s from
+   * the live-scrape gateway) instead of Cito's own canonical lookup.
+   *
+   * Bounded, not continuous: this only runs per round-ended action (armed by
+   * `citoBoutIds`) and gives up after `MAX_PENDING_POLLS`, same as the other
+   * pollers — every poll is metered quota, so nothing here polls forever.
    */
   private async pollCitoLive(): Promise<void> {
     if (this.citoLiveComplete) return;
@@ -628,8 +642,9 @@ export class LabWatcher {
       throw new Error("CITO_API_BASE_URL and CITO_API_KEY must be set");
     }
 
+    const liveBoutId = boutId.startsWith("ufc-") ? boutId : `ufc-${boutId}`;
     const url = new URL(
-      `ufc/live/${encodeURIComponent(boutId)}/state`,
+      `ufc/live/${encodeURIComponent(liveBoutId)}/state`,
       base.endsWith("/") ? base : `${base}/`,
     ).toString();
     const { json, remaining } = await this.getJson(url, { "x-api-key": apiKey });
@@ -637,7 +652,9 @@ export class LabWatcher {
     const data = (json as { data?: unknown }).data;
     const record = isRecord(data) ? data : undefined;
     const method = record?.method;
-    const round = record?.currentRound;
+    const round = typeof record?.currentRound === "number" ? record.currentRound : undefined;
+    const clock = typeof record?.currentTime === "string" ? record.currentTime : undefined;
+    const status = typeof record?.status === "string" ? record.status : undefined;
     // `winnerFighterSlug` is sometimes null even on a decided fight (seen on
     // the Buzukja/Grad bout); the per-corner `outcome: "win"` still names the
     // winner in that case, so fall back to it rather than showing no winner.
@@ -656,17 +673,41 @@ export class LabWatcher {
 
     if (typeof method === "string") {
       this.citoLiveComplete = true;
+      this.citoLiveFingerprint = undefined;
       this.timeline.record({
         kind: "observation",
         source: "cito-live",
         at: observedAt,
         boutId,
-        ...(typeof round === "number" ? { round } : {}),
-        label: `live state: ${method}${winner === undefined ? "" : `, ${winner} wins`}${typeof round === "number" ? ` (round ${round})` : ""}`,
+        ...(round === undefined ? {} : { round }),
+        label: `live state: ${method}${winner === undefined ? "" : `, ${winner} wins`}${round === undefined ? "" : ` (round ${round})`}`,
         detail: record ?? { method, winnerFighterSlug: winnerSlug, currentRound: round },
       });
       this.pausePoller("cito-live");
       return;
+    }
+
+    // Not decided yet. Report a snapshot only when something about it
+    // changed, so a steady stream of identical "still round 2" polls doesn't
+    // bury the moments that actually moved (a new round, a knockdown, etc).
+    // Deliberately excludes bookkeeping fields that change on every single
+    // poll regardless (lagSeconds, pollCount, lastPolledAt, capturedAt) —
+    // fingerprinting the whole record would never repeat and this dedup
+    // would do nothing.
+    const fingerprint = JSON.stringify({ status, round, clock, liveStats: record?.liveStats });
+    if (fingerprint !== this.citoLiveFingerprint) {
+      this.citoLiveFingerprint = fingerprint;
+      const bits = [status, round === undefined ? undefined : `round ${round}`, clock]
+        .filter((bit): bit is string => bit !== undefined);
+      this.timeline.record({
+        kind: "observation",
+        source: "cito-live",
+        at: observedAt,
+        boutId,
+        ...(round === undefined ? {} : { round }),
+        label: `live: ${bits.length > 0 ? bits.join(" · ") : "no live state yet"}`,
+        detail: record ?? {},
+      });
     }
 
     const polls = this.pollers.get("cito-live")?.polls ?? 0;
@@ -677,7 +718,7 @@ export class LabWatcher {
         source: "cito-live",
         at: observedAt,
         boutId,
-        label: `gave up waiting for a live-state method after ${polls + 1} polls`,
+        label: `gave up waiting for a method after ${polls + 1} polls — stopped to protect quota`,
       });
       this.pausePoller("cito-live");
       return;
