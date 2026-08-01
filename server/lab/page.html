@@ -453,13 +453,15 @@
       border-color: rgba(255, 118, 104, 0.45);
     }
 
-    .espn-stats-panel {
+    .espn-stats-panel,
+    .cito-live-stats-panel {
       margin-top: 32px;
       padding-top: 28px;
       border-top: 1px solid var(--border);
     }
 
-    .espn-stats-panel[hidden] { display: none; }
+    .espn-stats-panel[hidden],
+    .cito-live-stats-panel[hidden] { display: none; }
 
     .stats-heading {
       display: flex;
@@ -899,6 +901,39 @@
       </details>
     </section>
 
+    <section id="cito-live-stats-panel" class="cito-live-stats-panel" aria-labelledby="cito-live-stats-title" hidden>
+      <div class="stats-heading">
+        <div>
+          <h2 id="cito-live-stats-title">CITO Live stats</h2>
+          <p>Direct from Cito's live-state endpoint, captured the moment it reported a method.</p>
+        </div>
+        <div class="stats-badges" aria-label="CITO Live stats limitations">
+          <span class="stats-badge">One-shot, at finish</span>
+          <span class="stats-badge is-warning" id="cito-live-stats-source-badge">source unknown</span>
+        </div>
+      </div>
+      <div class="stats-metrics">
+        <div class="stats-metric">
+          <span>Method</span>
+          <strong id="cito-live-stats-method">—</strong>
+        </div>
+        <div class="stats-metric">
+          <span>Ending round</span>
+          <strong id="cito-live-stats-round">—</strong>
+        </div>
+        <div class="stats-metric">
+          <span>Winner</span>
+          <strong id="cito-live-stats-winner">—</strong>
+        </div>
+        <div class="stats-metric">
+          <span>Lag at capture</span>
+          <strong id="cito-live-stats-lag">—</strong>
+        </div>
+      </div>
+      <div id="cito-live-stats-table" class="stats"></div>
+      <p id="cito-live-stats-empty" class="source-detail" hidden>This payload carried a method but no per-fighter <code>liveStats</code> rows.</p>
+    </section>
+
     <details id="source-json" hidden>
       <summary>View raw source JSON</summary>
       <div class="json-tools">
@@ -940,6 +975,19 @@
       "timeincontrol",
       "controltime",
     ]);
+
+    const CITO_LIVE_STAT_FIELDS = [
+      ["knockdowns", "Knockdowns"],
+      ["sigStrikesLanded", "Sig. strikes landed"],
+      ["sigStrikesAttempted", "Sig. strikes attempted"],
+      ["totalStrikesLanded", "Total strikes landed"],
+      ["totalStrikesAttempted", "Total strikes attempted"],
+      ["takedownsLanded", "Takedowns landed"],
+      ["takedownsAttempted", "Takedowns attempted"],
+      ["submissionsAttempted", "Submission attempts"],
+      ["controlTime", "Control time"],
+      ["reversals", "Reversals"],
+    ];
 
     const $ = (id) => document.getElementById(id);
     const text = (value, fallback = "—") =>
@@ -1601,6 +1649,80 @@
       $("espn-stats-panel").hidden = false;
     }
 
+    function citoLiveRowForCorner(liveStats, fight, corner) {
+      const fighter = fight[corner];
+      return liveStats.find((row) =>
+        row.corner === corner ||
+        (fighter.slug && row.fighterSlug === fighter.slug) ||
+        row.fighterName === fighter.name
+      );
+    }
+
+    /** Everything Cito's live-state endpoint returned, laid out like the ESPN panel. */
+    function renderCitoLiveStats(entry) {
+      const fight = state.session && state.session.fight;
+      const data = (entry && entry.detail) || {};
+      if (!fight) return;
+
+      $("cito-live-stats-method").textContent = text(data.method);
+      $("cito-live-stats-round").textContent = Number.isFinite(Number(data.currentRound))
+        ? `Round ${data.currentRound}`
+        : "—";
+      const winnerEntry = Array.isArray(data.fighters)
+        ? data.fighters.find((fighter) => fighter.outcome === "win")
+        : undefined;
+      $("cito-live-stats-winner").textContent =
+        text(data.winnerFighterSlug) !== "—"
+          ? data.winnerFighterSlug
+          : text(winnerEntry && winnerEntry.fighterName);
+      $("cito-live-stats-lag").textContent = Number.isFinite(Number(data.lagSeconds))
+        ? `${data.lagSeconds}s`
+        : "—";
+      $("cito-live-stats-source-badge").textContent = data.source
+        ? `source: ${data.source}`
+        : "source unknown";
+
+      const liveStats = Array.isArray(data.liveStats) ? data.liveStats : [];
+      const host = $("cito-live-stats-table");
+      const empty = $("cito-live-stats-empty");
+      host.replaceChildren();
+
+      if (liveStats.length === 0) {
+        empty.hidden = false;
+      } else {
+        empty.hidden = true;
+        const red = citoLiveRowForCorner(liveStats, fight, "red");
+        const blue = citoLiveRowForCorner(liveStats, fight, "blue");
+
+        const fighterRow = document.createElement("div");
+        fighterRow.className = "stats-row fighter-row";
+        const redName = statCell("fighter fighter-red", fight.red.name);
+        const redCorner = document.createElement("small");
+        redCorner.textContent = "Red corner";
+        redName.append(redCorner);
+        const middle = statCell("round-label", "At finish");
+        const blueName = statCell("fighter fighter-blue", fight.blue.name);
+        const blueCorner = document.createElement("small");
+        blueCorner.textContent = "Blue corner";
+        blueName.append(blueCorner);
+        fighterRow.append(redName, middle, blueName);
+        host.append(fighterRow);
+
+        CITO_LIVE_STAT_FIELDS.forEach(([field, label]) => {
+          const row = document.createElement("div");
+          row.className = "stats-row";
+          row.append(
+            statCell("stat-value", red && red[field]),
+            statCell("stat-name", label),
+            statCell("stat-value", blue && blue[field]),
+          );
+          host.append(row);
+        });
+      }
+
+      $("cito-live-stats-panel").hidden = false;
+    }
+
     function renderRawJson() {
       if (!state.session) return;
       const sources = {};
@@ -1720,6 +1842,7 @@
         return;
       } else if (entry.source === "cito-live") {
         state.session.sources["cito-live"] = entry;
+        renderCitoLiveStats(entry);
       } else {
         state.session.sources.kalshi = entry;
       }
@@ -1794,6 +1917,7 @@
           ? state.session.espnStatsFirstNonzeroAt
           : null;
       if (!continuingFight) $("espn-stats-panel").hidden = true;
+      $("cito-live-stats-panel").hidden = true;
       state.rawJson = "";
       state.session = {
         mode: "round",
@@ -1855,6 +1979,7 @@
       if (!fight || !state.card) return;
 
       $("espn-stats-panel").hidden = true;
+      $("cito-live-stats-panel").hidden = true;
       $("source-json").hidden = true;
       state.rawJson = "";
       state.session = {
