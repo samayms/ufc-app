@@ -80,7 +80,7 @@ export function LiveStatsPanel({ view, selection }: { view: BoutView; selection:
     <section className="compact-stats live-stats" aria-label={heading}>
       <div className="compact-stats-head">
         <span>{heading}</span>
-        {latest ? <span className="freshness">ESPN · <span className="num">{fmtTime(latest.provenance.fetchedAt)}</span></span> : null}
+        {latest ? <span className="freshness">{latest.provenance.source.toUpperCase()} · <span className="num">{fmtTime(latest.provenance.fetchedAt)}</span></span> : null}
       </div>
       {hasStats ? (
         <div className="compact-stat-list">
