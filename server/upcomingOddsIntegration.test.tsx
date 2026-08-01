@@ -107,7 +107,6 @@ describe("upcoming odds, ESPN fixture through to the frontend", () => {
           bout={bout}
           redName="Makhachev"
           blueName="Garry"
-          syncedAt={document.generatedAt}
           nowMs={NOW_MS}
         />,
       );
