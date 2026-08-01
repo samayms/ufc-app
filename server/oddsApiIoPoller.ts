@@ -66,7 +66,12 @@ export interface OddsApiIoPollerOptions {
   metrics?: Metrics;
 }
 
-type PollReason = "periodic" | "boundary" | "confirmed-boundary" | "final";
+type PollReason =
+  | "periodic"
+  | "boundary"
+  | "confirmed-boundary"
+  | "final"
+  | "pre-fight";
 type RequestResult =
   | { status: "accepted"; receivedAt?: string }
   | { status: "failed" | "terminal" };
@@ -245,6 +250,30 @@ export class OddsApiIoPoller {
     });
   }
 
+  /**
+   * Fetches the next bout's current book immediately at a between-fights
+   * handoff.  Unlike `trackBout`, this resolves only after ingestion, so the
+   * caller can pin a pre-fight boundary from the refreshed book rather than
+   * the prior bout's cached state.
+   */
+  refreshPendingBout(boutId: string): Promise<string | undefined> {
+    let receivedAt: string | undefined;
+    const operation = this.operationQueue.then(async () => {
+      if (this.closed || this.halted) return;
+      this.clearTimer(boutId);
+      if (!this.activeBouts.has(boutId)) {
+        this.activeBouts.set(boutId, "pending");
+      }
+      const result = await this.poll(boutId, "pre-fight");
+      if (result?.status === "accepted") receivedAt = result.receivedAt;
+    });
+    this.operationQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation.then(() => receivedAt);
+  }
+
   isActive(boutId: string): boolean {
     return this.activeBouts.get(boutId) === "live";
   }
@@ -330,13 +359,13 @@ export class OddsApiIoPoller {
     boutId: string,
     reason: PollReason,
     round?: number,
-  ): Promise<void> {
+  ): Promise<RequestResult | undefined> {
     if (
       this.closed ||
       this.halted ||
       !this.activeBouts.has(boutId)
     ) {
-      return;
+      return undefined;
     }
     const remaining = await this.quota.remaining(
       ODDS_API_IO_QUOTA_SOURCE,
@@ -346,7 +375,7 @@ export class OddsApiIoPoller {
       this.targetIntervalMs(boutId),
     );
     if (reason === "periodic" && policy.mode === "boundary-only") {
-      return;
+      return undefined;
     }
 
     const result = await this.request(boutId);
@@ -356,7 +385,7 @@ export class OddsApiIoPoller {
         this.timer.clearTimeout(handle);
       }
       this.timers.clear();
-      return;
+      return result;
     }
     if (
       result.status === "accepted" &&
@@ -375,6 +404,7 @@ export class OddsApiIoPoller {
     if (reason !== "final" && this.activeBouts.has(boutId)) {
       await this.scheduleNext(boutId);
     }
+    return result;
   }
 
   private async request(
@@ -449,7 +479,9 @@ export class OddsApiIoPoller {
     }
     const handle = this.timer.setTimeout(() => {
       this.timers.delete(boutId);
-      this.enqueue(() => this.poll(boutId, "periodic"));
+      this.enqueue(async () => {
+        await this.poll(boutId, "periodic");
+      });
     }, policy.intervalMs);
     this.timers.set(boutId, handle);
   }

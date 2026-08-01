@@ -1394,10 +1394,23 @@ export async function createCollector(
    * which just ended.  Pin the current book at that handoff so a later live
    * tick cannot overwrite the pre-fight comparison in the browser.
    */
-  const capturePreFightOdds = (boutId: string, takenAt: string): void => {
-    void initializedTickStore.snapshotPreFight(boutId, takenAt).catch(
-      () => undefined,
-    );
+  const capturePreFightOdds = (
+    boutId: string,
+    takenAt: string,
+    refresh = false,
+  ): void => {
+    void (async () => {
+      // Refresh the next bout's sportsbook line first.  The handoff must not
+      // pin the previous bout's cached market merely because its final signal
+      // arrived before the next-book refresh.
+      const refreshedAt = refresh
+        ? await initializedOddsApiIoPoller.refreshPendingBout(boutId)
+        : undefined;
+      await initializedTickStore.snapshotPreFight(
+        boutId,
+        refreshedAt ?? takenAt,
+      );
+    })().catch(() => undefined);
   };
 
   const nextUpcomingBoutAfter = (boutId: string): string | undefined => {
@@ -1406,9 +1419,9 @@ export async function createCollector(
       .filter((bout) => bout.status === "upcoming")
       .filter(
         (bout) =>
-          completed === undefined || bout.cardPosition > completed.cardPosition,
+          completed === undefined || bout.cardPosition < completed.cardPosition,
       )
-      .sort((left, right) => left.cardPosition - right.cardPosition)[0];
+      .sort((left, right) => right.cardPosition - left.cardPosition)[0];
     return upcoming?.id;
   };
 
@@ -1435,11 +1448,13 @@ export async function createCollector(
         ).catch(() => undefined);
         return;
       }
+      // Widen the exchange streams before the opening snapshot. Their next
+      // full-book rebuild is the authoritative Kalshi/Polymarket handoff.
+      applyActiveSubscriptions();
       const nextBoutId = nextUpcomingBoutAfter(event.boutId);
       if (nextBoutId !== undefined) {
-        capturePreFightOdds(nextBoutId, event.detectedAt);
+        capturePreFightOdds(nextBoutId, event.detectedAt, true);
       }
-      applyActiveSubscriptions();
     }),
   );
 

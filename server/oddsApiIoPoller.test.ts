@@ -338,4 +338,19 @@ describe("Odds-API.io adaptive polling", () => {
     expect(fetch).toHaveBeenCalledTimes(4);
     await poller.close();
   });
+
+  it("waits for a next-bout refresh to ingest before returning its pre-fight timestamp", async () => {
+    const source = createOddsApiIoSource({ mode: "fixture" });
+    const fetch = vi.spyOn(source, "getBoutOdds");
+    const { ingest, poller, time } = await createPoller({ source });
+
+    const refreshedAt = await poller.refreshPendingBout("bout-main");
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(ingest).toHaveBeenCalledTimes(2);
+    expect(refreshedAt).toBe(new Date(time.now()).toISOString());
+    expect(poller.isTracked("bout-main")).toBe(true);
+    expect(poller.isActive("bout-main")).toBe(false);
+    await poller.close();
+  });
 });
