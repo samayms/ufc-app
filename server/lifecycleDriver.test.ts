@@ -85,7 +85,7 @@ function observationInput(
     state: "in",
     period: 1,
     completed: false,
-    // Mid-round: ESPN's clock counts up toward 5:00 (ROUND_LENGTH_SECONDS).
+    // Mid-round: ESPN's clock counts down from 5:00 (300 seconds).
     clockSeconds: 120,
     receivedAt: new Date(time.now()).toISOString(),
     ...overrides,
@@ -108,7 +108,7 @@ describe("boutLifecycleEntry", () => {
       state: "in",
       period: 2,
       completed: false,
-      clockSeconds: 300,
+      clockSeconds: 0,
     });
     expect(boutLifecycleEntry(comain!)).toEqual({
       externalId: "bout-comain",
@@ -141,7 +141,7 @@ describe("createFixtureLifecycleProvider", () => {
       state: "in",
       period: 2,
       completed: false,
-      clockSeconds: 300,
+      clockSeconds: 0,
       receivedAt: at(0),
     });
   });
@@ -227,14 +227,14 @@ describe("LifecycleDriver", () => {
     await driver.idle();
     expect(bus.getEventLog()).toEqual([]);
 
-    // Prime the next two responses to report the clock hitting 5:00 twice
+    // Prime the next two responses to report the clock hitting 0:00 twice
     // in a row (simulating ESPN reporting the same "round just ended" state
     // on consecutive polls).
     responses[2] = [
-      observationInput(time, { clockSeconds: 300, receivedAt: at(10) }),
+      observationInput(time, { clockSeconds: 0, receivedAt: at(10) }),
     ];
     responses[3] = [
-      observationInput(time, { clockSeconds: 300, receivedAt: at(15) }),
+      observationInput(time, { clockSeconds: 0, receivedAt: at(15) }),
     ];
 
     time.advance(5_000);

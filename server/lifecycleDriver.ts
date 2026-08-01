@@ -9,7 +9,6 @@ import {
 } from "../src/sources/espn.ts";
 import { espnPollDelayMs } from "./espnPollingSchedule.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
-import { ROUND_LENGTH_SECONDS } from "./lifecycle.ts";
 import type {
   FightLifecycleMachine,
   FightLifecycleObservation,
@@ -135,9 +134,8 @@ export function boutLifecycleEntry(bout: Bout): LifecycleScoreboardEntry {
       state: "in",
       period: bout.currentRound ?? 1,
       completed: false,
-      // A finished round reads as a full clock, not an empty one — ESPN's
-      // clock counts up (see ROUND_LENGTH_SECONDS in lifecycle.ts).
-      clockSeconds: ROUND_LENGTH_SECONDS,
+      // ESPN's five-minute clock counts down, so a completed round is 0:00.
+      clockSeconds: 0,
     };
   }
   if (bout.status === "in-round") {
