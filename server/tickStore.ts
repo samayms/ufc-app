@@ -338,16 +338,23 @@ function isSnapshotOutcome(value: unknown): value is MarketSnapshotOutcome {
 }
 
 function isMarketSnapshot(value: unknown): value is MarketSnapshot {
+  const isPreFight = value !== null &&
+    typeof value === "object" &&
+    (value as { boundaryType?: unknown }).boundaryType === "pre-fight";
   return (
     isRecord(value) &&
     SOURCES.has(value.source as MarketSource) &&
     typeof value.boutId === "string" &&
     Number.isSafeInteger(value.round) &&
-    (value.round as number) >= 1 &&
-    (value.boundaryType === "provisional" ||
-      value.boundaryType === "confirmed") &&
-    (value.label === undefined ||
-      value.label === "broad-post-round-comparison") &&
+    (isPreFight ? value.round === 0 : (value.round as number) >= 1) &&
+    (isPreFight
+      ? value.round === 0 &&
+        (value.label === undefined || value.label === "pre-fight-open")
+      : (value.round as number) >= 1 &&
+        (value.boundaryType === "provisional" ||
+          value.boundaryType === "confirmed") &&
+        (value.label === undefined ||
+          value.label === "broad-post-round-comparison")) &&
     typeof value.takenAt === "string" &&
     typeof value.fresh === "boolean" &&
     Array.isArray(value.outcomes) &&

@@ -382,7 +382,7 @@ describe("MarketTickStore", () => {
   });
 
   it("pins a pre-fight opening book at reserved round zero without creating a round boundary", async () => {
-    const { store } = await setup();
+    const { store, storage } = await setup();
     await store.appendTick(tick("red"));
     await store.appendTick(tick("blue"));
 
@@ -399,6 +399,16 @@ describe("MarketTickStore", () => {
     ]);
     expect(store.getSnapshots(BOUT_ID, 1)).toEqual([]);
     await store.close();
+
+    const restored = await setup({ storage });
+    expect(restored.store.getSnapshots(BOUT_ID)).toEqual([
+      expect.objectContaining({
+        round: 0,
+        boundaryType: "pre-fight",
+        label: "pre-fight-open",
+      }),
+    ]);
+    await restored.store.close();
   });
 
   it("removes a superseded provisional and replaces it at the corrected boundary without duplicates", async () => {
