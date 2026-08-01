@@ -379,8 +379,7 @@ export default function App() {
                     </span>
                   </div>
                 )}
-                {view.bout.status !== "final" && (
-                  <MarketStrip
+                <MarketStrip
                     latestOdds={withoutSportsbookOnEventDay(
                       view.latestOdds,
                       state?.event.startsAt ?? "",
@@ -390,16 +389,11 @@ export default function App() {
                       state?.event.startsAt ?? "",
                     )}
                     onOpen={() => setSection("odds")}
-                  />
-                )}
+                    resultWinner={view.bout.status === "final" ? view.bout.result?.winner : undefined}
+                />
                 <SectionTabs
                   active={section}
                   onChange={setSection}
-                  sections={
-                    view.bout.status === "final"
-                      ? ["summary", "stats", "tale"]
-                      : undefined
-                  }
                 />
                 {section === "summary" && (
                   <RoundSelector
@@ -435,7 +429,7 @@ export default function App() {
                     <LiveStatsPanel view={view} selection={round} />
                   </>
                 )}
-                {section === "odds" && view.bout.status !== "final" && (
+                {section === "odds" && (
                   <UpcomingOddsSection
                     fight={boutToScheduledFight(view.bout)}
                     upcoming={upcomingOdds}

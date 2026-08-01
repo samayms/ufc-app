@@ -1,6 +1,6 @@
 import { marketProbabilities } from "../lib/oddsMath.ts";
 import { pickPriorityMarket } from "../lib/marketPriority.ts";
-import type { BoutView } from "../schema.ts";
+import type { BoutView, Corner } from "../schema.ts";
 import { fmtPct } from "./format.ts";
 
 type LatestOdds = BoutView["latestOdds"];
@@ -17,17 +17,20 @@ export function MarketStrip({
   latestOdds,
   preFightOdds,
   onOpen,
+  resultWinner,
 }: {
   latestOdds: LatestOdds;
   preFightOdds: LatestOdds;
   onOpen: () => void;
+  /** A settled result overrides only the current display, never history. */
+  resultWinner?: Corner | "draw" | "nc";
 }) {
   const snapshot = pickPriorityMarket(latestOdds);
   // De-vigged, not the raw implied probability — sportsbook lines otherwise
   // sum to >100% (the book's overround) instead of a clean 100%.
   const probs = snapshot ? marketProbabilities(snapshot) : null;
-  const red = probs?.red ?? null;
-  const blue = probs?.blue ?? null;
+  const red = resultWinner === "red" ? 1 : resultWinner === "blue" ? 0 : probs?.red ?? null;
+  const blue = resultWinner === "blue" ? 1 : resultWinner === "red" ? 0 : probs?.blue ?? null;
   const hasData = red != null && blue != null;
   const total = (red ?? 0) + (blue ?? 0);
   const redShare = hasData && total > 0 ? ((red as number) / total) * 100 : 50;
