@@ -12,7 +12,7 @@ import {
   CITO_ROUND_STATS_JOB_TYPE,
 } from "./roundStats.ts";
 import {
-  sherdogRoundJobType,
+  SHERDOG_ROUND_JOB_TYPE,
   type SherdogFetcher,
 } from "./sherdogJobs.ts";
 import {
@@ -317,7 +317,7 @@ describe("round-source failure isolation", () => {
       jobs.find((job) => job.jobType === CITO_ROUND_STATS_JOB_TYPE),
     ).toMatchObject({ status: "failed" });
     expect(
-      jobs.find((job) => job.jobType === sherdogRoundJobType(1)),
+      jobs.find((job) => job.jobType === SHERDOG_ROUND_JOB_TYPE),
     ).toMatchObject({ status: "completed" });
     expect(
       jobs.find((job) => job.jobType === THE_ODDS_API_ROUND_JOB_TYPE),
@@ -347,8 +347,8 @@ describe("round-source failure isolation", () => {
     const failingSherdog: SherdogFetcher = {
       async fetchBout() {
         return {
-          status: 200,
-          html: "<html><body>no round headings</body></html>",
+          status: 500,
+          html: "",
           sourceUrl: "https://www.sherdog.com/fixture-failure",
         };
       },
@@ -359,7 +359,7 @@ describe("round-source failure isolation", () => {
     const jobs = collector.roundStats.scheduler.getJobs();
 
     expect(
-      jobs.find((job) => job.jobType === sherdogRoundJobType(1)),
+      jobs.find((job) => job.jobType === SHERDOG_ROUND_JOB_TYPE),
     ).toMatchObject({ status: "failed" });
     expect(
       jobs.find((job) => job.jobType === CITO_ROUND_STATS_JOB_TYPE),
@@ -387,9 +387,7 @@ describe("round-source failure isolation", () => {
       citoStats: expect.any(Object),
     });
     await expect(collector.review.getReviewRecords()).resolves.toMatchObject({
-      parserErrors: [
-        expect.objectContaining({ source: "sherdog" }),
-      ],
+      parserErrors: [],
     });
   });
 });

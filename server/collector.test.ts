@@ -924,7 +924,7 @@ describe("fixture collector loading", () => {
       detectedAt: "2026-07-28T00:00:00Z",
     });
     await liveCollector.sherdogJobs.idle();
-    liveTime.advance(0);
+    liveTime.advance(10_000);
     await liveCollector.sherdogJobs.idle();
 
     expect(

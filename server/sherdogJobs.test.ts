@@ -172,7 +172,10 @@ describe("SherdogRoundJobs", () => {
     const fetchBout = vi
       .fn<SherdogFetcher["fetchBout"]>()
       .mockImplementation(async () => response(body));
-    const { eventBus, storage, time, roundStats, jobs } = await setup({ fetchBout });
+    const { eventBus, storage, time, roundStats, jobs } = await setup(
+      { fetchBout },
+      { dataMode: "live", permissionScope: "sherdog-read" },
+    );
 
     fightStarted(eventBus);
     await jobs.idle();

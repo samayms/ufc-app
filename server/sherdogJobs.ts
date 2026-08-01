@@ -459,7 +459,9 @@ export class SherdogRoundJobs {
     );
     this.unsubscribers.push(
       this.eventBus.subscribe("FIGHT_STARTED", (event) => {
-        this.enqueueEvent(() => this.scheduleBaseline(event));
+        if (this.dataMode === "live") {
+          this.enqueueEvent(() => this.scheduleBaseline(event));
+        }
       }),
       this.eventBus.subscribe("PROVISIONAL_ROUND_ENDED", (event) => {
         this.enqueueEvent(() => this.scheduleRound(event));
