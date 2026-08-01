@@ -66,17 +66,18 @@ export function CardRail({
                   }}
                   redIsLoser={winner === "blue"}
                   blueIsLoser={winner === "red"}
+                  winnerCorner={winner === "red" || winner === "blue" ? winner : undefined}
                   isLive={
                     bout.status === "in-round" || bout.status === "between-rounds"
                   }
                   center={
-                    <span className="event-card-center">
+                    <>
                       <StatusChip bout={bout} />
                       <FitText
                         className="event-card-center-weight"
                         text={WEIGHT_LABEL[bout.weightClass] ?? ""}
                       />
-                    </span>
+                    </>
                   }
                 />
               );

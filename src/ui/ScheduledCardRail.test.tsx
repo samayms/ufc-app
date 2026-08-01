@@ -177,6 +177,8 @@ describe("ScheduledCardRail", () => {
     expect(markup).toContain(">IN R2<");
     expect(markup).toContain(">KO/TKO · R1<");
     expect(markup).toContain('class="event-card is-live"');
+    expect(markup).toContain("tot-winner-arrow-red");
+    expect(markup).toContain('aria-label="Final Red won"');
     expect(markup).not.toContain(">UPCOMING<");
   });
 

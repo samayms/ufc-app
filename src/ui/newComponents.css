@@ -180,6 +180,13 @@
   gap: 3px;
 }
 
+.event-card-winner-arrow {
+  flex: none;
+  width: 14px;
+  height: 9px;
+  margin: 1px 0 0;
+}
+
 .event-card-center-weight {
   /* A target width, not a hard clip — FitText shrinks the font to fit this
      when it can without going unreadably small, but never truncates. On the

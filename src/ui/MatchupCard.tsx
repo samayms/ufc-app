@@ -202,6 +202,7 @@ export function MatchupCard({
   blue,
   redIsLoser,
   blueIsLoser,
+  winnerCorner,
   center,
   isLive,
   isSelected,
@@ -212,6 +213,8 @@ export function MatchupCard({
   blue: MatchupFighterEntry | undefined;
   redIsLoser?: boolean;
   blueIsLoser?: boolean;
+  /** A completed bout's winner, rendered with the same corner arrow as BoutHeader. */
+  winnerCorner?: "red" | "blue";
   center: ReactNode;
   isLive?: boolean;
   isSelected: boolean;
@@ -227,7 +230,16 @@ export function MatchupCard({
       {header && <div className="event-card-header">{header}</div>}
       <div className="event-card-matchup">
         <MatchupFighter fighter={red} corner="red" isLoser={redIsLoser} />
-        {center}
+        <span className="event-card-center">
+          {center}
+          {winnerCorner && (
+            <span
+              className={`tot-winner-arrow tot-winner-arrow-${winnerCorner} event-card-winner-arrow`}
+              role="img"
+              aria-label={`${winnerCorner === "red" ? (red?.name ?? "Red corner") : (blue?.name ?? "Blue corner")} won`}
+            />
+          )}
+        </span>
         <MatchupFighter fighter={blue} corner="blue" isLoser={blueIsLoser} />
       </div>
     </button>

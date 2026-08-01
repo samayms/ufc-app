@@ -67,11 +67,12 @@ export function ScheduledCardRail({
                 blue={{ name: fight.blue.name, photoUrl: fight.blue.headshotUrl }}
                 redIsLoser={winner === "blue"}
                 blueIsLoser={winner === "red"}
+                winnerCorner={winner === "red" || winner === "blue" ? winner : undefined}
                 isLive={
                   fight.status === "in-round" || fight.status === "between-rounds"
                 }
                 center={
-                  <span className="event-card-center">
+                  <>
                     <FightStatusChip fight={fight} />
                     {fight.weightClassLabel && (
                       <FitText
@@ -79,7 +80,7 @@ export function ScheduledCardRail({
                         text={fight.weightClassLabel}
                       />
                     )}
-                  </span>
+                  </>
                 }
               />
             );
