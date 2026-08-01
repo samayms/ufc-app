@@ -135,21 +135,28 @@ function CenterStatus({
     const { winner, method, round, time } = result;
     const winnerCorner =
       winner === "red" || winner === "blue" ? winner : undefined;
-    const arrowSlot = winnerCorner && (
-      <span className="tot-method-arrow-slot">
-        <span
-          className={`tot-winner-arrow tot-winner-arrow-${winnerCorner}`}
-          role="img"
-          aria-label={`${fighters[winnerCorner].name} won`}
-        />
-      </span>
-    );
     return (
       <>
         <span className="tot-method-row">
-          {winnerCorner === "red" && arrowSlot}
+          <span className="tot-method-arrow-slot">
+            {winnerCorner === "red" && (
+              <span
+                className="tot-winner-arrow tot-winner-arrow-red"
+                role="img"
+                aria-label={`${fighters.red.name} won`}
+              />
+            )}
+          </span>
           <span className="tot-round-label">{fmtMethod(method)}</span>
-          {winnerCorner === "blue" && arrowSlot}
+          <span className="tot-method-arrow-slot">
+            {winnerCorner === "blue" && (
+              <span
+                className="tot-winner-arrow tot-winner-arrow-blue"
+                role="img"
+                aria-label={`${fighters.blue.name} won`}
+              />
+            )}
+          </span>
           {!winnerCorner && (
             <span className="tot-live-label tot-canceled">
               {winner === "draw" ? "Draw" : "No contest"}

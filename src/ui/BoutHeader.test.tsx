@@ -102,7 +102,7 @@ describe("BoutHeader live clock", () => {
     expect(markup).not.toContain("Reyes wins");
   });
 
-  it("puts the winner arrow inline beside the method, in a fixed slot", () => {
+  it("puts the winner arrow inline beside the method, in a fixed slot on each side that never moves the method text", () => {
     const bout = loadFixtureEvent().bouts[0]!;
     const redWon = renderToStaticMarkup(
       <BoutHeader
@@ -125,17 +125,28 @@ describe("BoutHeader live clock", () => {
       />,
     );
 
-    // Red wins: arrow slot comes before the method text.
-    expect(redWon.indexOf("tot-method-arrow-slot")).toBeLessThan(
-      redWon.indexOf(">SUB<"),
-    );
-    expect(redWon).toContain("tot-winner-arrow-red");
+    // Both slots are always present, on both sides, regardless of winner —
+    // each is a fixed-width CSS box (dashboard.css's .tot-method-arrow-slot)
+    // whether or not it holds an arrow, so the method text between them
+    // never shifts. Only the arrow inside the winner's own slot differs.
+    const slotMatches = (markup: string) =>
+      [...markup.matchAll(/tot-method-arrow-slot/g)];
+    expect(slotMatches(redWon)).toHaveLength(2);
+    expect(slotMatches(blueWon)).toHaveLength(2);
 
-    // Blue wins: arrow slot comes after the method text.
-    expect(blueWon.indexOf(">KO/TKO<")).toBeLessThan(
-      blueWon.indexOf("tot-method-arrow-slot"),
-    );
+    // The method text sits between the two slots in both cases — arrow
+    // slot, then method, then arrow slot — regardless of winner.
+    const firstSlot = /tot-method-arrow-slot/;
+    const secondSlot = /tot-method-arrow-slot(?![\s\S]*tot-method-arrow-slot)/;
+    expect(redWon.search(firstSlot)).toBeLessThan(redWon.indexOf(">SUB<"));
+    expect(redWon.indexOf(">SUB<")).toBeLessThan(redWon.search(secondSlot));
+    expect(blueWon.search(firstSlot)).toBeLessThan(blueWon.indexOf(">KO/TKO<"));
+    expect(blueWon.indexOf(">KO/TKO<")).toBeLessThan(blueWon.search(secondSlot));
+
+    expect(redWon).toContain("tot-winner-arrow-red");
+    expect(redWon).not.toContain("tot-winner-arrow-blue");
     expect(blueWon).toContain("tot-winner-arrow-blue");
+    expect(blueWon).not.toContain("tot-winner-arrow-red");
 
     // Round/time substate is unaffected either way.
     expect(redWon).toContain("Round 2 · 3:41");
