@@ -180,11 +180,19 @@
   gap: 3px;
 }
 
-.event-card-winner-arrow {
+.event-card-center-result {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.event-card-center-result .event-card-winner-arrow {
   flex: none;
-  width: 14px;
-  height: 9px;
-  margin: 1px 0 0;
+  width: 7px;
+  height: 8px;
+  margin: 0;
 }
 
 .event-card-center-weight {

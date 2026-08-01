@@ -70,14 +70,12 @@ export function CardRail({
                   isLive={
                     bout.status === "in-round" || bout.status === "between-rounds"
                   }
-                  center={
-                    <>
-                      <StatusChip bout={bout} />
-                      <FitText
-                        className="event-card-center-weight"
-                        text={WEIGHT_LABEL[bout.weightClass] ?? ""}
-                      />
-                    </>
+                  center={<StatusChip bout={bout} />}
+                  centerDetail={
+                    <FitText
+                      className="event-card-center-weight"
+                      text={WEIGHT_LABEL[bout.weightClass] ?? ""}
+                    />
                   }
                 />
               );

@@ -165,6 +165,18 @@ describe("ScheduledCardRail", () => {
               red: fighter("Final Red"),
               blue: fighter("Final Blue"),
             }),
+            fight({
+              competitionId: "final2",
+              matchNumber: 3,
+              status: "final",
+              result: {
+                winner: "blue",
+                method: "submission",
+                round: 2,
+              },
+              red: fighter("Tapped Red"),
+              blue: fighter("Winning Blue"),
+            }),
           ],
         },
       ],
@@ -179,6 +191,14 @@ describe("ScheduledCardRail", () => {
     expect(markup).toContain('class="event-card is-live"');
     expect(markup).toContain("tot-winner-arrow-red");
     expect(markup).toContain('aria-label="Final Red won"');
+    expect(markup).toContain("tot-winner-arrow-blue");
+    expect(markup).toContain('aria-label="Winning Blue won"');
+    expect(markup).toMatch(
+      /tot-winner-arrow-red event-card-winner-arrow[^>]*><\/span><span class="chip chip-final">KO\/TKO · R1<\/span>/,
+    );
+    expect(markup).toMatch(
+      /<span class="chip chip-final">SUB · R2<\/span><span class="tot-winner-arrow tot-winner-arrow-blue event-card-winner-arrow"/,
+    );
     expect(markup).not.toContain(">UPCOMING<");
   });
 

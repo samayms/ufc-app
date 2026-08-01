@@ -71,17 +71,13 @@ export function ScheduledCardRail({
                 isLive={
                   fight.status === "in-round" || fight.status === "between-rounds"
                 }
-                center={
-                  <>
-                    <FightStatusChip fight={fight} />
-                    {fight.weightClassLabel && (
-                      <FitText
-                        className="event-card-center-weight"
-                        text={fight.weightClassLabel}
-                      />
-                    )}
-                  </>
-                }
+                center={<FightStatusChip fight={fight} />}
+                centerDetail={fight.weightClassLabel && (
+                  <FitText
+                    className="event-card-center-weight"
+                    text={fight.weightClassLabel}
+                  />
+                )}
               />
             );
           })}
