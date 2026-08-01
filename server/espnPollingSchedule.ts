@@ -7,7 +7,7 @@
 import { SCHEDULE_TIME_ZONE, nextSlotAfter, zonedCalendarDate } from "./scheduler.ts";
 
 export const ESPN_EVENT_DAY_PRE_START_MS = 60_000;
-export const ESPN_EVENT_IN_PROGRESS_MS = 5_000;
+export const ESPN_EVENT_IN_PROGRESS_MS = 2_500;
 
 export type EspnPollingTier =
   | "non-event-day"
