@@ -39,3 +39,24 @@ export function isBackSwipe(
   if (dy > config.maxVerticalDriftPx) return false;
   return true;
 }
+
+/**
+ * Whether an in-progress drag has moved clearly enough, and clearly enough
+ * horizontally rather than vertically, to commit to a live back-swipe
+ * (as opposed to an ordinary vertical scroll that happened to start near
+ * the left edge). Once committed, the caller live-tracks the finger via
+ * `clampDragPx` instead of waiting for the gesture to end.
+ */
+export function isHorizontalDragCommit(
+  dx: number,
+  dy: number,
+  minCommitPx = 10,
+): boolean {
+  return Math.abs(dx) > minCommitPx && Math.abs(dx) > Math.abs(dy) * 1.5;
+}
+
+/** Clamps a rightward drag distance to the visible range [0, maxPx] — a
+ *  back-swipe never drags left of its start or past the screen's own width. */
+export function clampDragPx(dx: number, maxPx: number): number {
+  return Math.min(Math.max(dx, 0), maxPx);
+}
