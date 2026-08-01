@@ -30,6 +30,29 @@ function parse(fighters: { red: string; blue: string }, boutId = "bout-1") {
 }
 
 describe("parseSherdogRoundObservations against a real live page", () => {
+  it("ignores Sherdog's pre-rendered future-round placeholders", async () => {
+    const placeholder = `
+      <div class="event">
+        <h2>Uros Medic vs. Daniel Rodriguez</h2>
+        <h3>Round 1</h3>
+        <h4>Sherdog Scores</h4>
+        Brian Knapp scores the round:<br>
+        Tyler Treese scores the round:<br>
+        <h3>Round 2</h3>
+        <h4>Sherdog Scores</h4>
+        Brian Knapp scores the round:<br>
+        <h3>The Official Result</h3>
+      </div>`;
+
+    await expect(parseSherdogRoundObservations({
+      boutId: "medic-rodriguez",
+      html: placeholder,
+      sourceUrl,
+      fetchedAt,
+      fighterNames: { red: "Uros Medic", blue: "Daniel Rodriguez" },
+    })).resolves.toEqual([]);
+  });
+
   it("returns only the rounds of the requested bout, not the whole card", async () => {
     const observations = await parse({
       red: "Alden Coria",

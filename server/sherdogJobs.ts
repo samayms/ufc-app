@@ -5,6 +5,7 @@ import type {
 } from "../src/schema.ts";
 import {
   parseSherdogRoundObservations,
+  parseSherdogRoundSnapshots,
   SHERDOG_MAX_PAYLOAD_BYTES,
 } from "../src/sources/sherdog.ts";
 import type {
@@ -29,14 +30,15 @@ import { NOOP_METRICS, type Metrics } from "./health.ts";
 import type { ParserErrorSink } from "./review.ts";
 
 export const SHERDOG_FINAL_JOB_TYPE = "sherdog_final";
+export const SHERDOG_BASELINE_JOB_TYPE = "sherdog_baseline";
+export const SHERDOG_ROUND_JOB_TYPE = "sherdog_round";
 export const SHERDOG_OBSERVATIONS_STORAGE_STREAM =
   "sherdog-observations";
-export const SHERDOG_ROUND_ATTEMPT_DELAYS_MS = [
-  15_000,
-  30_000,
-  60_000,
-] as const;
+export const SHERDOG_BASELINES_STORAGE_STREAM = "sherdog-baselines";
+export const SHERDOG_BOUNDARY_POLL_INTERVAL_MS = 10_000;
+export const SHERDOG_BOUNDARY_MAX_ATTEMPTS = 30;
 
+/** Legacy persisted job name retained so an in-flight old deployment restores. */
 export function sherdogRoundJobType(attempt: 1 | 2 | 3): string {
   return `sherdog_round_${attempt}`;
 }
@@ -112,6 +114,14 @@ interface PersistedSherdogObservation {
   value: SherdogObservationRevision;
 }
 
+interface PersistedSherdogBaseline {
+  version: 1;
+  boutId: string;
+  round: number;
+  payloadHash: string;
+  capturedAt: string;
+}
+
 interface FixturePayload {
   boutEntries: Record<string, { html: string }>;
   sourceUrl: string;
@@ -150,6 +160,18 @@ function isPersisted(
     (value.value.revision as number) >= 1 &&
     typeof value.value.firstObservedAt === "string" &&
     typeof value.value.lastObservedAt === "string"
+  );
+}
+
+function isPersistedBaseline(value: unknown): value is PersistedSherdogBaseline {
+  return (
+    isRecord(value) &&
+    value.version === 1 &&
+    typeof value.boutId === "string" &&
+    Number.isSafeInteger(value.round) &&
+    (value.round as number) >= 1 &&
+    typeof value.payloadHash === "string" &&
+    typeof value.capturedAt === "string"
   );
 }
 
@@ -371,6 +393,8 @@ export class SherdogRoundJobs {
     SherdogObservationRevision[]
   >();
 
+  private readonly baselines = new Map<string, string>();
+
   private readonly unsubscribers: Array<() => void> = [];
 
   private eventQueue: Promise<void> = Promise.resolve();
@@ -413,6 +437,16 @@ export class SherdogRoundJobs {
         metrics: this.metrics,
       });
 
+    this.scheduler.registerHandler(
+      SHERDOG_BASELINE_JOB_TYPE,
+      (job) => this.captureBaseline(job),
+    );
+    this.scheduler.registerHandler(
+      SHERDOG_ROUND_JOB_TYPE,
+      (job) => this.runRound(job),
+    );
+    // Pending jobs from the previous three-attempt ladder remain runnable
+    // across a deploy; newly scheduled boundaries use SHERDOG_ROUND_JOB_TYPE.
     for (const attempt of [1, 2, 3] as const) {
       this.scheduler.registerHandler(
         sherdogRoundJobType(attempt),
@@ -424,6 +458,9 @@ export class SherdogRoundJobs {
       (job) => this.runFinal(job),
     );
     this.unsubscribers.push(
+      this.eventBus.subscribe("FIGHT_STARTED", (event) => {
+        this.enqueueEvent(() => this.scheduleBaseline(event));
+      }),
       this.eventBus.subscribe("PROVISIONAL_ROUND_ENDED", (event) => {
         this.enqueueEvent(() => this.scheduleRound(event));
       }),
@@ -519,7 +556,30 @@ export class SherdogRoundJobs {
         this.histories.set(key, history);
       }
     }
+    const baselines = await this.storage.read<unknown>(
+      SHERDOG_BASELINES_STORAGE_STREAM,
+    );
+    this.baselines.clear();
+    for (const record of baselines) {
+      if (!isPersistedBaseline(record)) continue;
+      this.baselines.set(`${record.boutId}:${record.round}`, record.payloadHash);
+    }
     await this.quota.restore();
+  }
+
+  private async scheduleBaseline(
+    event: Extract<CollectorEvent, { type: "FIGHT_STARTED" }>,
+  ): Promise<void> {
+    await this.scheduler.schedule({
+      boutId: event.boutId,
+      round: 1,
+      jobType: SHERDOG_BASELINE_JOB_TYPE,
+      dueAt: this.clock.now(),
+      retryPolicy: {
+        delayMs: SHERDOG_BOUNDARY_POLL_INTERVAL_MS,
+        maxAttempts: 3,
+      },
+    });
   }
 
   private async scheduleRound(
@@ -528,16 +588,16 @@ export class SherdogRoundJobs {
       { type: "PROVISIONAL_ROUND_ENDED" | "ROUND_ENDED" }
     >,
   ): Promise<void> {
-    const now = this.clock.now();
-    for (const [index, delayMs] of SHERDOG_ROUND_ATTEMPT_DELAYS_MS.entries()) {
-      await this.scheduler.schedule({
-        boutId: event.boutId,
-        round: event.round,
-        jobType: sherdogRoundJobType((index + 1) as 1 | 2 | 3),
-        dueAt: now + delayMs,
-        retryPolicy: { delayMs: 0, maxAttempts: 1 },
-      });
-    }
+    await this.scheduler.schedule({
+      boutId: event.boutId,
+      round: event.round,
+      jobType: SHERDOG_ROUND_JOB_TYPE,
+      dueAt: this.clock.now() + SHERDOG_BOUNDARY_POLL_INTERVAL_MS,
+      retryPolicy: {
+        delayMs: SHERDOG_BOUNDARY_POLL_INTERVAL_MS,
+        maxAttempts: SHERDOG_BOUNDARY_MAX_ATTEMPTS,
+      },
+    });
   }
 
   private async scheduleFinal(
@@ -547,23 +607,37 @@ export class SherdogRoundJobs {
       boutId: event.boutId,
       round: event.round,
       jobType: SHERDOG_FINAL_JOB_TYPE,
-      dueAt: this.clock.now(),
-      retryPolicy: { delayMs: 0, maxAttempts: 1 },
+      dueAt: this.clock.now() + SHERDOG_BOUNDARY_POLL_INTERVAL_MS,
+      retryPolicy: {
+        delayMs: SHERDOG_BOUNDARY_POLL_INTERVAL_MS,
+        maxAttempts: SHERDOG_BOUNDARY_MAX_ATTEMPTS,
+      },
     });
+  }
+
+  private async captureBaseline(job: RoundJob): Promise<void> {
+    const snapshots = await this.fetchAndParse(job.boutId, "round", true);
+    if (snapshots.length === 0) {
+      throw new Error(`Sherdog has not published bout ${job.boutId}`);
+    }
+    const capturedAt = new Date(this.clock.now()).toISOString();
+    for (const snapshot of snapshots) {
+      const record: PersistedSherdogBaseline = {
+        version: 1,
+        boutId: job.boutId,
+        round: snapshot.round,
+        payloadHash: snapshot.payloadHash,
+        capturedAt,
+      };
+      await this.storage.append(SHERDOG_BASELINES_STORAGE_STREAM, record);
+      this.baselines.set(`${job.boutId}:${snapshot.round}`, snapshot.payloadHash);
+    }
   }
 
   private async runRound(job: RoundJob): Promise<void> {
     const observations = await this.fetchAndParse(job.boutId, "round");
     if (observations.length === 0) {
-      await this.review?.recordParserError({
-        source: "sherdog",
-        context: `round:${job.boutId}:${job.round}`,
-        error: "parser found no round headings",
-        localTimestamp: new Date(this.clock.now()).toISOString(),
-      });
-      throw new TerminalRoundJobError(
-        `Sherdog parser found no round headings for ${job.boutId}`,
-      );
+      throw new Error(`Sherdog has not reported round ${job.round} for ${job.boutId}`);
     }
     const observation = observations.find(
       (candidate) => candidate.round === job.round,
@@ -573,32 +647,43 @@ export class SherdogRoundJobs {
         `Sherdog round ${job.round} is absent for ${job.boutId}`,
       );
     }
+    if (
+      this.baselines.get(`${job.boutId}:${job.round}`) ===
+      observation.payloadHash
+    ) {
+      throw new Error(`Sherdog round ${job.round} still matches its pre-fight snapshot`);
+    }
     await this.observe(observation);
+    if (observation.scorerCards.length === 0) {
+      throw new Error(`Sherdog scores for round ${job.round} are not reported yet`);
+    }
   }
 
   private async runFinal(job: RoundJob): Promise<void> {
     const observations = await this.fetchAndParse(job.boutId, "final");
     if (observations.length === 0) {
-      await this.review?.recordParserError({
-        source: "sherdog",
-        context: `final:${job.boutId}`,
-        error: "final parser found no rounds",
-        localTimestamp: new Date(this.clock.now()).toISOString(),
-      });
-      throw new TerminalRoundJobError(
-        `Sherdog final parser found no rounds for ${job.boutId}`,
-      );
+      throw new Error(`Sherdog has not reported the final round for ${job.boutId}`);
     }
+    let targetReported = false;
     for (const observation of observations) {
       if (observation.round <= job.round) {
+        if (observation.round === job.round) {
+          targetReported =
+            this.baselines.get(`${job.boutId}:${job.round}`) !==
+            observation.payloadHash;
+        }
         await this.observe(observation);
       }
+    }
+    if (!targetReported) {
+      throw new Error(`Sherdog final round ${job.round} is not reported yet`);
     }
   }
 
   private async fetchAndParse(
     boutId: string,
     purpose: "round" | "final",
+    includePlaceholders = false,
   ): Promise<SherdogRoundObservation[]> {
     await this.restore();
     if (this.stopped) return [];
@@ -611,7 +696,7 @@ export class SherdogRoundJobs {
       );
     }
     if (!(await this.quota.tryAcquire("sherdog"))) {
-      throw new TerminalRoundJobError(
+      throw new Error(
         "Sherdog request interval has not elapsed; request was not attempted",
       );
     }
@@ -651,7 +736,7 @@ export class SherdogRoundJobs {
     // fighters to pick this bout's rounds out of it.
     const bout = this.getBout(boutId);
     try {
-      return await parseSherdogRoundObservations({
+      const input = {
         boutId,
         html: response.html,
         sourceUrl: response.sourceUrl,
@@ -667,7 +752,10 @@ export class SherdogRoundJobs {
                 blue: bout.fighters.blue.name,
               },
             }),
-      });
+      };
+      return includePlaceholders
+        ? await parseSherdogRoundSnapshots(input)
+        : await parseSherdogRoundObservations(input);
     } catch (error) {
       await this.review?.recordParserError({
         source: "sherdog",

@@ -36,7 +36,7 @@ export interface SherdogParserInput {
   fighterNames?: { red: string; blue: string };
 }
 
-export const parserVersion = "sherdog-live-blog-v3";
+export const parserVersion = "sherdog-live-blog-v4";
 export const SHERDOG_MAX_PAYLOAD_BYTES = 1_000_000;
 export const SHERDOG_MAX_COMMENTARY_LENGTH = 20_000;
 
@@ -243,7 +243,12 @@ function parseScorerCard(scoreText: string): SherdogScorerCard | undefined {
   };
 }
 
-export async function parseSherdogRoundObservations(
+/**
+ * Parses every round block, including Sherdog's empty pre-fight placeholders.
+ * Boundary polling uses these hashes as a bout-local baseline; normal callers
+ * should use parseSherdogRoundObservations(), which returns reported rounds.
+ */
+export async function parseSherdogRoundSnapshots(
   input: SherdogParserInput,
 ): Promise<SherdogRoundObservation[]> {
   if (
@@ -306,6 +311,20 @@ export async function parseSherdogRoundObservations(
         observation !== null,
     )
     .sort((left, right) => left.round - right.round);
+}
+
+export async function parseSherdogRoundObservations(
+  input: SherdogParserInput,
+): Promise<SherdogRoundObservation[]> {
+  return (await parseSherdogRoundSnapshots(input)).filter(
+    // Sherdog pre-renders every future round with empty scorer lines. A
+    // heading alone is therefore not evidence that the round was reported.
+    // Commentary also keeps finish rounds valid, since a bout that ends
+    // inside the round has no 10-9 cards.
+    (observation) =>
+      observation.commentary.length > 0 ||
+      observation.scorerCards.length > 0,
+  );
 }
 
 async function parseRoundUpdates(html: string, bout: Bout): Promise<RoundUpdate[]> {

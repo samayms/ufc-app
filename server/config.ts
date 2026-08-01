@@ -319,7 +319,7 @@ export function loadConfig(
       requestIntervalMs: parsePositiveInteger(
         env,
         "SHERDOG_REQUEST_INTERVAL_MS",
-        300_000,
+        10_000,
       ),
       baseUrl:
         env.SHERDOG_BASE_URL?.trim() || "https://www.sherdog.com",

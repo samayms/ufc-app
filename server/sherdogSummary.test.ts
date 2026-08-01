@@ -7,6 +7,8 @@ import type { RoundSummarizer } from "./geminiSummarizer.ts";
 import type { RoundJobClock, RoundJobTimer } from "./roundJobs.ts";
 import { RoundStatsPipeline } from "./roundStats.ts";
 import {
+  SHERDOG_OBSERVATIONS_STORAGE_STREAM,
+  SHERDOG_BOUNDARY_POLL_INTERVAL_MS,
   SherdogRoundJobs,
   type SherdogFetchResponse,
   type SherdogFetcher,
@@ -115,7 +117,7 @@ async function setup(
     summarizer,
     clock: time,
   });
-  return { eventBus, time, roundStats, jobs };
+  return { eventBus, storage, time, roundStats, jobs };
 }
 
 function roundEnded(eventBus: CollectorEventBus, round = 1): void {
@@ -132,20 +134,31 @@ describe("Sherdog round summaries", () => {
     const summarize = vi
       .fn<RoundSummarizer["summarize"]>()
       .mockResolvedValue("Reyes controls the round behind the jab.");
-    const { eventBus, time, roundStats, jobs } = await setup(
+    const { eventBus, storage, time, roundStats, jobs } = await setup(
       async () => response(html("Reyes jabs and circles all round.")),
       { summarize },
     );
 
     roundEnded(eventBus);
     await jobs.idle();
-    time.advance(15_000);
+    time.advance(SHERDOG_BOUNDARY_POLL_INTERVAL_MS);
     await jobs.idle();
 
     expect(jobs.getObservation(bout.id, 1)?.observation).toMatchObject({
       commentary: "Reyes jabs and circles all round.",
       aiSummary: "Reyes controls the round behind the jab.",
     });
+    await expect(
+      storage.read(SHERDOG_OBSERVATIONS_STORAGE_STREAM),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        value: expect.objectContaining({
+          observation: expect.objectContaining({
+            aiSummary: "Reyes controls the round behind the jab.",
+          }),
+        }),
+      }),
+    ]);
     await jobs.close();
     await roundStats.close();
   });
@@ -161,7 +174,7 @@ describe("Sherdog round summaries", () => {
 
     roundEnded(eventBus);
     await jobs.idle();
-    time.advance(15_000);
+    time.advance(SHERDOG_BOUNDARY_POLL_INTERVAL_MS);
     await jobs.idle();
 
     expect(summarize).toHaveBeenCalledWith({
@@ -188,12 +201,16 @@ describe("Sherdog round summaries", () => {
 
     roundEnded(eventBus);
     await jobs.idle();
-    // The three-attempt ladder re-reads the same unchanged page.
-    time.advance(15_000);
+    time.advance(SHERDOG_BOUNDARY_POLL_INTERVAL_MS);
     await jobs.idle();
-    time.advance(15_000);
+    eventBus.emit({
+      type: "FIGHT_ENDED",
+      boutId: bout.id,
+      round: 1,
+      detectedAt: "2026-07-28T00:01:00Z",
+    });
     await jobs.idle();
-    time.advance(30_000);
+    time.advance(SHERDOG_BOUNDARY_POLL_INTERVAL_MS);
     await jobs.idle();
 
     expect(summarize).toHaveBeenCalledTimes(1);
@@ -217,10 +234,17 @@ describe("Sherdog round summaries", () => {
 
     roundEnded(eventBus);
     await jobs.idle();
-    time.advance(15_000);
+    time.advance(SHERDOG_BOUNDARY_POLL_INTERVAL_MS);
     await jobs.idle();
     body = html("Reyes jabs, then drops Volkov late.");
-    time.advance(15_000);
+    eventBus.emit({
+      type: "FIGHT_ENDED",
+      boutId: bout.id,
+      round: 1,
+      detectedAt: "2026-07-28T00:01:00Z",
+    });
+    await jobs.idle();
+    time.advance(SHERDOG_BOUNDARY_POLL_INTERVAL_MS);
     await jobs.idle();
 
     expect(summarize).toHaveBeenCalledTimes(2);
@@ -239,7 +263,7 @@ describe("Sherdog round summaries", () => {
 
     roundEnded(eventBus);
     await jobs.idle();
-    time.advance(15_000);
+    time.advance(SHERDOG_BOUNDARY_POLL_INTERVAL_MS);
     await jobs.idle();
 
     const stored = jobs.getObservation(bout.id, 1)?.observation;
@@ -261,7 +285,7 @@ describe("Sherdog round summaries", () => {
 
     roundEnded(eventBus);
     await jobs.idle();
-    time.advance(15_000);
+    time.advance(SHERDOG_BOUNDARY_POLL_INTERVAL_MS);
     await jobs.idle();
 
     const stored = jobs.getObservation(bout.id, 1)?.observation;

@@ -23,7 +23,7 @@ describe("loadConfig", () => {
       oddsApiIoBookmakers: ["Bet365", "DraftKings"],
       sherdog: {
         permissionScope: "none",
-        requestIntervalMs: 300_000,
+        requestIntervalMs: 10_000,
         baseUrl: "https://www.sherdog.com",
       },
       roundSummary: {
