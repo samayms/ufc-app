@@ -180,20 +180,19 @@ export function collectorSnapshotIsStale(
 }
 
 /**
- * The fixture is only ever a loading placeholder for the instant it takes an
- * SSE connection to deliver its first real bootstrap. Once the collector has
+ * Fixtures may be used as a local-development placeholder, but production
+ * must wait for its real collector bootstrap. Once the collector has
  * delivered real data even once, a later `null` (a reconnect that hasn't
- * re-bootstrapped yet) must not silently fall back to fixture odds — that
- * would show fake prices as though they were live. `hasReceivedLiveData`
- * lets the caller track that one-way transition.
+ * re-bootstrapped yet) must not silently fall back to fixture odds.
  */
 export function resolveDashboardData(
   fixture: DashboardState,
   snapshot: CollectorSnapshot,
   hasReceivedLiveData: boolean,
+  allowFixtureFallback = true,
 ): DashboardState | null {
   if (snapshot.dashboard !== null) return snapshot.dashboard;
-  return hasReceivedLiveData ? null : fixture;
+  return hasReceivedLiveData || !allowFixtureFallback ? null : fixture;
 }
 
 export function useDashboard(): DashboardLoadState {
@@ -233,14 +232,19 @@ export function useDashboard(): DashboardLoadState {
         if (cancelled) return;
         const fixture =
           demo === "live" ? applyLiveDemo(next) : next;
+        const collectorEnabled =
+          demo === "default" &&
+          !collectorDisabled(window.location.search);
+        const allowFixtureFallback = !import.meta.env.PROD;
         setState({
-          status: "ready",
-          data: fixture,
+          status:
+            collectorEnabled && !allowFixtureFallback ? "loading" : "ready",
+          data:
+            collectorEnabled && !allowFixtureFallback ? null : fixture,
           stale: demo === "stale",
         });
 
-        if (demo !== "default") return;
-        if (collectorDisabled(window.location.search)) return;
+        if (!collectorEnabled) return;
 
         const collector = createCollectorClient();
         let hasReceivedLiveData = false;
@@ -251,11 +255,12 @@ export function useDashboard(): DashboardLoadState {
             fixture,
             snapshot,
             hasReceivedLiveData,
+            allowFixtureFallback,
           );
           setState((current) => ({
-            status: "ready",
+            status: data === null ? "loading" : "ready",
             data,
-            stale: data === null || collectorSnapshotIsStale(snapshot),
+            stale: data !== null && collectorSnapshotIsStale(snapshot),
             collector: snapshot,
             ...(current.message === undefined
               ? {}

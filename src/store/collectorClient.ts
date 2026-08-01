@@ -1352,11 +1352,14 @@ function upsertRound(
   );
 }
 
-export function collectorBaseUrl(explicit?: string): string {
+export function collectorBaseUrl(
+  explicit?: string,
+  production = import.meta.env.PROD,
+): string {
   const configured =
     explicit ??
     import.meta.env.VITE_COLLECTOR_URL ??
-    `http://localhost:${DEFAULT_COLLECTOR_PORT}`;
+    (production ? "" : `http://localhost:${DEFAULT_COLLECTOR_PORT}`);
   return configured.replace(/\/+$/, "");
 }
 

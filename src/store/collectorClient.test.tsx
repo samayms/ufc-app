@@ -5,6 +5,7 @@ import { CREDENTIAL_ENV_NAMES } from "../../server/config.ts";
 import { DeliveryFreshness } from "../ui/DeliveryFreshness.tsx";
 import { SourceStatus } from "../ui/SourceStatus.tsx";
 import {
+  collectorBaseUrl,
   createCollectorClient,
   getCollectorMarketDelivery,
   getCollectorRoundDelivery,
@@ -144,6 +145,13 @@ function roundRecord(
 }
 
 describe("collector browser client", () => {
+  it("uses same-origin collector routes in production", () => {
+    expect(collectorBaseUrl(undefined, true)).toBe("");
+    expect(collectorBaseUrl("https://collector.test/", true)).toBe(
+      "https://collector.test",
+    );
+  });
+
   it("keeps the fixture dashboard unchanged when the collector is unavailable", async () => {
     const fixture = await assembleDashboard();
     const client = createCollectorClient({
@@ -162,6 +170,8 @@ describe("collector browser client", () => {
     // Never having received real data yet is a loading state — the fixture
     // is a reasonable instant-paint placeholder for it.
     expect(resolveDashboardData(fixture, snapshot, false)).toBe(fixture);
+    // Production must never show a fake card while waiting for live data.
+    expect(resolveDashboardData(fixture, snapshot, false, false)).toBeNull();
     // Once the collector delivered real data at least once, a later null
     // must never fall back to the fixture — that would show fake prices as
     // though they were live.
