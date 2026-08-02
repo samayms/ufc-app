@@ -115,61 +115,9 @@ function cornerClassName(corner: "red" | "blue" | undefined): string | undefined
   return undefined;
 }
 
-/**
- * Finds the run of words in `fullName` (diacritics intact) that normalizes to
- * `token`. Tries the trailing N words first, where N is the token's own word
- * count — this is right for both single names ("Rakic" -> "Rakić") and
- * multi-word surnames ("Machado Garry" -> "Machado Garry" out of "Ian
- * Machado Garry"). Falls back to scanning every contiguous window, then to
- * the bare last name if nothing normalizes to an exact match.
- */
-function bestNameMatch(token: string, fullName: string): string {
-  const words = fullName.split(/\s+/).filter((word) => word.length > 0);
-  const tokenWordCount = token.split(/\s+/).filter((word) => word.length > 0).length;
-
-  if (tokenWordCount > 0 && tokenWordCount <= words.length) {
-    const suffix = words.slice(words.length - tokenWordCount).join(" ");
-    if (normalizeNameToken(suffix) === token) return suffix;
-  }
-
-  for (let start = 0; start < words.length; start += 1) {
-    for (let length = 1; start + length <= words.length; length += 1) {
-      const candidate = words.slice(start, start + length).join(" ");
-      if (normalizeNameToken(candidate) === token) return candidate;
-    }
-  }
-
-  return words.at(-1) ?? fullName;
-}
-
-/**
- * Sherdog's `winner` string is the diacritic-stripped spelling; the fighter's
- * own name in bout data carries the real accents ("Rakić", "Medić"). Once a
- * corner is matched, display that fighter's own spelling instead of
- * Sherdog's token. Unmatched names have no corner to borrow a spelling from,
- * so they render as-is.
- */
-function resolveWinnerDisplay(
-  winner: string,
-  fighters: { red: string; blue: string },
-): { text: string; corner: "red" | "blue" | undefined } {
-  const corner = matchWinnerCorner(winner, fighters);
-  if (corner === undefined) return { text: winner, corner: undefined };
-  return { text: bestNameMatch(normalizeNameToken(winner), fighters[corner]), corner };
-}
-
-function WinnerName({
-  name,
-  fighters,
-}: {
-  name: string;
-  fighters: { red: string; blue: string };
-}) {
-  const { text, corner } = resolveWinnerDisplay(name, fighters);
-  const className = ["scorecard-judge-winner", cornerClassName(corner)]
-    .filter(Boolean)
-    .join(" ");
-  return <span className={className}>{text}</span>;
+/** Last name only, for the compact winner tag ("Aleksandar Rakić" -> "Rakić"). */
+function lastName(fullName: string): string {
+  return fullName.trim().split(/\s+/).at(-1) ?? fullName;
 }
 
 /** One judge's scored rounds, keyed by round number, round-ascending. */
@@ -181,6 +129,51 @@ interface JudgeRoundEntry {
 interface JudgeTotal {
   scorer: string;
   entries: JudgeRoundEntry[];
+}
+
+/** Splits a "10-9" style score into its two numbers, corner-attributed via `winner`. */
+function cornerScore(
+  score: string,
+  winner: string | undefined,
+  fighters: { red: string; blue: string },
+): { red: number; blue: number } | undefined {
+  const parts = score.trim().split(/\s*[-–—]\s*/u).map(Number);
+  if (parts.length !== 2 || parts.some((part) => Number.isNaN(part))) return undefined;
+  const [high = 0, low = 0] = parts;
+  const corner = matchWinnerCorner(winner, fighters);
+  if (corner === "red") return { red: high, blue: low };
+  if (corner === "blue") return { red: low, blue: high };
+  return undefined;
+}
+
+/**
+ * The running score through the boundary round. Prefers Sherdog's own
+ * cumulativeScore when the latest bounded round carried one (parsed the same
+ * corner-attributed way); otherwise sums every bounded round's own score,
+ * since Sherdog doesn't always post a running cumulative each round.
+ */
+function runningScore(
+  entries: readonly JudgeRoundEntry[],
+  fighters: { red: string; blue: string },
+): { red: number; blue: number } | undefined {
+  const latest = entries.at(-1);
+  if (latest?.card.cumulativeScore !== undefined) {
+    const parsed = cornerScore(latest.card.cumulativeScore, latest.card.winner, fighters);
+    if (parsed !== undefined) return parsed;
+  }
+
+  let red = 0;
+  let blue = 0;
+  let any = false;
+  for (const entry of entries) {
+    if (entry.card.roundScore === undefined) continue;
+    const parsed = cornerScore(entry.card.roundScore, entry.card.winner, fighters);
+    if (parsed === undefined) continue;
+    red += parsed.red;
+    blue += parsed.blue;
+    any = true;
+  }
+  return any ? { red, blue } : undefined;
 }
 
 function groupByJudge(
@@ -270,11 +263,13 @@ export function ScorecardFeed({
   const rows = judges
     .map((judge) => {
       const boundedEntries = judge.entries.filter((entry) => entry.round <= boundary);
-      const latest = boundedEntries.at(-1);
-      if (latest === undefined) return undefined;
-      return { judge, latest };
+      if (boundedEntries.length === 0) return undefined;
+      return { judge, boundedEntries };
     })
-    .filter((row): row is { judge: JudgeTotal; latest: JudgeRoundEntry } => row !== undefined);
+    .filter(
+      (row): row is { judge: JudgeTotal; boundedEntries: JudgeRoundEntry[] } =>
+        row !== undefined,
+    );
 
   if (rows.length === 0) return null;
 
@@ -284,20 +279,37 @@ export function ScorecardFeed({
       aria-label={allRounds ? "Sherdog scorecards" : `Sherdog scorecards through round ${boundary}`}
     >
       <ul className="scorecard-list">
-        {rows.map(({ judge, latest }) => {
-          const bigScore = latest.card.cumulativeScore ?? latest.card.roundScore;
+        {rows.map(({ judge, boundedEntries }) => {
+          const totals = runningScore(boundedEntries, fighters);
+          const winnerCorner =
+            totals === undefined
+              ? undefined
+              : totals.red === totals.blue
+                ? undefined
+                : totals.red > totals.blue
+                  ? "red"
+                  : "blue";
+          // Leader's number first, matching the "10-9" convention used for round scores.
+          const totalsText =
+            totals === undefined
+              ? undefined
+              : winnerCorner === "blue"
+                ? `${totals.blue}-${totals.red}`
+                : `${totals.red}-${totals.blue}`;
           return (
             <li className="scorecard-judge" key={judge.scorer}>
               <div className="scorecard-judge-header">
                 <ScorerAvatar scorer={judge.scorer} profiles={scorerProfiles} />
                 <strong className="scorecard-judge-name">{judge.scorer}</strong>
-                {bigScore !== undefined && (
-                  <span className="scorecard-judge-score num" title={bigScore}>
-                    {formatScore(bigScore)}
+                {totalsText !== undefined && (
+                  <span className="scorecard-judge-score num" title={totalsText}>
+                    {formatScore(totalsText)}
                   </span>
                 )}
-                {latest.card.winner && (
-                  <WinnerName name={latest.card.winner} fighters={fighters} />
+                {winnerCorner !== undefined && (
+                  <span className={`scorecard-judge-winner ${cornerClassName(winnerCorner)}`}>
+                    {lastName(fighters[winnerCorner])}
+                  </span>
                 )}
               </div>
               <div

@@ -223,8 +223,8 @@
   display: flex;
   align-items: stretch;
   padding:
-    1px max(8px, env(safe-area-inset-right))
-    max(1px, env(safe-area-inset-bottom))
+    8px max(8px, env(safe-area-inset-right))
+    max(6px, env(safe-area-inset-bottom))
     max(8px, env(safe-area-inset-left));
   border-top: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface) 96%, transparent);
@@ -232,7 +232,7 @@
 
 .bottom-nav-item {
   min-width: 0;
-  min-height: 24px;
+  min-height: 32px;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1275,6 +1275,13 @@
   white-space: nowrap;
 }
 
+/* Higher specificity than .corner-red/.corner-blue alone so the fighter's
+   corner color always wins here, regardless of stylesheet order. */
+.scorecard-judge-winner.corner-red,
+.scorecard-judge-winner.corner-blue {
+  color: inherit;
+}
+
 .scorecard-round-grid {
   display: grid;
   gap: 5px;
@@ -2265,11 +2272,11 @@
   }
 
   .bottom-nav {
-    padding-top: 1px;
+    padding-top: 5px;
   }
 
   .bottom-nav-item {
-    min-height: 18px;
+    min-height: 26px;
     gap: 2px;
   }
 

@@ -99,7 +99,9 @@ describe("ScorecardFeed", () => {
     expect(markup).not.toContain("scorecard-round-chip-empty");
   });
 
-  it("falls back to the latest round's own score as the headline when no round ever carried a cumulative", () => {
+  it("sums each round's own corner-attributed score into a running total when no round ever carried a cumulative", () => {
+    // Round 1: 10-9 Rakic (red). Round 2: 9-10 Tybura (blue) -> 10 for red, 9 for blue.
+    // Running total after round 2 should be 20-18, not round 2's bare "9-10".
     const records = [
       unifiedRound(1, [{ scorer: "Brian Knapp", winner: "Rakic", roundScore: "10-9" }]),
       unifiedRound(2, [{ scorer: "Brian Knapp", winner: "Tybura", roundScore: "9-10" }]),
@@ -109,7 +111,20 @@ describe("ScorecardFeed", () => {
       <ScorecardFeed view={view} records={records} allRounds />,
     );
 
-    expect(markup).toContain('class="scorecard-judge-score num" title="9-10">9 - 10<');
+    expect(markup).toContain('class="scorecard-judge-score num" title="20-18">20 - 18<');
     expect((markup.match(/scorecard-round-chip-empty/gu) ?? []).length).toBe(1);
+  });
+
+  it("shows the running total (not the round's bare score) when a specific round is selected mid-fight", () => {
+    const records = [
+      unifiedRound(1, [{ scorer: "Brian Knapp", winner: "Rakic", roundScore: "10-9" }]),
+      unifiedRound(2, [{ scorer: "Brian Knapp", winner: "Rakic", roundScore: "10-9" }]),
+    ];
+
+    const markup = renderToStaticMarkup(
+      <ScorecardFeed view={view} records={records} round={2} />,
+    );
+
+    expect(markup).toContain('class="scorecard-judge-score num" title="20-18">20 - 18<');
   });
 });
