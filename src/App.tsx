@@ -213,7 +213,22 @@ export default function App() {
         ? backToEventList
         : undefined;
 
-  useSwipeBack(mainContentRef, activeBackHandler, underlayRef);
+  // A swipe gesture already performs its own finger-tracked slide (see
+  // useSwipeBack) — by the time it calls this, the underlay has already
+  // visually settled into the new screen's exact final position. Without
+  // suppressing it here, ScreenTransition's key-change remount would then
+  // play its own slide-in keyframe on top of that, reading as a second,
+  // redundant "loading" animation right after the gesture already finished.
+  // The back BUTTON has no such gesture to hand off from, so it keeps using
+  // activeBackHandler directly and still gets the normal slide-in.
+  const swipeBackHandler = activeBackHandler
+    ? () => {
+        forcedScreenDirectionRef.current = "none";
+        activeBackHandler();
+      }
+    : undefined;
+
+  useSwipeBack(mainContentRef, swipeBackHandler, underlayRef);
 
   // Screen key/direction for ScreenTransition's slide animation. Computed
   // here (above the loading/error early returns, like activeBackHandler
@@ -433,13 +448,23 @@ export default function App() {
   // (the current event's own CardRail) for the underlay, since swipe-back
   // never targets an arbitrary ESPN future-event id — but it stays correct
   // for any `virtualSelection` since it's also what drives the live render.
-  const renderEventScreen = (virtualSelection: string | null) => {
+  const renderEventScreen = (
+    virtualSelection: string | null,
+    // Drops the id/aria-labelledby pairing for the swipe-back underlay's
+    // copy — otherwise, while it's mounted alongside the live main content
+    // (both call this same function), the page ends up with two elements
+    // sharing id="card-title", which is invalid HTML even though the
+    // underlay's own aria-hidden="true" wrapper already keeps it out of the
+    // accessibility tree.
+    forUnderlay = false,
+  ) => {
+    const titleId = forUnderlay ? undefined : "card-title";
     if (virtualSelection === null) {
       return (
-        <section className="card-screen" aria-labelledby="card-title">
+        <section className="card-screen" aria-labelledby={titleId}>
           <div className="page-heading">
             <div>
-              <h2 id="card-title" className="events-title">Events</h2>
+              <h2 id={titleId} className="events-title">Events</h2>
             </div>
           </div>
           {upcomingEspn.status === "error" && (
@@ -480,11 +505,11 @@ export default function App() {
             )
           : undefined;
     return (
-      <section className="card-screen" aria-labelledby="card-title">
+      <section className="card-screen" aria-labelledby={titleId}>
         <div className="page-heading">
           <div>
             <span className="page-kicker">Bout order</span>
-            <h2 id="card-title" className="event-title">
+            <h2 id={titleId} className="event-title">
               {virtualSelection === event.id
                 ? event.name
                 : (espnCard.card?.name ?? "Event card")}
@@ -527,9 +552,17 @@ export default function App() {
   // if any — undefined means there's no swipe-revealable underlay for the
   // current screen (e.g. the Data tab, or the Fight tab's jump-back case,
   // which isn't covered by this underlay yet).
+  //
+  // backToEventFromFight's own logic (above) keeps scheduleSelection as-is
+  // when it's already set — a fight opened from a drilled-in *upcoming*
+  // event leaves scheduleSelection pointing at that event, not the live
+  // one — and only falls back to the live event when scheduleSelection was
+  // null. Hardcoding event.id here (instead of mirroring that same
+  // fallback) always showed the live event's own card in the underlay
+  // regardless of which event the fight actually belonged to.
   const swipeUnderlaySelection: string | null | undefined =
     activeBackHandler === backToEventFromFight
-      ? event.id
+      ? (scheduleSelection ?? event.id)
       : activeBackHandler === backToEventList
         ? null
         : undefined;
@@ -567,7 +600,7 @@ export default function App() {
         )}
         {swipeUnderlaySelection !== undefined && (
           <div className="app-content-underlay" ref={underlayRef} aria-hidden="true">
-            {renderEventScreen(swipeUnderlaySelection)}
+            {renderEventScreen(swipeUnderlaySelection, true)}
           </div>
         )}
         <main className="app-content" id="main-content" ref={mainContentRef}>
