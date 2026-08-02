@@ -38,6 +38,7 @@ export function useSwipeBack(
   const startRef = useRef<SwipePoint | null>(null);
   const committedRef = useRef(false);
   const lastPointRef = useRef<SwipePoint | null>(null);
+  const startScrollTopRef = useRef(0);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
 
@@ -63,6 +64,7 @@ export function useSwipeBack(
       startRef.current = { x: touch.clientX, y: touch.clientY };
       lastPointRef.current = startRef.current;
       committedRef.current = false;
+      startScrollTopRef.current = el.scrollTop;
       el.style.transition = "none";
       const underlay = underlayRef?.current;
       if (underlay) underlay.style.transition = "none";
@@ -82,6 +84,16 @@ export function useSwipeBack(
         if (!isHorizontalDragCommit(dx, dy)) return;
         if (dx <= 0) return;
         committedRef.current = true;
+        // Up to this point, touchmove events weren't preventDefault'd yet
+        // (the gesture wasn't classified as horizontal until just now), so
+        // the browser's own vertical scroll handling ran normally for
+        // those first few pixels of ambiguous movement — even a mostly-
+        // horizontal swipe rarely has exactly zero vertical component,
+        // which nudged .app-content's scrollTop by a few px before this
+        // code ever touched it. Undo that one-time drift right as we take
+        // over, so the rest of the gesture starts from the true original
+        // position instead of a slightly-scrolled one.
+        el.scrollTop = startScrollTopRef.current;
       }
 
       // Committed to a horizontal back-swipe — stop the page's own vertical

@@ -306,14 +306,23 @@ export default function App() {
     setTab("fight");
   };
 
-  // Just switches tabs — the Fight tab keeps showing whichever bout (live
-  // or a specific selectedFutureFight) was already selected, same as the
-  // Event tab keeps its own drill state, regardless of how many times you
-  // tap away and back. Previously also cleared selectedFutureFight
-  // unconditionally, which fired even when re-tapping the tab you were
-  // already on and evicted you from the exact future fight you'd drilled
-  // into, back to the live event's default bout.
+  // Tapping "Fight" always jumps to whichever bout in the current live
+  // event finished most recently (lowest cardPosition among final bouts —
+  // the card airs from the highest cardPosition down to the main event, so
+  // that's the last one to finish); if nothing's finished yet, it falls
+  // through to the normal live/default bout instead. Every other tab just
+  // switches, keeping whatever it was already showing.
   const handleNavTabChange = (next: AppTab) => {
+    if (next === "fight") {
+      const mostRecentCompleted = event.bouts
+        .filter((bout) => bout.status === "final")
+        .sort((a, b) => a.cardPosition - b.cardPosition)[0];
+      if (mostRecentCompleted) {
+        setSelected(mostRecentCompleted.id);
+        setSection("summary");
+        setSelectedFutureFight(null);
+      }
+    }
     setTab(next);
   };
 
