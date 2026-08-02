@@ -306,14 +306,15 @@ export default function App() {
     setTab("fight");
   };
 
-  // Bottom nav is the only "start fresh" entry point — clears any
-  // drill-down/back-arrow state left over from the Event tab. Tapping a tab
-  // you're already on is a no-op beyond that: it stays on whichever bout
-  // (or event, or screen) was already showing, same as switching to any
-  // other tab and back does.
+  // Just switches tabs — the Fight tab keeps showing whichever bout (live
+  // or a specific selectedFutureFight) was already selected, same as the
+  // Event tab keeps its own drill state, regardless of how many times you
+  // tap away and back. Previously also cleared selectedFutureFight
+  // unconditionally, which fired even when re-tapping the tab you were
+  // already on and evicted you from the exact future fight you'd drilled
+  // into, back to the live event's default bout.
   const handleNavTabChange = (next: AppTab) => {
     setTab(next);
-    setSelectedFutureFight(null);
   };
 
   const mainBout = event.bouts.find((bout) => bout.cardPosition === 1);

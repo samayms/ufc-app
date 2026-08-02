@@ -113,6 +113,13 @@ export function useSwipeBack(
         }
         window.setTimeout(() => {
           resetStyles();
+          // App.tsx's own scroll-reset effect (keyed on the navigation
+          // state) would also do this, but only after the state update
+          // below commits and that effect gets scheduled — a visible gap
+          // during which the new (already-revealed) screen briefly sits at
+          // the OLD screen's scroll offset, then jumps to top. Doing it
+          // here, synchronously before that state update, closes the gap.
+          el.scrollTop = 0;
           onBackRef.current?.();
         }, COMPLETE_MS);
       } else {
