@@ -94,38 +94,25 @@
   box-sizing: border-box;
 }
 
-/* Locked to the viewport, not just min-height'd to it — .app-content is the
- * only element allowed to scroll. Without this, html/body can end up a
- * hair taller than the visual viewport (dvh/vh rounding, the address-bar
- * show/hide transition) and become scrollable themselves, which drags the
- * whole .app — including the fixed top bar and bottom nav — with it on an
- * iOS rubber-band pull instead of just bouncing the inner content.
- *
- * body uses `position: fixed; inset: 0` rather than `height: 100%` —
- * percentage heights on html/body resolve against iOS Safari's *layout*
- * viewport, which can disagree with the *visual* viewport .app's own
- * `100dvh` tracks (most visibly while the address bar is animating in/out).
- * A mismatch there, combined with `overflow: hidden`, silently clips
- * whatever falls outside body's box — in practice the bottom nav, since
- * it's the last child in .app's column. `position: fixed; inset: 0` pins
- * body to the true visual viewport instead, so it can never disagree with
- * .app's own sizing. */
-html {
-  height: 100%;
-  overflow: hidden;
+/* Deliberately does NOT force html/body/#root to a specific height or
+ * position — an earlier attempt at that (height: 100% + overflow: hidden,
+ * then position: fixed + inset: 0) was meant to stop the iOS rubber-band
+ * pull, but ended up clipping the bottom nav on real devices instead:
+ * percentage/fixed sizing on html/body can disagree with .app's own
+ * `100dvh` (src/ui/dashboard.css's `.app` rule) by exactly the height of
+ * one flex child, and whichever child lands outside that mismatch gets
+ * cut off by `overflow: hidden` — in practice the bottom nav, since it's
+ * .app's last child. `.app` already declares `height: 100dvh; overflow:
+ * hidden` itself and is the page's only real content, so html/body never
+ * need their own height or overflow rule to stay exactly viewport-sized —
+ * they just need to refuse to hand a scroll gesture up to the OS, which
+ * `overscroll-behavior: none` alone does, with no sizing side effects. */
+html,
+body {
   overscroll-behavior: none;
-}
-
-#root {
-  height: 100%;
 }
 
 body {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  overflow: hidden;
-  overscroll-behavior: none;
   margin: 0;
   background: var(--bg);
   color: var(--text);
