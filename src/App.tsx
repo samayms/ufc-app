@@ -696,6 +696,7 @@ export default function App() {
                 view={entryView}
                 records={dashboard.collector?.unifiedRounds ?? []}
                 round={resolveRound(entryView, entryRound)}
+                allRounds={entryRound === "total"}
               />
             </>
           )}

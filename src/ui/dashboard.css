@@ -1248,18 +1248,11 @@
 .media-scorecard-name {
   overflow: hidden;
   font-family: var(--font-display);
-  font-size: 0.94rem;
+  /* The design system's `title` step. Bigger than the 0.94rem this used to
+     be — the judge's name is the row's subject, not a caption for the
+     score. */
+  font-size: 1.125rem;
   font-weight: 600;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.media-scorecard-handle {
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: 0.64rem;
-  letter-spacing: 0.02em;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1278,10 +1271,25 @@
   white-space: nowrap;
 }
 
+/* Round score and the winner's name sit on one line; the cumulative total (if any) goes below. */
+.media-scorecard-round-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* Total mode: every round's score, comma-joined, above the final cumulative line. */
+.media-scorecard-rounds {
+  max-width: 22ch;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
 .media-scorecard-winner {
   max-width: 14ch;
   overflow: hidden;
-  color: var(--text-muted);
   font-family: var(--font-body);
   font-size: 0.67rem;
   font-weight: 500;
@@ -2214,11 +2222,9 @@
   }
 
   .media-scorecard-name {
-    font-size: 0.78rem;
-  }
-
-  .media-scorecard-handle {
-    font-size: 0.62rem;
+    /* The `body` step: the phone is where these rows are actually read, so
+       this override stays on the ramp rather than shrinking off it. */
+    font-size: 0.9375rem;
   }
 
   .media-scorecard-score {
