@@ -97,24 +97,20 @@ export function FightSummary({
   }));
   const hasStats = rows.some((row) => row.red != null || row.blue != null);
   const summary = preferredSummary(view, selection);
-  const selectionLabel =
-    selection === "total" ? "Fight totals" : `Round ${selection}`;
 
   return (
     <div className="fight-summary">
-      <section className="compact-stats" aria-label={`${selectionLabel} statistics`}>
-        <div className="compact-stats-head">
-          <span>{selectionLabel}</span>
-          {!hasStats ? (
-            <span className="freshness">awaiting completed-round stats</span>
-          ) : null}
-        </div>
+      <section className="compact-stats" aria-label="Round statistics">
         {hasStats ? (
           <div className="compact-stat-list">
             {rows.map((row) => {
               const red = row.red ?? 0;
               const blue = row.blue ?? 0;
-              const total = Math.max(red + blue, 1);
+              // Proportional to the larger side, not to the total — a lopsided
+              // stat reads as a near-empty bar on one side and a full bar on
+              // the other, matching the handed-off design, rather than the
+              // two sides always summing to a full-width bar.
+              const max = Math.max(red, blue, 1);
               const redDisplay = row.format
                 ? row.format(red)
                 : row.redTotal != null
@@ -128,11 +124,11 @@ export function FightSummary({
               return (
                 <div className="compact-stat" key={row.key}>
                   <div className="compact-stat-values">
-                    <span className={`num${red >= blue ? " corner-red" : ""}`}>
+                    <span className={`num${red > 0 && red >= blue ? " stat-lead" : ""}`}>
                       {redDisplay}
                     </span>
                     <span>{row.label}</span>
-                    <span className={`num${blue >= red ? " corner-blue" : ""}`}>
+                    <span className={`num${blue > 0 && blue >= red ? " stat-lead" : ""}`}>
                       {blueDisplay}
                     </span>
                   </div>
@@ -140,13 +136,13 @@ export function FightSummary({
                     <span>
                       <i
                         className="compact-bar-red"
-                        style={{ width: `${(red / total) * 100}%` }}
+                        style={{ width: red > 0 ? `${(red / max) * 100}%` : "0%" }}
                       />
                     </span>
                     <span>
                       <i
                         className="compact-bar-blue"
-                        style={{ width: `${(blue / total) * 100}%` }}
+                        style={{ width: blue > 0 ? `${(blue / max) * 100}%` : "0%" }}
                       />
                     </span>
                   </div>

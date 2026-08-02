@@ -858,9 +858,17 @@
 
 .compact-stat-values > span:first-child,
 .compact-stat-values > span:last-child {
+  color: var(--text-ghost);
   font-family: "Barlow Condensed", sans-serif;
-  font-size: 0.76rem;
+  font-size: 14px;
   font-weight: 600;
+}
+
+/* The leading side of a stat (or a tie, when both sides have a real value)
+ * reads bright; the trailing side stays dim. Bar color, not text color,
+ * carries which corner it belongs to. */
+.compact-stat-values > span.stat-lead {
+  color: var(--text);
 }
 
 .compact-stat-values > span:nth-child(2) {
@@ -883,15 +891,15 @@
 .compact-stat-bars {
   display: flex;
   gap: 3px;
-  margin-top: 3px;
+  margin-top: 5px;
 }
 
 .compact-stat-bars > span {
-  height: 4px;
+  height: 3px;
   flex: 1;
   display: flex;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: 2px;
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
