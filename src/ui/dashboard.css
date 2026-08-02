@@ -359,6 +359,19 @@
   letter-spacing: 0;
 }
 
+.tot-nickname {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  font-style: italic;
+  line-height: 1.1;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tot-record {
   color: var(--text-faint);
   font-size: 0.57rem;
@@ -789,7 +802,7 @@
 
 .compact-stats-head > span:first-child {
   color: var(--text-muted);
-  font-family: var(--font-display);
+  font-family: "Barlow Condensed", sans-serif;
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.09em;
@@ -798,7 +811,7 @@
 
 .freshness {
   color: var(--text-faint);
-  font-family: var(--font-display);
+  font-family: "Barlow", sans-serif;
   font-size: 0.66rem;
   font-weight: 600;
   letter-spacing: 0.07em;
@@ -845,6 +858,7 @@
 
 .compact-stat-values > span:first-child,
 .compact-stat-values > span:last-child {
+  font-family: "Barlow Condensed", sans-serif;
   font-size: 0.76rem;
   font-weight: 600;
 }
@@ -852,7 +866,7 @@
 .compact-stat-values > span:nth-child(2) {
   overflow: hidden;
   color: var(--text-muted);
-  font-family: var(--font-stat-label);
+  font-family: "Barlow", sans-serif;
   font-size: 0.6rem;
   font-weight: 400;
   letter-spacing: 0.06em;
@@ -934,6 +948,7 @@
   overflow: hidden;
   margin: 0;
   color: var(--text-muted);
+  font-family: "Barlow", sans-serif;
   font-size: 0.76rem;
   line-height: 1.45;
   -webkit-box-orient: vertical;
@@ -1696,95 +1711,74 @@
 
 /* Tale and form --------------------------------------------------------- */
 
-.profile-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 9px;
-}
-
-.profile {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.profile-blue {
-  align-items: flex-end;
-  text-align: right;
-}
-
-.profile h3 {
-  overflow: hidden;
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-record {
-  margin-top: 3px;
-  font-size: 0.64rem;
-}
-
-.profile-nick {
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: 0.62rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-ranking {
-  overflow: hidden;
-  color: var(--text-faint);
-  font-size: 0.62rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-vs {
-  color: var(--text-ghost);
-  font-family: var(--font-data);
-  font-size: 0.55rem;
+.profile-panel {
+  padding: 4px 14px;
 }
 
 .profile-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  padding: 5px 0;
+  padding: 6px 0;
   border-top: 1px solid var(--border);
 }
 
 /* When a stat-row list opens a panel with nothing above it (e.g. no fight
  * outlook to divide from), the first row's divider line has nothing to
  * divide and reads as a stray line under the panel's own top edge. */
-.profile-rows--leading .profile-row:first-child {
+.profile-rows--leading > .profile-row:first-child,
+.profile-rows--leading > .profile-row-block:first-child .profile-row {
   border-top: none;
 }
 
 .profile-row > span {
   overflow: hidden;
-  font-size: 0.66rem;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .profile-row > span:nth-child(2) {
   color: var(--text-faint);
-  font-family: var(--font-stat-label);
-  font-size: 0.57rem;
-  letter-spacing: 0.05em;
-  text-transform: none;
+  font-family: "Barlow", sans-serif;
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .profile-row > span:last-child {
   text-align: right;
+}
+
+/* Career-average stat rows (Tale tab): the row itself reuses .profile-row,
+ * with a neutral progress-bar pair underneath standing in for the
+ * proportional bars until a real per-stat data source exists. */
+.profile-row-bars {
+  display: flex;
+  gap: 3px;
+  margin: -2px 0 6px;
+}
+
+.profile-row-bar-red,
+.profile-row-bar-blue {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.profile-rows-empty {
+  margin: 0;
+  padding-top: 10px;
+  color: var(--text-ghost);
+  font-family: "Barlow", sans-serif;
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-align: center;
 }
 
 .form-grid {
@@ -1794,9 +1788,12 @@
 }
 
 .form-col h3 {
-  margin: 0 0 7px;
-  font-family: var(--font-display);
-  font-size: 0.8rem;
+  margin: 0 0 8px;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .form-red {
@@ -1815,8 +1812,9 @@
 .form-list li {
   min-width: 0;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 5px;
+  font-family: "Barlow", sans-serif;
   font-size: 0.62rem;
 }
 
@@ -1825,14 +1823,18 @@
 }
 
 .form-result {
-  width: 20px;
+  width: 15px;
+  height: 15px;
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 4px;
   color: var(--text-muted);
   background: var(--surface-3);
-  font-family: var(--font-data);
-  font-size: 0.52rem;
-  font-weight: 600;
+  font-family: "Barlow", sans-serif;
+  font-size: 8px;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -1849,6 +1851,9 @@
 .form-opp {
   min-width: 0;
   overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1856,7 +1861,10 @@
 .form-method {
   flex: none;
   color: var(--text-faint);
-  font-size: 0.5rem;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 /* Event card ------------------------------------------------------------ */

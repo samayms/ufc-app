@@ -322,14 +322,16 @@
 
 .outlook-heading {
   color: var(--text-faint);
-  font-family: var(--font-data);
+  font-family: "Barlow", sans-serif;
   font-size: 0.58rem;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .outlook-body {
   color: var(--text-muted);
+  font-family: "Barlow", sans-serif;
   font-size: 0.72rem;
   line-height: 1.5;
 }

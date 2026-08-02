@@ -220,6 +220,10 @@ export function UpcomingOddsSection({
   );
 }
 
+function hasRealStatValue(value: string | undefined): boolean {
+  return value !== undefined && value !== "—";
+}
+
 export function UpcomingTaleSection({
   fighters,
   statValues,
@@ -230,6 +234,10 @@ export function UpcomingTaleSection({
   /** Real Sherdog-derived outlook text; the panel is omitted entirely when absent. */
   outlook?: string;
 }) {
+  const hasAnyStats = STAT_ROWS.some(
+    ({ key }) =>
+      hasRealStatValue(statValues?.red?.[key]) || hasRealStatValue(statValues?.blue?.[key]),
+  );
   return (
     <>
       <FighterProfile fighters={fighters} />
@@ -250,13 +258,24 @@ export function UpcomingTaleSection({
           }
         >
           {STAT_ROWS.map(({ key, label }) => (
-            <div className="profile-row" key={key}>
-              <span className="num">{statValues?.red?.[key] ?? "—"}</span>
-              <span>{label}</span>
-              <span className="num">{statValues?.blue?.[key] ?? "—"}</span>
+            <div className="profile-row-block" key={key}>
+              <div className="profile-row">
+                <span className="num">{statValues?.red?.[key] ?? "—"}</span>
+                <span>{label}</span>
+                <span className="num">{statValues?.blue?.[key] ?? "—"}</span>
+              </div>
+              <div className="profile-row-bars" aria-hidden="true">
+                <span className="profile-row-bar-red" />
+                <span className="profile-row-bar-blue" />
+              </div>
             </div>
           ))}
         </div>
+        {!hasAnyStats && (
+          <p className="profile-rows-empty">
+            No career averages available for this matchup
+          </p>
+        )}
       </section>
     </>
   );

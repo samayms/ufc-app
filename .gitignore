@@ -62,3 +62,7 @@ __pycache__/
 /pm-logos-and-fonts/
 /betmgm-logo.webp
 /Bet365-Logo.png
+
+# Design handoff export (claude.ai/design project download); already ported
+# into the app via src/ui/ScheduledFightPreview.tsx, FighterProfile.tsx, etc.
+/UFC fighter profile redesign/

@@ -1,28 +1,14 @@
 import type { Corner, Fighter } from "../schema.ts";
-import { fmtRecord } from "./format.ts";
 
 function value(value: string | number | undefined, suffix = "") {
   return value == null ? "—" : `${value}${suffix}`;
 }
 
-function Profile({
-  fighter,
-  corner,
-}: {
-  fighter: Fighter;
-  corner: Corner;
-}) {
-  const last = fighter.name.split(" ").at(-1) ?? fighter.name;
-  return (
-    <div className={`profile profile-${corner}`}>
-      <h3 className={`corner-${corner}`}>{last}</h3>
-      <span className="profile-record num">{fmtRecord(fighter.record)}</span>
-      {fighter.nickname && <span className="profile-nick">"{fighter.nickname}"</span>}
-      {fighter.ranking && <span className="profile-ranking">{fighter.ranking}</span>}
-    </div>
-  );
-}
-
+/**
+ * Physicals-only comparison (age/height/reach/stance/country). The
+ * name/record/nickname header this used to carry lives in BoutHeader now,
+ * directly above the FIGHT/STATS/TALE tabs, so this panel doesn't repeat it.
+ */
 export function FighterProfile({ fighters }: { fighters: Record<Corner, Fighter> }) {
   const { red, blue } = fighters;
   const rows = [
@@ -34,12 +20,7 @@ export function FighterProfile({ fighters }: { fighters: Record<Corner, Fighter>
   ];
   return (
     <section className="profile-panel" aria-label="Fighter comparison">
-      <div className="profile-head">
-        <Profile fighter={red} corner="red" />
-        <span className="profile-vs">vs</span>
-        <Profile fighter={blue} corner="blue" />
-      </div>
-      <div className="profile-rows">
+      <div className="profile-rows profile-rows--leading">
         {rows.map(([label, redValue, blueValue]) => (
           <div className="profile-row" key={label}>
             <span className="num">{redValue}</span>
