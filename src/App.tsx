@@ -7,6 +7,7 @@ import { CardRail } from "./ui/CardRail.tsx";
 import { EventList, type EventListEntry } from "./ui/EventList.tsx";
 import { FightSummary } from "./ui/FightSummary.tsx";
 import { useSwipeBack } from "./hooks/useSwipeBack.ts";
+import { useBlockPullToTop } from "./hooks/useBlockPullToTop.ts";
 import { LiveStatsPanel } from "./ui/LiveStatsPanel.tsx";
 import { LoadingSplash } from "./ui/LoadingSplash.tsx";
 import { withoutSportsbookOnEventDay } from "./lib/marketPriority.ts";
@@ -110,13 +111,6 @@ export default function App() {
   );
   const [selectedFutureFight, setSelectedFutureFight] =
     useState<EspnScheduledFight | null>(null);
-  // Set only by the Fight bottom-nav tab's "jump to the most recently
-  // completed fight" shortcut (tapping Fight while already on the Fight
-  // tab) — names the bout to return to on the next back action. Cleared
-  // once consumed, and by any other navigation that would make it stale.
-  const [previousSelected, setPreviousSelected] = useState<string | null>(
-    null,
-  );
   const mainContentRef = useRef<HTMLElement>(null);
   // The swipe-back "underlay" — a live, already-rendered preview of the
   // screen a back gesture leads to, kept positioned just off-screen so it's
@@ -125,9 +119,16 @@ export default function App() {
   // once the gesture completes.
   const underlayRef = useRef<HTMLDivElement>(null);
   // One-shot override for screenDirection, consumed by the next screenKey
-  // change then cleared — see backToPreviousFight, the one navigation whose
-  // correct direction directionBetween's depth model can't infer on its own.
+  // change then cleared — see the swipeBackHandler wrapper below, which
+  // uses this to suppress ScreenTransition's own slide-in keyframe for a
+  // swipe-completed navigation (the gesture itself already animated it).
   const forcedScreenDirectionRef = useRef<TransitionDirection | null>(null);
+  // Paired with forcedScreenDirectionRef: also suppresses the remount
+  // ScreenTransition's key change would otherwise trigger, which — even
+  // with the slide-in class suppressed — still tore the whole screen's DOM
+  // down and rebuilt it, reading as a brief "reload" flash right after a
+  // swipe-completed navigation already finished its own animation.
+  const forcedSkipRemountRef = useRef(false);
 
   const upcomingEspn = useUpcomingEspnEvents();
   // Loaded at the app level rather than per preview: one document covers every
@@ -193,22 +194,10 @@ export default function App() {
     setScheduleSelection(null);
   };
 
-  // Back arrow after the Fight tab's "jump to the most recently completed
-  // fight" shortcut: returns to whichever bout was showing before the jump,
-  // staying on the Fight tab rather than exiting to the Event tab. Both the
-  // jumped-to and the returned-to screen share the same "fight:*" depth
-  // tier, so directionBetween alone can't tell this apart from a forward
-  // pick — force the animation backward for this one transition.
-  const backToPreviousFight = () => {
-    forcedScreenDirectionRef.current = "backward";
-    setSelected(previousSelected);
-    setPreviousSelected(null);
-  };
-
   const activeBackHandler = !state
     ? undefined
     : tab === "fight"
-      ? (previousSelected !== null ? backToPreviousFight : backToEventFromFight)
+      ? backToEventFromFight
       : tab === "event" && scheduleSelection !== null
         ? backToEventList
         : undefined;
@@ -216,28 +205,22 @@ export default function App() {
   // A swipe gesture already performs its own finger-tracked slide (see
   // useSwipeBack) — by the time it calls this, the underlay has already
   // visually settled into the new screen's exact final position. Without
-  // suppressing it here, ScreenTransition's key-change remount would then
-  // play its own slide-in keyframe on top of that, reading as a second,
-  // redundant "loading" animation right after the gesture already finished.
-  // The back BUTTON has no such gesture to hand off from, so it keeps using
-  // activeBackHandler directly and still gets the normal slide-in.
-  //
-  // "none" is set AFTER calling activeBackHandler, not before: some back
-  // handlers (backToPreviousFight) force their own direction internally,
-  // because the default depth-based computation can't infer it — that
-  // forcing is exactly right for a button click (no gesture already showed
-  // the motion), so it must still win there. Overwriting the ref after the
-  // handler runs lets swipe's "none" take priority over that forcing for
-  // this one call, while leaving the handler itself, and its behavior when
-  // called directly from the back button, unchanged.
+  // suppressing both of these, ScreenTransition would then also remount
+  // and play its own slide-in keyframe on top of that, reading as a
+  // second, redundant "reload" flash right after the gesture already
+  // finished. The back BUTTON has no such gesture to hand off from, so it
+  // keeps using activeBackHandler directly and still gets the normal
+  // remount + slide-in.
   const swipeBackHandler = activeBackHandler
     ? () => {
         activeBackHandler();
         forcedScreenDirectionRef.current = "none";
+        forcedSkipRemountRef.current = true;
       }
     : undefined;
 
   useSwipeBack(mainContentRef, swipeBackHandler, underlayRef);
+  useBlockPullToTop(mainContentRef, Boolean(state));
 
   // Screen key/direction for ScreenTransition's slide animation. Computed
   // here (above the loading/error early returns, like activeBackHandler
@@ -257,9 +240,11 @@ export default function App() {
   const screenDirection =
     forcedScreenDirectionRef.current ??
     directionBetween(previousScreenKeyRef.current, screenKey, screenDepth);
+  const skipScreenRemount = forcedSkipRemountRef.current;
   useEffect(() => {
     previousScreenKeyRef.current = screenKey;
     forcedScreenDirectionRef.current = null;
+    forcedSkipRemountRef.current = false;
   }, [screenKey]);
 
   const previousSectionRef = useRef<string | null>(null);
@@ -314,9 +299,6 @@ export default function App() {
     setTab("fight");
     setSection("summary");
     setSelectedFutureFight(null);
-    // A direct pick invalidates any pending "jump back" target from the
-    // Fight tab's most-recently-completed shortcut.
-    setPreviousSelected(null);
   };
 
   const selectFutureFight = (fight: EspnScheduledFight) => {
@@ -325,28 +307,13 @@ export default function App() {
   };
 
   // Bottom nav is the only "start fresh" entry point — clears any
-  // drill-down/back-arrow state left over from the Event tab. Tapping
-  // "Fight" while already on the Fight tab is a shortcut instead: jump to
-  // whichever bout in the current event finished most recently (lowest
-  // cardPosition among final bouts — the card airs from the highest
-  // cardPosition down to the main event, so that's the last one to finish),
-  // remembering where you were so the back action can return to it.
+  // drill-down/back-arrow state left over from the Event tab. Tapping a tab
+  // you're already on is a no-op beyond that: it stays on whichever bout
+  // (or event, or screen) was already showing, same as switching to any
+  // other tab and back does.
   const handleNavTabChange = (next: AppTab) => {
-    if (next === "fight" && tab === "fight") {
-      const mostRecentCompleted = event.bouts
-        .filter((bout) => bout.status === "final")
-        .sort((a, b) => a.cardPosition - b.cardPosition)[0];
-      if (mostRecentCompleted && mostRecentCompleted.id !== selectedId) {
-        setPreviousSelected(selectedId ?? null);
-        setSelected(mostRecentCompleted.id);
-        setSection("summary");
-      }
-      setSelectedFutureFight(null);
-      return;
-    }
     setTab(next);
     setSelectedFutureFight(null);
-    setPreviousSelected(null);
   };
 
   const mainBout = event.bouts.find((bout) => bout.cardPosition === 1);
@@ -557,91 +524,9 @@ export default function App() {
     );
   };
 
-  // A read-only preview of a single bout for the swipe-back underlay's
-  // "jump to most recent, then back to where I was" case — deliberately
-  // not the same block the live Fight tab renders: it always shows the
-  // summary section at round 1 regardless of the live section/round state
-  // (those are shared UI state that only make sense for whichever bout is
-  // actually on screen), and every interactive callback is a no-op, since
-  // the underlay itself is aria-hidden and pointer-events: none.
-  const renderFightScreen = (boutId: string) => {
-    const previewView = boutViews[boutId];
-    if (!previewView) return null;
-    if (previewView.bout.status === "upcoming") {
-      return (
-        <ScheduledFightPreview
-          fight={boutToScheduledFight(previewView.bout)}
-          upcoming={upcomingOdds}
-          photosByCorner={photosByBoutId[previewView.bout.id]}
-        />
-      );
-    }
-    const previewRound = defaultRoundSelection(previewView);
-    const previewSelectedRound =
-      previewRound === "total"
-        ? Math.max(
-            0,
-            ...(dashboard.collector?.unifiedRounds
-              .filter((record) => record.boutId === previewView.bout.id)
-              .map((record) => record.round) ?? []),
-          )
-        : previewRound;
-    return (
-      <div className="fight-screen">
-        <BoutHeader
-          weightClassLabel={WEIGHT_LABEL[previewView.bout.weightClass] ?? ""}
-          titleFight={previewView.bout.titleFight}
-          scheduledRounds={previewView.bout.scheduledRounds}
-          fighters={previewView.bout.fighters}
-          status={previewView.bout.status}
-          currentRound={previewView.bout.currentRound}
-          result={previewView.bout.result}
-          clockSync={dashboard.collector?.clocks[previewView.bout.id]}
-        />
-        <MarketStrip
-          latestOdds={withoutSportsbookOnEventDay(
-            previewView.latestOdds,
-            event.startsAt,
-          )}
-          preFightOdds={withoutSportsbookOnEventDay(
-            previewView.preFightOdds,
-            event.startsAt,
-          )}
-          onOpen={() => {}}
-          resultWinner={
-            previewView.bout.status === "final"
-              ? previewView.bout.result?.winner
-              : undefined
-          }
-        />
-        <SectionTabs
-          active="summary"
-          onChange={() => {}}
-          sections={
-            previewView.bout.status === "final"
-              ? ["summary", "stats", "tale"]
-              : undefined
-          }
-        />
-        <RoundSelector view={previewView} value={previewRound} onChange={() => {}} />
-        <FightSummary
-          view={previewView}
-          eventStartsAt={event.startsAt}
-          selection={previewRound}
-          collectorRounds={dashboard.collector?.unifiedRounds}
-        />
-        <ScorecardFeed
-          view={previewView}
-          records={dashboard.collector?.unifiedRounds ?? []}
-          round={previewSelectedRound}
-        />
-      </div>
-    );
-  };
-
-  // What the swipe-back underlay should show, if anything — undefined means
-  // there's no swipe-revealable underlay for the current screen (e.g. the
-  // Data tab).
+  // Which virtual event-tab selection the swipe-back underlay should show,
+  // if any — undefined means there's no swipe-revealable underlay for the
+  // current screen (e.g. the Data tab).
   //
   // backToEventFromFight's own logic (above) keeps scheduleSelection as-is
   // when it's already set — a fight opened from a drilled-in *upcoming*
@@ -650,17 +535,12 @@ export default function App() {
   // null. Hardcoding event.id here (instead of mirroring that same
   // fallback) always showed the live event's own card in the underlay
   // regardless of which event the fight actually belonged to.
-  const swipeUnderlay:
-    | { kind: "event"; selection: string | null }
-    | { kind: "fight"; boutId: string }
-    | undefined =
+  const swipeUnderlaySelection: string | null | undefined =
     activeBackHandler === backToEventFromFight
-      ? { kind: "event", selection: scheduleSelection ?? event.id }
+      ? (scheduleSelection ?? event.id)
       : activeBackHandler === backToEventList
-        ? { kind: "event", selection: null }
-        : activeBackHandler === backToPreviousFight && previousSelected !== null
-          ? { kind: "fight", boutId: previousSelected }
-          : undefined;
+        ? null
+        : undefined;
 
   return (
     <div className="app">
@@ -673,14 +553,7 @@ export default function App() {
           tab === "event" && scheduleSelection !== null ? (
             <BackButton onClick={backToEventList} />
           ) : tab === "fight" ? (
-            // activeBackHandler, not backToEventFromFight directly — the
-            // Fight tab's own back target depends on whether the "jump to
-            // most recent completed" shortcut is active (previousSelected
-            // set): backToPreviousFight then, backToEventFromFight
-            // otherwise. Hardcoding backToEventFromFight here always exited
-            // to the Event tab even right after that jump, when the correct
-            // target is the fight you jumped from.
-            <BackButton onClick={activeBackHandler ?? backToEventFromFight} />
+            <BackButton onClick={backToEventFromFight} />
           ) : undefined
         }
       />
@@ -700,15 +573,17 @@ export default function App() {
             />
           </aside>
         )}
-        {swipeUnderlay !== undefined && (
+        {swipeUnderlaySelection !== undefined && (
           <div className="app-content-underlay" ref={underlayRef} aria-hidden="true">
-            {swipeUnderlay.kind === "event"
-              ? renderEventScreen(swipeUnderlay.selection, true)
-              : renderFightScreen(swipeUnderlay.boutId)}
+            {renderEventScreen(swipeUnderlaySelection, true)}
           </div>
         )}
         <main className="app-content" id="main-content" ref={mainContentRef}>
-          <ScreenTransition screenKey={screenKey} direction={screenDirection}>
+          <ScreenTransition
+            screenKey={screenKey}
+            direction={screenDirection}
+            skipRemount={skipScreenRemount}
+          >
           {tab === "fight" &&
             (selectedFutureFight ? (
               <ScheduledFightPreview

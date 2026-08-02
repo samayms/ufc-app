@@ -24,13 +24,15 @@
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  /* `none`, not `contain` — `contain` only stops the scroll from chaining
-   * up to the page (already unreachable here, .app-content's the only
-   * scroller), but still lets the browser's own rubber-band bounce play
-   * out locally at the top/bottom of this element. `none` removes that
-   * local bounce too, so content stops dead at its real top/bottom instead
-   * of overscrolling past it. */
-  overscroll-behavior-y: none;
+  /* `contain`, not `none` — this only stops the scroll from chaining up to
+   * the page (already unreachable here, .app-content's the only scroller,
+   * and body itself carries its own `overscroll-behavior: none`), while
+   * still allowing the browser's own rubber-band bounce locally. Pulling
+   * down past the top specifically is blocked in JS instead (see
+   * src/hooks/useBlockPullToTop.ts), so the bounce at the bottom of a list
+   * stays, but pulling down at the top — which reads as "about to trigger
+   * something," with nothing behind it to trigger — doesn't. */
+  overscroll-behavior-y: contain;
   padding:
     11px max(15px, env(safe-area-inset-right))
     calc(18px + env(safe-area-inset-bottom))
