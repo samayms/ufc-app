@@ -635,6 +635,12 @@ export default function App() {
           currentRound={entryView.bout.currentRound}
           result={entryView.bout.result}
           clockSync={dashboard.collector?.clocks[entryView.bout.id]}
+          // Same headshots the bout list you tapped through was already
+          // showing. Without this a live or finished bout dropped to the
+          // no-photo placeholder even though the photos were loaded and on
+          // screen a moment earlier — only the upcoming branch below ever
+          // passed them through.
+          photosByCorner={photosByBoutId[entryView.bout.id]}
         />
         {dashboard.stale && (
           <div className="state-notice" role="status">
