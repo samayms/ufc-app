@@ -68,11 +68,18 @@ export function SourceStatus({
   state,
   stale = false,
   collector,
+  forUnderlay = false,
 }: {
   state: DashboardState;
   stale?: boolean;
   collector?: CollectorSnapshot;
+  /** Drops the id/aria-labelledby pairing for the swipe-back underlay's
+   *  copy, which is mounted alongside the live screen — two elements sharing
+   *  id="source-title" would be invalid HTML even though the underlay's own
+   *  aria-hidden wrapper already keeps it out of the accessibility tree. */
+  forUnderlay?: boolean;
 }) {
+  const titleId = forUnderlay ? undefined : "source-title";
   const sourceUpdates = SOURCES.map((source) => sourceTimes(state, source.id));
   const lastSyncedAt = [
     state.event.provenance.fetchedAt,
@@ -95,11 +102,11 @@ export function SourceStatus({
   const syncedAt = collector?.lastReceivedAt ?? lastSyncedAt;
 
   return (
-    <section className="source-panel" aria-labelledby="source-title">
+    <section className="source-panel" aria-labelledby={titleId}>
       <div className="page-heading">
         <div>
           <span className="page-kicker">Connection health</span>
-          <h2 id="source-title">Data feeds</h2>
+          <h2 id={titleId}>Data feeds</h2>
         </div>
       </div>
       <div className="data-overview" aria-label="Overall data status">
