@@ -6,6 +6,7 @@ import {
 } from "../store/collectorClient.ts";
 import { fmtMethod, fmtRecord } from "./format.ts";
 import { useFighterPhoto } from "./fighterPhoto.ts";
+import { isTbaFighter } from "../lib/tbaFighter.ts";
 
 /**
  * Turns an ESPN-sourced `Fighter.ranking` string (see `parseEspnRankings`
@@ -31,8 +32,11 @@ function FighterBlock({
   photoUrl?: string;
 }) {
   const photo = useFighterPhoto(photoUrl);
+  const isTba = isTbaFighter(fighter.name);
   const firstName = fighter.name.split(" ")[0] ?? fighter.name;
-  const lastName = fighter.name.split(" ").at(-1) ?? fighter.name;
+  const lastName = isTba
+    ? "TBA"
+    : (fighter.name.split(" ").at(-1) ?? fighter.name);
   const badge = rankingBadge(fighter.ranking);
   const lastNameClass =
     lastName.length >= 14
@@ -54,9 +58,14 @@ function FighterBlock({
           onError={photo.onError}
         />
       </span>
-      <span className="tot-firstname">{firstName}</span>
+      {/* An unannounced side is just "TBA" — ESPN's filler first name
+          ("Opponent", or a second "TBA") says nothing above it. */}
+      {!isTba && <span className="tot-firstname">{firstName}</span>}
       <span className="tot-name-row">
-        <span className={`${lastNameClass} corner-${corner}`} title={fighter.name}>
+        <span
+          className={`${lastNameClass} corner-${corner}`}
+          title={isTba ? "TBA" : fighter.name}
+        >
           {lastName}
         </span>
         {badge && (

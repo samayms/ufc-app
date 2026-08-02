@@ -4,6 +4,7 @@ import type {
 } from "../sources/espnSchedule.ts";
 import { FitText, MatchupCard } from "./MatchupCard.tsx";
 import { fmtFightPhase, fmtTime } from "./format.ts";
+import { isTbaMatchup } from "../lib/tbaFighter.ts";
 import "./newComponents.css";
 
 /**
@@ -63,6 +64,7 @@ export function ScheduledCardRail({
                 key={fight.competitionId}
                 isSelected={false}
                 onSelect={() => onSelect(fight)}
+                disabled={isTbaMatchup(fight.red.name, fight.blue.name)}
                 red={{ name: fight.red.name, photoUrl: fight.red.headshotUrl }}
                 blue={{ name: fight.blue.name, photoUrl: fight.blue.headshotUrl }}
                 redIsLoser={winner === "blue"}

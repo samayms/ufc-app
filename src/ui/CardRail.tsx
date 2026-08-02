@@ -1,6 +1,7 @@
 import type { Bout } from "../schema.ts";
 import { FitText, MatchupCard } from "./MatchupCard.tsx";
 import { fmtFightPhase, WEIGHT_LABEL } from "./format.ts";
+import { isTbaMatchup } from "../lib/tbaFighter.ts";
 import "./newComponents.css";
 
 const SEGMENT_LABEL = {
@@ -56,6 +57,10 @@ export function CardRail({
                   key={bout.id}
                   isSelected={bout.id === selectedId}
                   onSelect={() => onSelect(bout.id)}
+                  disabled={isTbaMatchup(
+                    bout.fighters.red.name,
+                    bout.fighters.blue.name,
+                  )}
                   red={{
                     name: bout.fighters.red.name,
                     photoUrl: photosByBoutId?.[bout.id]?.red,

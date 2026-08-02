@@ -62,6 +62,18 @@
   background: var(--surface-3);
 }
 
+/* A matchup with an unannounced side is a listing, not a link — there's no
+ * fight screen behind it worth opening. It keeps its normal weight in the
+ * card (it IS a real scheduled slot) and only drops the affordances that
+ * promise a tap does something. */
+.event-card.is-unavailable {
+  cursor: default;
+}
+
+.event-card.is-unavailable:hover {
+  background: var(--surface-2);
+}
+
 .event-card.is-selected {
   border-color: var(--border-strong);
 }

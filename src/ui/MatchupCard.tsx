@@ -1,6 +1,7 @@
 import { type ReactNode, useLayoutEffect, useRef } from "react";
 import "./newComponents.css";
 import { useFighterPhoto } from "./fighterPhoto.ts";
+import { isTbaFighter } from "../lib/tbaFighter.ts";
 
 /** Never shrink text past this fraction of its natural size — a label that
  * still doesn't fit at this size is left here and allowed to visually
@@ -153,6 +154,7 @@ export function MatchupFighter({
   if (!fighter) {
     return <div className={`event-card-fighter${blueSuffix}`} />;
   }
+  const isTba = isTbaFighter(fighter.name);
   const { first, last } = splitName(fighter.name);
   const loserSuffix = isLoser ? " is-loser" : "";
   const winnerSuffix = isWinner ? " is-winner" : "";
@@ -170,9 +172,14 @@ export function MatchupFighter({
         />
       </span>
       <span className={`event-card-fighter-names${blueSuffix}`}>
-        <span className={`event-card-fighter-firstname${blueSuffix}${loserSuffix}`}>{first}</span>
+        {/* An unannounced side has no first name worth a line of its own —
+            ESPN's filler ("Opponent", or a second "TBA") would otherwise sit
+            above the real label saying nothing. */}
+        {!isTba && (
+          <span className={`event-card-fighter-firstname${blueSuffix}${loserSuffix}`}>{first}</span>
+        )}
         <FitText
-          text={last}
+          text={isTba ? "TBA" : last}
           className={`event-card-fighter-lastname${blueSuffix}${loserSuffix}`}
           minScale={FIGHTER_NAME_MIN_SCALE}
         />
@@ -200,6 +207,7 @@ export function MatchupCard({
   isLive,
   isSelected,
   onSelect,
+  disabled,
 }: {
   header?: ReactNode;
   red: MatchupFighterEntry | undefined;
@@ -214,12 +222,16 @@ export function MatchupCard({
   isLive?: boolean;
   isSelected: boolean;
   onSelect: () => void;
+  /** Renders the row as a non-interactive listing. Used for a matchup with
+   *  an unannounced side, which has no fight screen worth opening. */
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
-      className={`event-card${isLive ? " is-live" : ""}${isSelected ? " is-selected" : ""}`}
-      onClick={onSelect}
+      className={`event-card${isLive ? " is-live" : ""}${isSelected ? " is-selected" : ""}${disabled ? " is-unavailable" : ""}`}
+      onClick={disabled ? undefined : onSelect}
+      disabled={disabled}
       aria-current={isSelected ? "true" : undefined}
     >
       {header && <div className="event-card-header">{header}</div>}
