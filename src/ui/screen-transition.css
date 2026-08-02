@@ -2,6 +2,27 @@
   width: 100%;
 }
 
+/*
+ * Where this wrapper holds a tab's content, it sits inside a flex column
+ * (.fight-screen, .scheduled-preview) that spaces its children with `gap`.
+ * As a plain block it stopped that gap at its own boundary: the wrapper
+ * itself was spaced from the tab strip above it, but the panels stacked
+ * INSIDE it — tale of the tape, recent form, the stat rows — had no spacing
+ * mechanism at all and sat flush against each other, so the further down the
+ * screen you read, the more shoved together it looked.
+ *
+ * Adopting the parent's own column layout puts those panels back in the same
+ * rhythm as everything above them. `gap: inherit` deliberately takes the
+ * parent's value rather than restating a number, so the two screens'
+ * different gaps — and their per-breakpoint overrides — stay in one place.
+ */
+.fight-screen > .screen-transition,
+.scheduled-preview > .screen-transition {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+}
+
 .screen-slide-in-forward {
   animation: screen-slide-in-forward 220ms ease-out;
 }
