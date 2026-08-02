@@ -62,3 +62,9 @@ __pycache__/
 /pm-logos-and-fonts/
 /betmgm-logo.webp
 /Bet365-Logo.png
+
+# Owner's hand-dropped copy of ESPN's blank-fighter silhouette. The product
+# copy is fetched from ESPN and tracked at
+# src/assets/default-fighter-headshot.png, so this root drop is a duplicate
+# kept out of the repo rather than a second source of truth.
+/i.png

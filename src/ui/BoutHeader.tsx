@@ -5,6 +5,7 @@ import {
   type CollectorClockSync,
 } from "../store/collectorClient.ts";
 import { fmtMethod, fmtRecord } from "./format.ts";
+import { useFighterPhoto } from "./fighterPhoto.ts";
 
 /**
  * Turns an ESPN-sourced `Fighter.ranking` string (see `parseEspnRankings`
@@ -29,13 +30,7 @@ function FighterBlock({
   corner: Corner;
   photoUrl?: string;
 }) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const showImg = photoUrl !== undefined && !imgFailed;
-  const initials = fighter.name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2);
+  const photo = useFighterPhoto(photoUrl);
   const firstName = fighter.name.split(" ")[0] ?? fighter.name;
   const lastName = fighter.name.split(" ").at(-1) ?? fighter.name;
   const badge = rankingBadge(fighter.ranking);
@@ -50,18 +45,14 @@ function FighterBlock({
     <div className={`tot-fighter tot-${corner}`}>
       <span
         className={`fighter-photo fighter-photo-${corner}`}
-        aria-hidden={showImg ? undefined : "true"}
+        aria-hidden={photo.isPlaceholder ? "true" : undefined}
       >
-        {showImg ? (
-          <img
-            className="fighter-photo-img"
-            src={photoUrl}
-            alt={fighter.name}
-            onError={() => setImgFailed(true)}
-          />
-        ) : (
-          initials
-        )}
+        <img
+          className="fighter-photo-img"
+          src={photo.src}
+          alt={photo.isPlaceholder ? "" : fighter.name}
+          onError={photo.onError}
+        />
       </span>
       <span className="tot-firstname">{firstName}</span>
       <span className="tot-name-row">

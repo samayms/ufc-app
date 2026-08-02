@@ -89,6 +89,15 @@ function sectionDepth(key: string): number {
   return SECTION_ORDER.indexOf(key as FightSection);
 }
 
+/** Whether the reader has asked the OS to keep motion to a minimum — the
+ *  same signal screen-transition.css honours for its slide keyframes. */
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true
+  );
+}
+
 export default function App() {
   const dashboard = useDashboard();
   const state = dashboard.data;
@@ -333,31 +342,39 @@ export default function App() {
   // drilled into — the tab is named for that list, so tapping it should land
   // on it, at the top.
   const handleNavTabChange = (next: AppTab) => {
-    if (next === "event") {
-      navigateTo({ tab: "event", scheduleSelection: null });
-    } else if (next === "fight") {
-      const mostRecentCompleted = event.bouts
-        .filter((bout) => bout.status === "final")
-        .sort((a, b) => a.cardPosition - b.cardPosition)[0];
-      navigateTo(
-        mostRecentCompleted
-          ? {
-              tab: "fight",
-              selected: mostRecentCompleted.id,
-              section: "summary",
-              selectedFutureFight: null,
-            }
-          : { tab: "fight" },
-      );
-    } else {
-      navigateTo({ tab: next });
-    }
+    const mostRecentCompleted = event.bouts
+      .filter((bout) => bout.status === "final")
+      .sort((a, b) => a.cardPosition - b.cardPosition)[0];
+    const changes: Partial<NavEntry> =
+      next === "event"
+        ? { tab: "event", scheduleSelection: null }
+        : next !== "fight"
+          ? { tab: next }
+          : mostRecentCompleted
+            ? {
+                tab: "fight",
+                selected: mostRecentCompleted.id,
+                section: "summary",
+                selectedFutureFight: null,
+              }
+            : { tab: "fight" };
+    const staysOnSameScreen =
+      screenKeyOf({ ...currentNav, ...changes }) === screenKey;
+    navigateTo(changes);
     // Tapping the tab you're already on leaves every piece of navigation
     // state untouched, so the screen-key scroll-reset effect never fires —
-    // yet the tap should still take you to the top of that screen. Doing it
-    // here covers that case; for taps that DO change screens the effect
-    // repeats it harmlessly once the new screen renders.
-    mainContentRef.current?.scrollTo({ top: 0 });
+    // yet the tap should still take you to the top. Scroll it there
+    // *animated*: nothing else on screen changes, so an instant jump reads
+    // as the list teleporting, with no way to tell how far you moved.
+    // Screen-CHANGING taps deliberately keep the effect's instant reset —
+    // a screen you haven't seen yet should simply arrive at its top rather
+    // than be watched scrolling to it.
+    if (staysOnSameScreen) {
+      mainContentRef.current?.scrollTo({
+        top: 0,
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+      });
+    }
   };
 
   const mainBout = event.bouts.find((bout) => bout.cardPosition === 1);

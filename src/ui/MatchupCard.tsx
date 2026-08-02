@@ -1,5 +1,6 @@
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 import "./newComponents.css";
+import { useFighterPhoto } from "./fighterPhoto.ts";
 
 /** Never shrink text past this fraction of its natural size — a label that
  * still doesn't fit at this size is left here and allowed to visually
@@ -127,15 +128,6 @@ export interface MatchupFighterEntry {
   photoUrl?: string;
 }
 
-/** Two-letter initials from a full name, matching BoutHeader.tsx's FighterBlock convention. */
-function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2);
-}
-
 function splitName(name: string): { first: string; last: string } {
   const parts = name.split(/\s+/).filter(Boolean);
   const first = parts[0] ?? name;
@@ -156,12 +148,11 @@ export function MatchupFighter({
    *  the winner arrow. */
   isWinner?: boolean;
 }) {
-  const [imgFailed, setImgFailed] = useState(false);
+  const photo = useFighterPhoto(fighter?.photoUrl);
   const blueSuffix = corner === "blue" ? " is-blue" : "";
   if (!fighter) {
     return <div className={`event-card-fighter${blueSuffix}`} />;
   }
-  const showImg = fighter.photoUrl && !imgFailed;
   const { first, last } = splitName(fighter.name);
   const loserSuffix = isLoser ? " is-loser" : "";
   const winnerSuffix = isWinner ? " is-winner" : "";
@@ -169,18 +160,14 @@ export function MatchupFighter({
     <div className={`event-card-fighter${blueSuffix}${winnerSuffix}`}>
       <span
         className={`event-card-fighter-photo fighter-photo-${corner}`}
-        aria-hidden={showImg ? undefined : "true"}
+        aria-hidden={photo.isPlaceholder ? "true" : undefined}
       >
-        {showImg ? (
-          <img
-            className="fighter-photo-img"
-            src={fighter.photoUrl}
-            alt={fighter.name}
-            onError={() => setImgFailed(true)}
-          />
-        ) : (
-          initialsOf(fighter.name)
-        )}
+        <img
+          className="fighter-photo-img"
+          src={photo.src}
+          alt={photo.isPlaceholder ? "" : fighter.name}
+          onError={photo.onError}
+        />
       </span>
       <span className={`event-card-fighter-names${blueSuffix}`}>
         <span className={`event-card-fighter-firstname${blueSuffix}${loserSuffix}`}>{first}</span>
