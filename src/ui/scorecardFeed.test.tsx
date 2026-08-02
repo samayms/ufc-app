@@ -65,7 +65,7 @@ describe("ScorecardFeed", () => {
       <ScorecardFeed view={view} records={records} round={1} />,
     );
 
-    expect(markup).toContain("10 - 9");
+    expect(markup).toContain("10-9");
     // The regression that matters: Sherdog sent the unaccented "Rakic", the
     // rendered name must be the fighter's own accented spelling.
     expect(markup).toContain("Rakić");
@@ -93,7 +93,7 @@ describe("ScorecardFeed", () => {
       <ScorecardFeed view={view} records={records} allRounds />,
     );
 
-    expect(markup).toContain("29 - 28");
+    expect(markup).toContain("29-28");
     expect(markup).toContain("Rakić");
     expect(markup).toContain('class="scorecard-judge-winner corner-red"');
     expect(markup).not.toContain("scorecard-round-chip-empty");
@@ -111,7 +111,7 @@ describe("ScorecardFeed", () => {
       <ScorecardFeed view={view} records={records} allRounds />,
     );
 
-    expect(markup).toContain('class="scorecard-judge-score num" title="20-18">20 - 18<');
+    expect(markup).toContain('class="scorecard-judge-score num" title="20-18">20-18<');
     expect((markup.match(/scorecard-round-chip-empty/gu) ?? []).length).toBe(1);
   });
 
@@ -125,6 +125,6 @@ describe("ScorecardFeed", () => {
       <ScorecardFeed view={view} records={records} round={2} />,
     );
 
-    expect(markup).toContain('class="scorecard-judge-score num" title="20-18">20 - 18<');
+    expect(markup).toContain('class="scorecard-judge-score num" title="20-18">20-18<');
   });
 });

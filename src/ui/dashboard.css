@@ -1247,8 +1247,8 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-family: var(--font-display);
-  font-size: 1.125rem;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 17px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1256,9 +1256,10 @@
 
 .scorecard-judge-score {
   flex: none;
-  font-family: var(--font-display);
-  font-size: 1.4rem;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 23px;
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .scorecard-judge-winner {
@@ -1266,20 +1267,24 @@
   max-width: 12ch;
   overflow: hidden;
   color: var(--text-faint);
-  font-family: var(--font-body);
-  font-size: 0.67rem;
+  font-family: "Barlow", sans-serif;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
 /* Higher specificity than .corner-red/.corner-blue alone so the fighter's
-   corner color always wins here, regardless of stylesheet order. */
-.scorecard-judge-winner.corner-red,
+   corner color always wins here, regardless of stylesheet order. Exact hex
+   from the handed-off scorecard design, not the app's general corner tokens. */
+.scorecard-judge-winner.corner-red {
+  color: #ff5361;
+}
+
 .scorecard-judge-winner.corner-blue {
-  color: inherit;
+  color: #6aa6ff;
 }
 
 .scorecard-round-grid {
@@ -1302,8 +1307,8 @@
   border-radius: 6px;
   background: var(--surface-3);
   color: var(--text-muted);
-  font-family: var(--font-display);
-  font-size: 0.9rem;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 16px;
   font-weight: 700;
 }
 
@@ -1311,14 +1316,15 @@
   color: var(--text-ghost);
 }
 
+/* Exact colors from the handed-off scorecard design. */
 .scorecard-round-chip-red {
-  background: var(--red-corner-dim);
-  color: var(--red-corner-strong);
+  background: rgba(225, 29, 46, 0.16);
+  color: #ff5361;
 }
 
 .scorecard-round-chip-blue {
-  background: var(--blue-corner-dim);
-  color: var(--blue-corner-strong);
+  background: rgba(59, 130, 246, 0.18);
+  color: #6aa6ff;
 }
 
 .scorecard-round-bar {
@@ -2259,16 +2265,16 @@
   .scorecard-judge-name {
     /* The `body` step: the phone is where these rows are actually read, so
        this override stays on the ramp rather than shrinking off it. */
-    font-size: 0.9375rem;
+    font-size: 15px;
   }
 
   .scorecard-judge-score {
-    font-size: 1.2rem;
+    font-size: 19px;
   }
 
   .scorecard-round-chip {
     height: 24px;
-    font-size: 0.82rem;
+    font-size: 13px;
   }
 
   .bottom-nav {

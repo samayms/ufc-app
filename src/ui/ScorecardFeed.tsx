@@ -74,9 +74,9 @@ function hasScore(card: SherdogScorerCard): boolean {
   );
 }
 
-/** "10-9" (or an en/em dash, or already-spaced) -> "10 - 9" for display. */
+/** "10 - 9" (or an en/em dash) -> "10-9" for display: no space around the dash. */
 function formatScore(score: string): string {
-  return score.trim().replace(/\s*[-–—]\s*/u, " - ");
+  return score.trim().replace(/\s*[-–—]\s*/u, "-");
 }
 
 function normalizeNameToken(value: string): string {
