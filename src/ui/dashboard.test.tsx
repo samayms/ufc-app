@@ -213,7 +213,7 @@ describe("dashboard state surfaces", () => {
 
     const scorecards = renderToStaticMarkup(<ScorecardFeed view={view} />);
     expect(scorecards).toBe("");
-    expect(scorecards).not.toContain('class="media-scorecard"');
+    expect(scorecards).not.toContain('class="scorecard-judge"');
     expect(scorecards).not.toContain("10–9");
   });
 
@@ -275,9 +275,9 @@ describe("dashboard state surfaces", () => {
     expect(scorecards).not.toContain("delivery-freshness");
     expect(scorecards).not.toContain("Sherdog · Round");
     expect(scorecards).not.toContain("received");
-    expect(scorecards).toContain('class="media-scorecard-avatar"');
+    expect(scorecards).toContain('class="scorecard-judge-avatar"');
     expect(scorecards).toContain('alt=""');
-    expect(scorecards).toContain('aria-label="Sherdog round 1 scorecards"');
+    expect(scorecards).toContain('aria-label="Sherdog scorecards through round 1"');
     expect(scorecards).toContain("10-9");
     expect(scorecards).toContain("Sherdog");
   });

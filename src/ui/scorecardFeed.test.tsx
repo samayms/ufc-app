@@ -10,6 +10,7 @@ import { matchWinnerCorner, ScorecardFeed } from "./ScorecardFeed.tsx";
 const view = {
   bout: {
     id: "bout-rakic-tybura",
+    scheduledRounds: 3,
     fighters: {
       red: { name: "Aleksandar Rakić" },
       blue: { name: "Marcin Tybura" },
@@ -53,7 +54,7 @@ describe("ScorecardFeed", () => {
     expect(markup).toBe("");
   });
 
-  it("shows the reformatted round score and the winner's accented name, corner-coloured", () => {
+  it("shows round 1's score as the running total and the winner's accented name, corner-coloured, with rounds 2-3 dashed", () => {
     const records = [
       unifiedRound(1, [
         { scorer: "Brian Knapp", winner: "Rakic", roundScore: "10-9" },
@@ -69,10 +70,12 @@ describe("ScorecardFeed", () => {
     // rendered name must be the fighter's own accented spelling.
     expect(markup).toContain("Rakić");
     expect(markup).not.toContain(">Rakic<");
-    expect(markup).toContain('class="media-scorecard-winner corner-red"');
+    expect(markup).toContain('class="scorecard-judge-winner corner-red"');
+    // Grid is fixed to the bout's 3 scheduled rounds; rounds 2-3 aren't in yet.
+    expect((markup.match(/scorecard-round-chip-empty/gu) ?? []).length).toBe(2);
   });
 
-  it("in total mode, joins every round's score in order and shows the final cumulative with the winner in parens", () => {
+  it("through round 3, shows the final cumulative as the headline score with the winner beside it, every round chip filled", () => {
     const records = [
       unifiedRound(1, [{ scorer: "Brian Knapp", winner: "Rakic", roundScore: "10-9" }]),
       unifiedRound(2, [{ scorer: "Brian Knapp", winner: "Tybura", roundScore: "9-10" }]),
@@ -90,14 +93,13 @@ describe("ScorecardFeed", () => {
       <ScorecardFeed view={view} records={records} allRounds />,
     );
 
-    expect(markup).toContain("10 - 9, 9 - 10, 10 - 9");
     expect(markup).toContain("29 - 28");
-    expect(markup).toContain("(");
     expect(markup).toContain("Rakić");
-    expect(markup).toContain('class="media-scorecard-winner corner-red"');
+    expect(markup).toContain('class="scorecard-judge-winner corner-red"');
+    expect(markup).not.toContain("scorecard-round-chip-empty");
   });
 
-  it("omits the cumulative line in total mode when no round ever carried one", () => {
+  it("falls back to the latest round's own score as the headline when no round ever carried a cumulative", () => {
     const records = [
       unifiedRound(1, [{ scorer: "Brian Knapp", winner: "Rakic", roundScore: "10-9" }]),
       unifiedRound(2, [{ scorer: "Brian Knapp", winner: "Tybura", roundScore: "9-10" }]),
@@ -107,7 +109,7 @@ describe("ScorecardFeed", () => {
       <ScorecardFeed view={view} records={records} allRounds />,
     );
 
-    expect(markup).toContain("10 - 9, 9 - 10");
-    expect(markup).not.toContain("media-scorecard-total");
+    expect(markup).toContain('class="scorecard-judge-score num" title="9-10">9 - 10<');
+    expect((markup.match(/scorecard-round-chip-empty/gu) ?? []).length).toBe(1);
   });
 });

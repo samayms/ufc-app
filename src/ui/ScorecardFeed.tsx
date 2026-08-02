@@ -57,7 +57,7 @@ function ScorerAvatar({
   const [imageFailed, setImageFailed] = useState(false);
   return (
     <img
-      className="media-scorecard-avatar"
+      className="scorecard-judge-avatar"
       src={imageFailed ? defaultScorerAvatar : profilePhoto}
       alt=""
       width={32}
@@ -166,16 +166,21 @@ function WinnerName({
   fighters: { red: string; blue: string };
 }) {
   const { text, corner } = resolveWinnerDisplay(name, fighters);
-  const className = ["media-scorecard-winner", cornerClassName(corner)]
+  const className = ["scorecard-judge-winner", cornerClassName(corner)]
     .filter(Boolean)
     .join(" ");
   return <span className={className}>{text}</span>;
 }
 
-/** One judge's scored cards across every round of the bout, round-ascending. */
+/** One judge's scored rounds, keyed by round number, round-ascending. */
+interface JudgeRoundEntry {
+  round: number;
+  card: SherdogScorerCard;
+}
+
 interface JudgeTotal {
   scorer: string;
-  cards: SherdogScorerCard[];
+  entries: JudgeRoundEntry[];
 }
 
 function groupByJudge(
@@ -193,19 +198,46 @@ function groupByJudge(
       if (!hasScore(card)) continue;
       let group = byScorer.get(card.scorer);
       if (group === undefined) {
-        group = { scorer: card.scorer, cards: [] };
+        group = { scorer: card.scorer, entries: [] };
         byScorer.set(card.scorer, group);
         groups.push(group);
       }
-      group.cards.push(card);
+      group.entries.push({ round: record.round, card });
     }
   }
   return groups;
 }
 
-/** The last round with a recorded cumulative score, or undefined if none was ever posted. */
-function finalCumulative(cards: readonly SherdogScorerCard[]): SherdogScorerCard | undefined {
-  return [...cards].reverse().find((card) => card.cumulativeScore !== undefined);
+function RoundChip({
+  entry,
+  fighters,
+}: {
+  entry: JudgeRoundEntry | undefined;
+  fighters: { red: string; blue: string };
+}) {
+  if (entry?.card.roundScore === undefined) {
+    return (
+      <div className="scorecard-round-cell">
+        <div className="scorecard-round-chip scorecard-round-chip-empty">—</div>
+        <div className="scorecard-round-bar scorecard-round-bar-empty" />
+      </div>
+    );
+  }
+
+  const corner = matchWinnerCorner(entry.card.winner, fighters);
+  const cornerModifier = corner ? ` scorecard-round-chip-${corner}` : "";
+  const barModifier = corner ? ` scorecard-round-bar-${corner}` : "";
+  return (
+    <div className="scorecard-round-cell">
+      <div
+        className={`scorecard-round-chip num${cornerModifier}`}
+        title={entry.card.roundScore}
+      >
+        {formatScore(entry.card.roundScore)}
+      </div>
+      <div className={`scorecard-round-bar${barModifier}`} />
+    </div>
+  );
 }
 
 export function ScorecardFeed({
@@ -217,7 +249,7 @@ export function ScorecardFeed({
   view: BoutView;
   records?: readonly CollectorUnifiedRound[];
   round?: number;
-  /** Group every judge's cards across all rounds instead of showing one round. */
+  /** True when the round selector is set to "total" (through the last reported round). */
   allRounds?: boolean;
 }) {
   const scorerProfiles = useSherdogScorerProfiles();
@@ -225,96 +257,67 @@ export function ScorecardFeed({
     red: view.bout.fighters.red.name,
     blue: view.bout.fighters.blue.name,
   };
+  const scheduledRounds = view.bout.scheduledRounds ?? 3;
 
-  if (allRounds) {
-    const judges = groupByJudge(records, view.bout.id);
-    if (judges.length === 0) return null;
+  const judges = groupByJudge(records, view.bout.id);
+  if (judges.length === 0) return null;
 
-    return (
-      <section className="panel scorecard-panel" aria-label="Sherdog scorecards">
-        <ul className="media-scorecard-grid">
-          {judges.map((judge) => {
-            const total = finalCumulative(judge.cards);
-            const roundScores = judge.cards
-              .filter((card) => card.roundScore)
-              .map((card) => card.roundScore as string);
-            return (
-              <li className="media-scorecard" key={judge.scorer}>
-                <ScorerAvatar scorer={judge.scorer} profiles={scorerProfiles} />
-                <span className="media-scorecard-id">
-                  <strong className="media-scorecard-name">{judge.scorer}</strong>
-                </span>
-                <span className="media-scorecard-score">
-                  {roundScores.length > 0 && (
-                    <span
-                      className="media-scorecard-rounds num"
-                      title={roundScores.join(", ")}
-                    >
-                      {roundScores.map(formatScore).join(", ")}
-                    </span>
-                  )}
-                  {total?.cumulativeScore && (
-                    <span className="media-scorecard-total num" title={total.cumulativeScore}>
-                      {formatScore(total.cumulativeScore)}
-                      {total.winner && (
-                        <>
-                          {" ("}
-                          <WinnerName name={total.winner} fighters={fighters} />
-                          {")"}
-                        </>
-                      )}
-                    </span>
-                  )}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-    );
-  }
+  const boundary =
+    round === undefined
+      ? Math.max(0, ...judges.flatMap((judge) => judge.entries.map((entry) => entry.round)))
+      : round;
 
-  const record = records
-    .filter(
-      (candidate) =>
-        candidate.boutId === view.bout.id &&
-        (round === undefined || candidate.round === round),
-    )
-    .sort((left, right) => right.round - left.round)[0];
-  const sherdog = record?.sherdog;
-  const scoredCards = sherdog?.scorerCards.filter(hasScore) ?? [];
+  const rows = judges
+    .map((judge) => {
+      const boundedEntries = judge.entries.filter((entry) => entry.round <= boundary);
+      const latest = boundedEntries.at(-1);
+      if (latest === undefined) return undefined;
+      return { judge, latest };
+    })
+    .filter((row): row is { judge: JudgeTotal; latest: JudgeRoundEntry } => row !== undefined);
 
-  if (sherdog === undefined || scoredCards.length === 0) return null;
+  if (rows.length === 0) return null;
 
   return (
     <section
       className="panel scorecard-panel"
-      aria-label={`Sherdog round ${sherdog.round} scorecards`}
+      aria-label={allRounds ? "Sherdog scorecards" : `Sherdog scorecards through round ${boundary}`}
     >
-      <ul className="media-scorecard-grid">
-        {scoredCards.map((card, index) => (
-          <li className="media-scorecard" key={`${card.scorer}:${index}`}>
-            <ScorerAvatar scorer={card.scorer} profiles={scorerProfiles} />
-            <span className="media-scorecard-id">
-              <strong className="media-scorecard-name">{card.scorer}</strong>
-            </span>
-            <span className="media-scorecard-score">
-              <span className="media-scorecard-round-line">
-                {card.roundScore && (
-                  <b className="num" title={card.roundScore}>
-                    {formatScore(card.roundScore)}
-                  </b>
+      <ul className="scorecard-list">
+        {rows.map(({ judge, latest }) => {
+          const bigScore = latest.card.cumulativeScore ?? latest.card.roundScore;
+          return (
+            <li className="scorecard-judge" key={judge.scorer}>
+              <div className="scorecard-judge-header">
+                <ScorerAvatar scorer={judge.scorer} profiles={scorerProfiles} />
+                <strong className="scorecard-judge-name">{judge.scorer}</strong>
+                {bigScore !== undefined && (
+                  <span className="scorecard-judge-score num" title={bigScore}>
+                    {formatScore(bigScore)}
+                  </span>
                 )}
-                {card.winner && <WinnerName name={card.winner} fighters={fighters} />}
-              </span>
-              {card.cumulativeScore && (
-                <span className="media-scorecard-total num" title={card.cumulativeScore}>
-                  {formatScore(card.cumulativeScore)}
-                </span>
-              )}
-            </span>
-          </li>
-        ))}
+                {latest.card.winner && (
+                  <WinnerName name={latest.card.winner} fighters={fighters} />
+                )}
+              </div>
+              <div
+                className="scorecard-round-grid"
+                style={{ gridTemplateColumns: `repeat(${scheduledRounds}, 1fr)` }}
+              >
+                {Array.from({ length: scheduledRounds }, (_, index) => {
+                  const roundNumber = index + 1;
+                  const entry =
+                    roundNumber <= boundary
+                      ? judge.entries.find((candidate) => candidate.round === roundNumber)
+                      : undefined;
+                  return (
+                    <RoundChip key={roundNumber} entry={entry} fighters={fighters} />
+                  );
+                })}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
