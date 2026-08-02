@@ -12,6 +12,7 @@
 }
 
 .app-body {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -23,12 +24,41 @@
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  /* `none`, not `contain` — `contain` only stops the scroll from chaining
+   * up to the page (already unreachable here, .app-content's the only
+   * scroller), but still lets the browser's own rubber-band bounce play
+   * out locally at the top/bottom of this element. `none` removes that
+   * local bounce too, so content stops dead at its real top/bottom instead
+   * of overscrolling past it. */
+  overscroll-behavior-y: none;
   padding:
     11px max(15px, env(safe-area-inset-right))
     calc(18px + env(safe-area-inset-bottom))
     max(15px, env(safe-area-inset-left));
   scrollbar-width: none;
+}
+
+/*
+ * A live, already-rendered preview of the swipe-back gesture's destination
+ * screen — kept mounted and positioned just off the left edge (not
+ * display:none, so its layout is ready before the first touchmove) rather
+ * than built on demand, so a slow drag reveals real content immediately
+ * instead of blank space while something is fetched or mounted. useSwipeBack
+ * moves it in lockstep with .app-content during the gesture (see
+ * src/hooks/useSwipeBack.ts); at rest it sits fully off-screen and never
+ * affects layout or scroll.
+ */
+.app-content-underlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateX(-100%);
+  padding:
+    11px max(15px, env(safe-area-inset-right))
+    calc(18px + env(safe-area-inset-bottom))
+    max(15px, env(safe-area-inset-left));
 }
 
 /* Only the screen that contains the upcoming odds panel participates in the
@@ -1805,7 +1835,7 @@
 
 .rail {
   overflow-y: auto;
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: none;
   scrollbar-width: none;
 }
 

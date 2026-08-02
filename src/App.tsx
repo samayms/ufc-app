@@ -118,6 +118,12 @@ export default function App() {
     null,
   );
   const mainContentRef = useRef<HTMLElement>(null);
+  // The swipe-back "underlay" — a live, already-rendered preview of the
+  // screen a back gesture leads to, kept positioned just off-screen so it's
+  // instantly there (not re-fetched or re-mounted) the moment a drag starts,
+  // and revealed in lockstep with the finger rather than only appearing
+  // once the gesture completes.
+  const underlayRef = useRef<HTMLDivElement>(null);
   // One-shot override for screenDirection, consumed by the next screenKey
   // change then cleared — see backToPreviousFight, the one navigation whose
   // correct direction directionBetween's depth model can't infer on its own.
@@ -207,7 +213,7 @@ export default function App() {
         ? backToEventList
         : undefined;
 
-  useSwipeBack(mainContentRef, activeBackHandler);
+  useSwipeBack(mainContentRef, activeBackHandler, underlayRef);
 
   // Screen key/direction for ScreenTransition's slide animation. Computed
   // here (above the loading/error early returns, like activeBackHandler
@@ -404,21 +410,6 @@ export default function App() {
     };
   }
 
-  // Reflects whichever card the drilled-in Event tab screen is currently
-  // showing. Undefined on the top-level list screen (no single event's bout
-  // count applies) or while a future ESPN card is still loading or failed.
-  const cardBoutCount =
-    scheduleSelection === null
-      ? undefined
-      : scheduleSelection === event.id
-        ? event.bouts.length
-        : espnCard.card
-          ? espnCard.card.sections.reduce(
-              (total, sec) => total + sec.fights.length,
-              0,
-            )
-          : undefined;
-
   const selectedScheduleEventName =
     scheduleSelection === null
       ? undefined
@@ -434,6 +425,114 @@ export default function App() {
         ? (selectedScheduleEventName ?? event.name)
         : event.name
       : event.name;
+
+  // The Event tab's screen for a given drill state — extracted so the swipe-
+  // back underlay below can render "what going back would show" from the
+  // same code as the live screen, kept in sync rather than a second,
+  // drifting copy. Only ever called with `null` (top list) or `event.id`
+  // (the current event's own CardRail) for the underlay, since swipe-back
+  // never targets an arbitrary ESPN future-event id — but it stays correct
+  // for any `virtualSelection` since it's also what drives the live render.
+  const renderEventScreen = (virtualSelection: string | null) => {
+    if (virtualSelection === null) {
+      return (
+        <section className="card-screen" aria-labelledby="card-title">
+          <div className="page-heading">
+            <div>
+              <h2 id="card-title" className="events-title">Events</h2>
+            </div>
+          </div>
+          {upcomingEspn.status === "error" && (
+            <div className="state-notice" role="status">
+              <strong>ESPN unavailable</strong>
+              <span>
+                {upcomingEspn.message ??
+                  "Upcoming ESPN events could not be loaded."}
+              </span>
+              <button
+                type="button"
+                className="retry-button"
+                onClick={upcomingEspn.reload}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {upcomingEspn.status === "loading" && (
+            <SkeletonRows count={3} className="event-row-skeleton" />
+          )}
+          <EventList
+            currentEvent={currentEventEntry}
+            events={scheduleEventEntries}
+            selectedId=""
+            onSelect={setScheduleSelection}
+          />
+        </section>
+      );
+    }
+    const boutCount =
+      virtualSelection === event.id
+        ? event.bouts.length
+        : espnCard.card
+          ? espnCard.card.sections.reduce(
+              (total, sec) => total + sec.fights.length,
+              0,
+            )
+          : undefined;
+    return (
+      <section className="card-screen" aria-labelledby="card-title">
+        <div className="page-heading">
+          <div>
+            <span className="page-kicker">Bout order</span>
+            <h2 id="card-title" className="event-title">
+              {virtualSelection === event.id
+                ? event.name
+                : (espnCard.card?.name ?? "Event card")}
+            </h2>
+          </div>
+          {boutCount !== undefined && (
+            <span className="num page-count">{boutCount} bouts</span>
+          )}
+        </div>
+        {virtualSelection === event.id ? (
+          <CardRail
+            bouts={event.bouts}
+            selectedId={selectedId ?? ""}
+            onSelect={selectBout}
+            photosByBoutId={photosByBoutId}
+          />
+        ) : espnCard.status === "loading" || espnCard.status === "idle" ? (
+          <SkeletonRows count={4} className="card-row-skeleton" />
+        ) : espnCard.status === "error" ? (
+          <div className="state-notice" role="status">
+            <strong>Card unavailable</strong>
+            <span>
+              {espnCard.message ??
+                "This event's fight card could not be loaded."}
+            </span>
+          </div>
+        ) : espnCard.card ? (
+          <ScheduledCardRail card={espnCard.card} onSelect={selectFutureFight} />
+        ) : (
+          <div className="empty-state">
+            <strong>No fight card yet</strong>
+            <span>ESPN hasn't published matchups for this event.</span>
+          </div>
+        )}
+      </section>
+    );
+  };
+
+  // Which virtual event-tab selection the swipe-back underlay should show,
+  // if any — undefined means there's no swipe-revealable underlay for the
+  // current screen (e.g. the Data tab, or the Fight tab's jump-back case,
+  // which isn't covered by this underlay yet).
+  const swipeUnderlaySelection: string | null | undefined =
+    activeBackHandler === backToEventFromFight
+      ? event.id
+      : activeBackHandler === backToEventList
+        ? null
+        : undefined;
 
   return (
     <div className="app">
@@ -465,6 +564,11 @@ export default function App() {
               photosByBoutId={photosByBoutId}
             />
           </aside>
+        )}
+        {swipeUnderlaySelection !== undefined && (
+          <div className="app-content-underlay" ref={underlayRef} aria-hidden="true">
+            {renderEventScreen(swipeUnderlaySelection)}
+          </div>
         )}
         <main className="app-content" id="main-content" ref={mainContentRef}>
           <ScreenTransition screenKey={screenKey} direction={screenDirection}>
@@ -576,85 +680,7 @@ export default function App() {
                 <span>Event data loaded without a selectable matchup.</span>
               </div>
             ))}
-          {tab === "event" &&
-            (scheduleSelection === null ? (
-              <section className="card-screen" aria-labelledby="card-title">
-                <div className="page-heading">
-                  <div>
-                    <h2 id="card-title" className="events-title">Events</h2>
-                  </div>
-                </div>
-                {upcomingEspn.status === "error" && (
-                  <div className="state-notice" role="status">
-                    <strong>ESPN unavailable</strong>
-                    <span>
-                      {upcomingEspn.message ??
-                        "Upcoming ESPN events could not be loaded."}
-                    </span>
-                    <button
-                      type="button"
-                      className="retry-button"
-                      onClick={upcomingEspn.reload}
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-                {upcomingEspn.status === "loading" && (
-                  <SkeletonRows count={3} className="event-row-skeleton" />
-                )}
-                <EventList
-                  currentEvent={currentEventEntry}
-                  events={scheduleEventEntries}
-                  selectedId=""
-                  onSelect={setScheduleSelection}
-                />
-              </section>
-            ) : (
-              <section className="card-screen" aria-labelledby="card-title">
-                <div className="page-heading">
-                  <div>
-                    <span className="page-kicker">Bout order</span>
-                    <h2 id="card-title" className="event-title">
-                      {scheduleSelection === event.id
-                        ? event.name
-                        : (espnCard.card?.name ?? "Event card")}
-                    </h2>
-                  </div>
-                  {cardBoutCount !== undefined && (
-                    <span className="num page-count">{cardBoutCount} bouts</span>
-                  )}
-                </div>
-                {scheduleSelection === event.id ? (
-                  <CardRail
-                    bouts={event.bouts}
-                    selectedId={selectedId ?? ""}
-                    onSelect={selectBout}
-                    photosByBoutId={photosByBoutId}
-                  />
-                ) : espnCard.status === "loading" || espnCard.status === "idle" ? (
-                  <SkeletonRows count={4} className="card-row-skeleton" />
-                ) : espnCard.status === "error" ? (
-                  <div className="state-notice" role="status">
-                    <strong>Card unavailable</strong>
-                    <span>
-                      {espnCard.message ??
-                        "This event's fight card could not be loaded."}
-                    </span>
-                  </div>
-                ) : espnCard.card ? (
-                  <ScheduledCardRail
-                    card={espnCard.card}
-                    onSelect={selectFutureFight}
-                  />
-                ) : (
-                  <div className="empty-state">
-                    <strong>No fight card yet</strong>
-                    <span>ESPN hasn't published matchups for this event.</span>
-                  </div>
-                )}
-              </section>
-            ))}
+          {tab === "event" && renderEventScreen(scheduleSelection)}
           {tab === "data" && (
             <SourceStatus
               state={state}
