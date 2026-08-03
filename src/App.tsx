@@ -659,7 +659,9 @@ export default function App() {
             entryView.preFightOdds,
             event.startsAt,
           )}
-          onOpen={() => changeSection("odds")}
+          {...(entryView.bout.status === "final"
+            ? {}
+            : { onOpen: () => changeSection("odds") })}
           resultWinner={
             entryView.bout.status === "final"
               ? entryView.bout.result?.winner

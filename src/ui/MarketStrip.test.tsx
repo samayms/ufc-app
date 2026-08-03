@@ -50,6 +50,19 @@ function renderMarket(market: OddsSnapshot["market"]): string {
 }
 
 describe("MarketStrip odds source", () => {
+  it("renders as an inert div, not a button, once the bout is final and there's nowhere to open", () => {
+    const html = renderToStaticMarkup(
+      <MarketStrip
+        latestOdds={{ kalshi: snapshot("kalshi") }}
+        preFightOdds={{}}
+        resultWinner="blue"
+      />,
+    );
+    expect(html).not.toContain("<button");
+    expect(html).toContain("<div");
+    expect(html).toContain("market-strip");
+  });
+
   it("shows a final winner as 100/0 while retaining prefight context", () => {
     const html = renderToStaticMarkup(
       <MarketStrip

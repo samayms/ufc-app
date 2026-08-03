@@ -877,10 +877,10 @@
   font-family: "Barlow", sans-serif;
   font-size: 0.6rem;
   font-weight: 400;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   text-align: center;
   text-overflow: ellipsis;
-  text-transform: none;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 

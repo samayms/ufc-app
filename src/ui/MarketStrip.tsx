@@ -21,7 +21,8 @@ export function MarketStrip({
 }: {
   latestOdds: LatestOdds;
   preFightOdds: LatestOdds;
-  onOpen: () => void;
+  /** Omitted once the bout is final — there's no Odds tab left to open. */
+  onOpen?: () => void;
   /** Settled result overrides only this compact current display. */
   resultWinner?: Corner | "draw" | "nc";
 }) {
@@ -42,13 +43,8 @@ export function MarketStrip({
   const preFightRed = preFightProbs?.red ?? null;
   const preFightBlue = preFightProbs?.blue ?? null;
 
-  return (
-    <button
-      className="market-strip"
-      type="button"
-      onClick={onOpen}
-      aria-label="Open odds comparison"
-    >
+  const content = (
+    <>
       <span className="market-strip-side">
         <strong className="num" data-odds-source={snapshot?.market}>
           {red == null ? "—" : fmtPct(red)}
@@ -75,6 +71,27 @@ export function MarketStrip({
           Prefight odds: <span className="num">{preFightBlue == null ? "—" : fmtPct(preFightBlue)}</span>
         </span>
       </span>
+    </>
+  );
+
+  // Once the bout is final there's no Odds tab to open — render as an inert
+  // strip instead of a dead button that swaps to a blank section.
+  if (onOpen === undefined) {
+    return (
+      <div className="market-strip" aria-label="Final odds">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      className="market-strip"
+      type="button"
+      onClick={onOpen}
+      aria-label="Open odds comparison"
+    >
+      {content}
     </button>
   );
 }
