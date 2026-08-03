@@ -224,6 +224,13 @@ function hasRealStatValue(value: string | undefined): boolean {
   return value !== undefined && value !== "—";
 }
 
+/** "3.21" -> 3.21; "—" or anything non-numeric -> undefined. */
+function parseStatNumber(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export function UpcomingTaleSection({
   fighters,
   statValues,
@@ -257,19 +264,34 @@ export function UpcomingTaleSection({
             outlook === undefined ? "profile-rows profile-rows--leading" : "profile-rows"
           }
         >
-          {STAT_ROWS.map(({ key, label }) => (
-            <div className="profile-row-block" key={key}>
-              <div className="profile-row">
-                <span className="num">{statValues?.red?.[key] ?? "—"}</span>
-                <span>{label}</span>
-                <span className="num">{statValues?.blue?.[key] ?? "—"}</span>
+          {STAT_ROWS.map(({ key, label }) => {
+            const red = parseStatNumber(statValues?.red?.[key]);
+            const blue = parseStatNumber(statValues?.blue?.[key]);
+            const max = Math.max(red ?? 0, blue ?? 0, 1);
+            return (
+              <div className="profile-row-block" key={key}>
+                <div className="profile-row">
+                  <span className="num">{statValues?.red?.[key] ?? "—"}</span>
+                  <span>{label}</span>
+                  <span className="num">{statValues?.blue?.[key] ?? "—"}</span>
+                </div>
+                <div className="profile-row-bars" aria-hidden="true">
+                  <span>
+                    <i
+                      className="profile-row-bar-red"
+                      style={{ width: red ? `${(red / max) * 100}%` : "0%" }}
+                    />
+                  </span>
+                  <span>
+                    <i
+                      className="profile-row-bar-blue"
+                      style={{ width: blue ? `${(blue / max) * 100}%` : "0%" }}
+                    />
+                  </span>
+                </div>
               </div>
-              <div className="profile-row-bars" aria-hidden="true">
-                <span className="profile-row-bar-red" />
-                <span className="profile-row-bar-blue" />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         {!hasAnyStats && (
           <p className="profile-rows-empty">

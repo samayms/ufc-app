@@ -1763,20 +1763,39 @@
 }
 
 /* Career-average stat rows (Tale tab): the row itself reuses .profile-row,
- * with a neutral progress-bar pair underneath standing in for the
- * proportional bars until a real per-stat data source exists. */
+ * with a proportional bar pair underneath — same track/fill shape as the
+ * Fight tab's .compact-stat-bars, filled toward whichever corner leads that
+ * stat, relative to the larger of the two values. */
 .profile-row-bars {
   display: flex;
   gap: 3px;
   margin: -2px 0 6px;
 }
 
-.profile-row-bar-red,
-.profile-row-bar-blue {
+.profile-row-bars > span {
   height: 4px;
   flex: 1;
+  display: flex;
+  overflow: hidden;
   border-radius: 2px;
   background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.profile-row-bars > span:first-child {
+  justify-content: flex-end;
+}
+
+.profile-row-bars i {
+  display: block;
+  height: 100%;
+}
+
+.profile-row-bar-red {
+  background: var(--red-corner);
+}
+
+.profile-row-bar-blue {
+  background: var(--blue-corner);
 }
 
 .profile-rows-empty {
