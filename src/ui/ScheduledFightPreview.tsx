@@ -290,16 +290,28 @@ function TaleSection({ fight }: { fight: EspnScheduledFight }) {
     <UpcomingTaleSection
       fighters={fighters}
       outlook={fight.outlook}
-      statValues={{
-        red: Object.fromEntries(
-          STAT_ROWS.map(({ key }) => [key, statValue(fight.red, key)]),
-        ),
-        blue: Object.fromEntries(
-          STAT_ROWS.map(({ key }) => [key, statValue(fight.blue, key)]),
-        ),
-      }}
+      statValues={taleStatValues(fight)}
     />
   );
+}
+
+/**
+ * ESPN's fightcenter career-average stats for both corners of a fight, in
+ * the shape `UpcomingTaleSection` takes. Exported so the live/current-event
+ * Fight tab (App.tsx) can show the same real numbers this preview does, once
+ * it has matched its own bout to an ESPN fightcenter fight.
+ */
+export function taleStatValues(
+  fight: EspnScheduledFight,
+): Partial<Record<Corner, Record<string, string>>> {
+  return {
+    red: Object.fromEntries(
+      STAT_ROWS.map(({ key }) => [key, statValue(fight.red, key)]),
+    ),
+    blue: Object.fromEntries(
+      STAT_ROWS.map(({ key }) => [key, statValue(fight.blue, key)]),
+    ),
+  };
 }
 
 const STAT_ROWS: { key: string; label: string }[] = [

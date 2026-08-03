@@ -30,6 +30,7 @@ import {
 import { ScheduledCardRail } from "./ui/ScheduledCardRail.tsx";
 import {
   boutToScheduledFight,
+  taleStatValues,
   UpcomingOddsSection,
   UpcomingTaleSection,
   ScheduledFightPreview,
@@ -87,6 +88,19 @@ const SECTION_ORDER: FightSection[] = ["summary", "stats", "odds", "tale"];
 
 function sectionDepth(key: string): number {
   return SECTION_ORDER.indexOf(key as FightSection);
+}
+
+/** Finds the ESPN fightcenter fight matching a canonical bout id, if the card is loaded. */
+function findEspnFight(
+  card: { sections: { fights: EspnScheduledFight[] }[] } | null,
+  boutId: string,
+): EspnScheduledFight | undefined {
+  if (!card) return undefined;
+  for (const section of card.sections) {
+    const match = section.fights.find((fight) => fight.competitionId === boutId);
+    if (match) return match;
+  }
+  return undefined;
 }
 
 /** Whether the reader has asked the OS to keep motion to a minimum — the
@@ -151,6 +165,12 @@ export default function App() {
       ? scheduleSelection
       : null;
   const espnCard = useEspnCard(futureEventId);
+  // The current dashboard event's own ESPN fightcenter card — separate from
+  // espnCard above (which only ever names a *different*, browsed-to event).
+  // Bout/Fighter (the canonical, collector-fed shape entryView.bout carries)
+  // has no career-stat field at all, so the Tale tab's stat rows need this
+  // fetch even for the event already on screen.
+  const currentEspnCard = useEspnCard(currentEventId ?? null);
   const upcomingEventPhotos = useUpcomingEventPhotos(
     upcomingEspn.status === "ready" ? upcomingEspn.events : [],
   );
@@ -610,10 +630,20 @@ export default function App() {
         </div>
       );
     }
+    // Bout/Fighter never carries ESPN's career-average stats (the collector
+    // pipeline that feeds it has no such field) — this fills that gap with
+    // the same fightcenter fetch a browsed-to future event already uses,
+    // matched back to this bout by its ESPN-rooted id.
+    const matchedEspnFight = findEspnFight(currentEspnCard.card, entryView.bout.id);
     if (entryView.bout.status === "upcoming") {
+      const canonicalFight = boutToScheduledFight(entryView.bout);
       return (
         <ScheduledFightPreview
-          fight={boutToScheduledFight(entryView.bout)}
+          fight={
+            matchedEspnFight
+              ? { ...canonicalFight, red: matchedEspnFight.red, blue: matchedEspnFight.blue }
+              : canonicalFight
+          }
           upcoming={upcomingOdds}
           photosByCorner={photosByBoutId[entryView.bout.id]}
         />
@@ -720,7 +750,13 @@ export default function App() {
             />
           )}
           {entry.section === "tale" && (
-            <UpcomingTaleSection fighters={entryView.bout.fighters} />
+            <UpcomingTaleSection
+              fighters={entryView.bout.fighters}
+              outlook={entryView.bout.outlook}
+              {...(matchedEspnFight
+                ? { statValues: taleStatValues(matchedEspnFight) }
+                : {})}
+            />
           )}
         </ScreenTransition>
       </div>

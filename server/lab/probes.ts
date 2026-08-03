@@ -363,7 +363,7 @@ const espnSchedule = jsonProbe({
     );
   },
   summarize: ({ json }) => {
-    const events = parseEspnScheduleEvents(json, new Date());
+    const events = parseEspnScheduleEvents(json);
     return {
       summary: [
         `${events.length} events`,

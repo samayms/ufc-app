@@ -425,14 +425,14 @@ function scheduledEventStatus(
 }
 
 /**
- * Parses the ESPN scoreboard payload into current/recent/upcoming,
- * non-Contender-Series event summaries. A freshly completed card remains
- * eligible long enough to review its results and round stats; after that
- * bounded window it drops out and the next event becomes current.
+ * Parses the ESPN scoreboard payload into current/recent/upcoming/past,
+ * non-Contender-Series event summaries. Every event the underlying query
+ * returned is kept regardless of age or status — how far back "past" goes is
+ * entirely a function of the caller's own date-range query, not a filter in
+ * here (see SCHEDULE_LOOKBACK_DAYS below).
  */
 export function parseEspnScheduleEvents(
   payload: unknown,
-  now: Date,
 ): EspnScheduledEventSummary[] {
   if (typeof payload !== "object" || payload === null) return [];
 
@@ -456,16 +456,10 @@ export function parseEspnScheduleEvents(
     if (Number.isNaN(eventTime)) continue;
 
     const status = scheduledEventStatus(event.status?.type);
-    if (status === "completed") {
-      if (!eventWithinReviewWindow(date, now)) {
-        continue;
-      }
-    }
 
     // A past *scheduled* time alone is not proof that a card is over. ESPN
     // keeps a live event on the scoreboard while the card is in progress.
-    // Keep it so a restart can attach to the current card; completed events
-    // are filtered above.
+    // Keep it so a restart can attach to the current card.
 
     const shortName = event.shortName;
     if (CONTENDER_SERIES_PATTERN.test(`${name} ${shortName ?? ""}`)) continue;
@@ -1044,11 +1038,15 @@ async function fetchJsonWithLimits(
 // ---------------------------------------------------------------------------
 
 const DEFAULT_TTL_MS = 5 * 60_000;
-/** Covers a card that began before midnight UTC and is still in progress. */
-const SCHEDULE_LOOKBACK_DAYS = 1;
-// With the one-day lookback, +364 keeps the inclusive ESPN `dates` range at
-// its verified 366-calendar-day maximum (yesterday through 364 days ahead).
-const SCHEDULE_WINDOW_DAYS = 364;
+// Weighted toward the past so the Event tab's "Past events" section keeps
+// every completed event this query can still see, rather than just the one
+// that just finished. UFC's own schedule is rarely announced more than a
+// few months out, so trimming the forward side to 65 days costs nothing —
+// ESPN just returns no events for the months beyond what's announced — while
+// 300 days back covers roughly a full year of fight history. Combined, 365
+// days stays one under ESPN's verified 366-calendar-day inclusive cap.
+const SCHEDULE_LOOKBACK_DAYS = 300;
+const SCHEDULE_WINDOW_DAYS = 65;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SCHEDULE_REQUEST_TIMEOUT_MS = 8_000;
 const SCHEDULE_MAX_RESPONSE_BYTES = 4_000_000;
@@ -1126,7 +1124,7 @@ export function createEspnScheduleSource(options?: {
           fetchImpl,
         },
       );
-      return parseEspnScheduleEvents(payload, start);
+      return parseEspnScheduleEvents(payload);
     } catch (error) {
       throw new Error(
         `Failed to load the ESPN UFC schedule: ${messageOf(error)}`,

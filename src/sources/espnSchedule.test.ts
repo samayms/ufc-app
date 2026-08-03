@@ -106,8 +106,7 @@ describe("buildEspnAthleteUrl", () => {
 // despite not containing the literal string "UFC").
 describe("parseEspnScheduleEvents", () => {
   it("excludes all Contender Series events but keeps Noche UFC", () => {
-    const now = new Date("2026-07-28T00:00:00Z");
-    const events = parseEspnScheduleEvents(scoreboardFixture, now);
+    const events = parseEspnScheduleEvents(scoreboardFixture);
 
     expect(events).toHaveLength(8);
     expect(
@@ -116,8 +115,7 @@ describe("parseEspnScheduleEvents", () => {
     expect(events.some((event) => event.name === "Noche UFC")).toBe(true);
   });
 
-  it("keeps a recent completed card for review but drops it after the retention window", () => {
-    const now = new Date("2026-08-20T00:00:00Z");
+  it("keeps every completed event the query returned, regardless of age — how far back that goes is the caller's date-range query, not a filter here", () => {
     const events = parseEspnScheduleEvents({
       events: [
         { id: "live", date: "2026-08-19T23:00:00Z", name: "UFC Live", status: { type: { name: "STATUS_IN_PROGRESS", completed: false } } },
@@ -125,14 +123,16 @@ describe("parseEspnScheduleEvents", () => {
         { id: "old-final", date: "2026-08-18T05:00:00Z", name: "UFC Old Final", status: { type: { name: "STATUS_FINAL", completed: true } } },
         { id: "next", date: "2026-08-27T23:00:00Z", name: "UFC Next" },
       ],
-    }, now);
+    });
 
     expect(events.map((event) => event.eventId)).toEqual([
+      "old-final",
       "recent-final",
       "live",
       "next",
     ]);
     expect(events.map((event) => event.status)).toEqual([
+      "completed",
       "completed",
       "live",
       "upcoming",
@@ -155,13 +155,12 @@ describe("parseEspnScheduleEvents", () => {
           },
         },
       ],
-    }, new Date("2026-08-20T00:00:00Z"));
+    });
 
     expect(events[0]?.status).toBe("upcoming");
   });
 
   it("de-duplicates by event id", () => {
-    const now = new Date("2026-07-28T00:00:00Z");
     const duplicated = {
       events: [
         ...(scoreboardFixture.events as unknown[]),
@@ -169,24 +168,23 @@ describe("parseEspnScheduleEvents", () => {
       ],
     };
 
-    const events = parseEspnScheduleEvents(duplicated, now);
+    const events = parseEspnScheduleEvents(duplicated);
     const ids = events.map((event) => event.eventId);
 
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("sorts ascending by date", () => {
-    const now = new Date("2026-07-28T00:00:00Z");
-    const events = parseEspnScheduleEvents(scoreboardFixture, now);
+    const events = parseEspnScheduleEvents(scoreboardFixture);
     const times = events.map((event) => new Date(event.startsAt).getTime());
 
     expect(times).toEqual([...times].sort((a, b) => a - b));
   });
 
   it("returns an empty list rather than throwing on malformed input", () => {
-    expect(parseEspnScheduleEvents(null, new Date())).toEqual([]);
-    expect(parseEspnScheduleEvents({}, new Date())).toEqual([]);
-    expect(parseEspnScheduleEvents({ cards: null }, new Date())).toEqual([]);
+    expect(parseEspnScheduleEvents(null)).toEqual([]);
+    expect(parseEspnScheduleEvents({})).toEqual([]);
+    expect(parseEspnScheduleEvents({ cards: null })).toEqual([]);
   });
 });
 
@@ -709,7 +707,7 @@ describe("createEspnScheduleSource", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it("requests a one-day lookback within ESPN's inclusive 366-day cap", async () => {
+  it("requests a 300-day lookback (for Past events) within ESPN's inclusive 366-day cap", async () => {
     const currentTime = new Date("2026-07-28T00:00:00Z");
     const fetchImpl = vi.fn(async () => jsonResponse(scoreboardFixture));
     const source = createEspnScheduleSource({
@@ -720,8 +718,8 @@ describe("createEspnScheduleSource", () => {
     await source.listUpcomingEvents();
 
     const expectedUrl = buildEspnScheduleUrl(
-      new Date(currentTime.getTime() - 24 * 60 * 60 * 1_000),
-      new Date(currentTime.getTime() + 364 * 24 * 60 * 60 * 1000),
+      new Date(currentTime.getTime() - 300 * 24 * 60 * 60 * 1_000),
+      new Date(currentTime.getTime() + 65 * 24 * 60 * 60 * 1000),
     );
     expect(fetchImpl).toHaveBeenCalledWith(expectedUrl, expect.anything());
   });
