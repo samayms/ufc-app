@@ -243,6 +243,19 @@ export async function loadLiveEventState(
   const events = await source.listUpcomingEvents();
 
   for (const summary of events) {
+    // `listUpcomingEvents()` now looks up to `SCHEDULE_LOOKBACK_DAYS` into the
+    // past (for the Past events tab) and returns everything in that window
+    // sorted ascending by start date, so an old completed card can sort
+    // before the real current/upcoming one. Skip completed events here
+    // unless they just finished, mirroring the `preferredEventIds` review
+    // window above so a restart moments after a card ends still attaches to
+    // its final result instead of jumping straight to next week's event.
+    if (
+      summary.status === "completed" &&
+      !eventWithinReviewWindow(summary.startsAt, now)
+    ) {
+      continue;
+    }
     const card = await source.getCard(summary.eventId);
     if (card === null) continue;
     const state = espnCardToDashboardState(card, fetchedAt);

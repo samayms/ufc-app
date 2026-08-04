@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { espnCardToDashboardState } from "./liveEventState.ts";
-import type { EspnScheduledCard } from "../src/sources/espnSchedule.ts";
+import { espnCardToDashboardState, loadLiveEventState } from "./liveEventState.ts";
+import type {
+  EspnScheduledCard,
+  EspnScheduledEventSummary,
+  EspnScheduleSource,
+} from "../src/sources/espnSchedule.ts";
 
 function card(): EspnScheduledCard {
   return {
@@ -33,6 +37,60 @@ function card(): EspnScheduledCard {
     ],
   };
 }
+
+function fakeScheduleSource(
+  events: EspnScheduledEventSummary[],
+  cardsByEventId: Record<string, EspnScheduledCard>,
+): EspnScheduleSource {
+  return {
+    async listUpcomingEvents() {
+      return events;
+    },
+    async getCard(eventId: string) {
+      return cardsByEventId[eventId] ?? null;
+    },
+  };
+}
+
+describe("loadLiveEventState event selection", () => {
+  it("skips a completed event even when the schedule query returns it before the upcoming one", async () => {
+    const completedCard = card();
+    completedCard.eventId = "600000001";
+    const upcomingCard = card();
+    upcomingCard.eventId = "600000002";
+
+    // `listUpcomingEvents()` now looks 300 days into the past (for the Past
+    // events tab), so its result is sorted ascending by start date with old,
+    // already-completed events first — the live-state loader must skip those
+    // rather than latch onto whichever card happens to sort first.
+    const events: EspnScheduledEventSummary[] = [
+      {
+        eventId: "600000001",
+        name: "UFC Fight Night: Old vs. Stale",
+        startsAt: "2025-10-11T20:00:00.000Z",
+        status: "completed",
+      },
+      {
+        eventId: "600000002",
+        name: "UFC Fight Night: Gamrot vs. Salkilld",
+        startsAt: "2026-08-08T18:00:00.000Z",
+        status: "upcoming",
+      },
+    ];
+
+    const source = fakeScheduleSource(events, {
+      "600000001": completedCard,
+      "600000002": upcomingCard,
+    });
+
+    const state = await loadLiveEventState({
+      scheduleSource: source,
+      now: () => new Date("2026-08-03T12:00:00Z"),
+    });
+
+    expect(state.event.id).toBe("600000002");
+  });
+});
 
 describe("espnCardToDashboardState outlook wiring", () => {
   it("attaches the fixture outlook to the bout it matches by ESPN competition id", () => {

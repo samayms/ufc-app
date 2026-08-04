@@ -36,6 +36,7 @@ import {
   createEspnScheduleSource,
   parseEspnFightcenterCard,
   type EspnScheduledCard,
+  type EspnScheduleSource,
 } from "../src/sources/espnSchedule.ts";
 import espnFightcenterFixture from "../src/fixtures/espnFightcenter.json" with {
   type: "json",
@@ -107,12 +108,20 @@ async function loadFixtureCards(): Promise<UpcomingCard[]> {
   );
 }
 
-async function loadLiveCards(limit: number): Promise<UpcomingCard[]> {
-  const source = createEspnScheduleSource();
+export async function loadLiveCards(
+  limit: number,
+  source: EspnScheduleSource = createEspnScheduleSource(),
+): Promise<UpcomingCard[]> {
   const events = await source.listUpcomingEvents();
+  // `listUpcomingEvents()` looks up to `SCHEDULE_LOOKBACK_DAYS` into the past
+  // (for the dashboard's Past events tab) and returns that whole window
+  // sorted ascending by start date, so old completed cards sort before the
+  // real upcoming ones this sync exists to prime. Priming only ever wants
+  // what's actually ahead.
+  const upcomingOnly = events.filter((event) => event.status !== "completed");
   const cards: UpcomingCard[] = [];
 
-  for (const event of events.slice(0, limit)) {
+  for (const event of upcomingOnly.slice(0, limit)) {
     const card = await source.getCard(event.eventId);
     if (card === null) continue;
     const upcoming = espnCardToUpcomingCard(card);
