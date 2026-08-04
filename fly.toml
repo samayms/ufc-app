@@ -23,7 +23,16 @@ primary_region = "ewr"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "512mb"
+  # Bumped from 512mb (2026-08-04): market-ticks.jsonl retains every accepted
+  # tick by design (src/sources/contract.ts) and is fully replayed into
+  # memory on boot (server/tickStore.ts restoreFromStorage). It had grown to
+  # ~147MB, and parsing that into MarketTick objects pushed V8's heap past
+  # 512mb, OOM-crash-looping the machine until it exhausted its restart
+  # budget and Fly stopped it. 512mb was only ever sized for the empty-store
+  # case. Revisit if this keeps climbing — either size up again or make tick
+  # retention deliberately bounded (a product decision, not one to make
+  # silently) — see PROGRESS.md.
+  memory = "2048mb"
 
 [http_service]
   internal_port = 8600
