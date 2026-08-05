@@ -3,6 +3,7 @@ import {
   hasEventCompleted,
   hasEventStarted,
   isEventDay,
+  nextUpcomingEventId,
   sameEvent,
   selectFightTabBoutId,
 } from "./eventIdentity.ts";
@@ -87,6 +88,36 @@ describe("selectFightTabBoutId", () => {
       selectFightTabBoutId([
         { id: "co-main", cardPosition: 2, status: "upcoming" },
         { id: "main", cardPosition: 1, status: "upcoming" },
+      ]),
+    ).toBeUndefined();
+  });
+});
+
+describe("nextUpcomingEventId", () => {
+  it("skips an old completed event that sorts before the real upcoming one", () => {
+    expect(
+      nextUpcomingEventId([
+        { eventId: "old-completed", status: "completed" },
+        { eventId: "next-up", status: "upcoming" },
+      ]),
+    ).toBe("next-up");
+  });
+
+  it("returns a live event ahead of a not-yet-started one", () => {
+    expect(
+      nextUpcomingEventId([
+        { eventId: "old-completed", status: "completed" },
+        { eventId: "tonight", status: "live" },
+        { eventId: "next-week", status: "upcoming" },
+      ]),
+    ).toBe("tonight");
+  });
+
+  it("returns undefined when the whole schedule window is completed events", () => {
+    expect(
+      nextUpcomingEventId([
+        { eventId: "old-1", status: "completed" },
+        { eventId: "old-2", status: "completed" },
       ]),
     ).toBeUndefined();
   });

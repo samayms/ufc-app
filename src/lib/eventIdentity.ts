@@ -65,6 +65,20 @@ export function hasEventCompleted(
   );
 }
 
+/**
+ * The nearest non-completed event's id out of `listUpcomingEvents()`'s
+ * result — which spans a wide past+future window (see espnSchedule.ts's
+ * SCHEDULE_LOOKBACK_DAYS, kept for the Past events tab) sorted ascending by
+ * start date, so an old completed card can sort before the real
+ * current/upcoming one. `undefined` when nothing on the schedule is
+ * upcoming or live.
+ */
+export function nextUpcomingEventId(
+  events: readonly { eventId: string; status: "upcoming" | "live" | "completed" }[],
+): string | undefined {
+  return events.find((event) => event.status !== "completed")?.eventId;
+}
+
 const LIVE_BOUT_STATUSES = new Set<BoutStatus>(["in-round", "between-rounds"]);
 
 /**

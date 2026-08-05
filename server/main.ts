@@ -30,6 +30,7 @@ import {
   createEspnScheduleSource,
   eventWithinReviewWindow,
 } from "../src/sources/espnSchedule.ts";
+import { nextUpcomingEventId } from "../src/lib/eventIdentity.ts";
 import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
 
 export const EVENT_ROTATION_INTERVAL_MS = 15 * 60 * 1_000;
@@ -103,7 +104,9 @@ export async function startApp(): Promise<{
                 return activeEventId;
               }
             }
-            return (await scheduleSource.listUpcomingEvents())[0]?.eventId;
+            return nextUpcomingEventId(
+              await scheduleSource.listUpcomingEvents(),
+            );
           },
           rotate: async (eventId) => {
             if (eventId === activeEventId) return;
