@@ -1089,9 +1089,17 @@ export class MarketTickStore implements TickHistorySource {
     this.latest.clear();
     for (const persisted of ticks) {
       if (!isPersistedTick(persisted)) continue;
-      const tick = copyTick(persisted.tick);
-      this.history.push(tick);
-      applyTick(this.latest, tick);
+      // No copyTick() here, unlike appendTick(): `persisted.tick` came
+      // straight out of JSON.parse in storage.read() and isn't aliased by
+      // any caller that could later mutate it, so history can hold it
+      // directly. market-ticks.jsonl retains every accepted tick by design
+      // (src/sources/contract.ts) and routinely runs into the hundreds of
+      // thousands of records; cloning every one of them here doubled peak
+      // memory during restore (the full parsed array and a full cloned copy
+      // alive at once) for no safety benefit, which is what was OOM-crashing
+      // the deployed machine on boot (see PROGRESS.md, 2026-08-04/05).
+      this.history.push(persisted.tick);
+      applyTick(this.latest, persisted.tick);
     }
 
     this.snapshots.clear();
