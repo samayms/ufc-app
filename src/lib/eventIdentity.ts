@@ -65,6 +65,31 @@ export function hasEventCompleted(
   );
 }
 
+const LIVE_BOUT_STATUSES = new Set<BoutStatus>(["in-round", "between-rounds"]);
+
+/**
+ * Which bout the bottom nav's Fight tab should jump to: whichever bout is
+ * live right now (in-round or between-rounds) if one exists, else whichever
+ * finished most recently. The card airs from the highest `cardPosition` down
+ * to the main event (`cardPosition` 1), so among either group the lowest
+ * `cardPosition` is the one currently airing or the last one to finish.
+ * `undefined` when nothing on the card has started yet — the caller keeps
+ * showing whatever it already had.
+ */
+export function selectFightTabBoutId(
+  bouts: readonly { id: string; cardPosition: number; status: BoutStatus }[],
+): string | undefined {
+  const live = bouts
+    .filter((bout) => LIVE_BOUT_STATUSES.has(bout.status))
+    .sort((a, b) => a.cardPosition - b.cardPosition)[0];
+  if (live) return live.id;
+
+  const mostRecentlyFinished = bouts
+    .filter((bout) => bout.status === "final")
+    .sort((a, b) => a.cardPosition - b.cardPosition)[0];
+  return mostRecentlyFinished?.id;
+}
+
 /** True when `startsAt` falls on the same calendar day as `now`, in the
  * viewer's local time zone. Used to gate same-day-only display rules (e.g.
  * hiding a provider that only misbehaves on the day of the event) — distinct

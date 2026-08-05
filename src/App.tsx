@@ -48,6 +48,7 @@ import {
   hasEventCompleted,
   hasEventStarted,
   sameEvent,
+  selectFightTabBoutId,
 } from "./lib/eventIdentity.ts";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
 import { useUpcomingOdds } from "./store/useUpcomingOdds.ts";
@@ -353,27 +354,25 @@ export default function App() {
   // they replace goes on the back stack (navigateTo), so back — button or
   // swipe — returns to the exact fight or drilled card that was showing.
   //
-  // "Fight" jumps to whichever bout in the current live event finished most
-  // recently (lowest cardPosition among final bouts — the card airs from the
-  // highest cardPosition down to the main event, so that's the last one to
-  // finish); if nothing's finished yet it keeps showing whatever it was.
+  // "Fight" jumps to whichever bout on the current live event is live right
+  // now, or else whichever one finished most recently (see
+  // selectFightTabBoutId); if nothing's started yet it keeps showing
+  // whatever it was.
   //
   // "Event" goes to the events list itself, not to whatever event was last
   // drilled into — the tab is named for that list, so tapping it should land
   // on it, at the top.
   const handleNavTabChange = (next: AppTab) => {
-    const mostRecentCompleted = event.bouts
-      .filter((bout) => bout.status === "final")
-      .sort((a, b) => a.cardPosition - b.cardPosition)[0];
+    const fightTabBoutId = selectFightTabBoutId(event.bouts);
     const changes: Partial<NavEntry> =
       next === "event"
         ? { tab: "event", scheduleSelection: null }
         : next !== "fight"
           ? { tab: next }
-          : mostRecentCompleted
+          : fightTabBoutId
             ? {
                 tab: "fight",
-                selected: mostRecentCompleted.id,
+                selected: fightTabBoutId,
                 section: "summary",
                 selectedFutureFight: null,
               }

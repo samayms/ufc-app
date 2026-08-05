@@ -72,6 +72,23 @@ describe("ScheduledFightPreview", () => {
     expect(html).not.toContain(">Stats</button>");
   });
 
+  it("shows a finished past-event fight as Final, not Upcoming", () => {
+    const finishedBout: Bout = {
+      ...bout,
+      id: "fixture-past-bout",
+      status: "final",
+      result: { winner: "red", method: "ko-tko", round: 2, time: "3:14" },
+    };
+    const fight = boutToScheduledFight(finishedBout);
+    const html = renderToStaticMarkup(
+      <ScheduledFightPreview fight={fight} upcoming={upcoming} />,
+    );
+
+    expect(html).not.toContain("Upcoming");
+    expect(html).toContain("KO/TKO");
+    expect(html).toContain("tot-winner-arrow-red");
+  });
+
   it("renders the fight-outlook heading and text when outlook is present", () => {
     const html = renderToStaticMarkup(
       <UpcomingTaleSection

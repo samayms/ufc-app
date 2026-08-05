@@ -417,7 +417,9 @@ export function ScheduledFightPreview({
         titleFight={fight.titleFight}
         scheduledRounds={scheduledRounds}
         fighters={{ red: toFighter(fight.red), blue: toFighter(fight.blue) }}
-        status="upcoming"
+        status={fight.status}
+        currentRound={fight.currentRound}
+        result={fight.result}
         photosByCorner={photosByCorner ?? {
           red: fight.red.headshotUrl,
           blue: fight.blue.headshotUrl,

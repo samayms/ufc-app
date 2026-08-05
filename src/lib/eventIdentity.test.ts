@@ -4,6 +4,7 @@ import {
   hasEventStarted,
   isEventDay,
   sameEvent,
+  selectFightTabBoutId,
 } from "./eventIdentity.ts";
 
 describe("sameEvent", () => {
@@ -47,6 +48,47 @@ describe("hasEventCompleted", () => {
     ])).toBe(false);
     expect(hasEventCompleted([{ status: "upcoming" }])).toBe(false);
     expect(hasEventCompleted([])).toBe(false);
+  });
+});
+
+describe("selectFightTabBoutId", () => {
+  it("prefers a fight currently in progress over any finished one", () => {
+    expect(
+      selectFightTabBoutId([
+        { id: "prelim-1", cardPosition: 3, status: "final" },
+        { id: "co-main", cardPosition: 2, status: "in-round" },
+        { id: "main", cardPosition: 1, status: "upcoming" },
+      ]),
+    ).toBe("co-main");
+  });
+
+  it("prefers a fight between rounds over any finished one", () => {
+    expect(
+      selectFightTabBoutId([
+        { id: "prelim-1", cardPosition: 3, status: "final" },
+        { id: "co-main", cardPosition: 2, status: "between-rounds" },
+        { id: "main", cardPosition: 1, status: "upcoming" },
+      ]),
+    ).toBe("co-main");
+  });
+
+  it("falls back to the most recently finished fight — lowest card position — when nothing is live", () => {
+    expect(
+      selectFightTabBoutId([
+        { id: "prelim-1", cardPosition: 3, status: "final" },
+        { id: "co-main", cardPosition: 2, status: "final" },
+        { id: "main", cardPosition: 1, status: "upcoming" },
+      ]),
+    ).toBe("co-main");
+  });
+
+  it("returns undefined when nothing has started", () => {
+    expect(
+      selectFightTabBoutId([
+        { id: "co-main", cardPosition: 2, status: "upcoming" },
+        { id: "main", cardPosition: 1, status: "upcoming" },
+      ]),
+    ).toBeUndefined();
   });
 });
 
