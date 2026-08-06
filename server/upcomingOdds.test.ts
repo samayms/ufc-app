@@ -160,7 +160,7 @@ describe("syncUpcomingOdds", () => {
     });
   });
 
-  it("uses Polymarket when its implied values stay below 110%", async () => {
+  it("uses Polymarket when its implied values stay below 110% and volume clears $500", async () => {
     const polymarket = {
       ...kalshiMainEvent(),
       externalId: "polymarket-liquid",
@@ -179,6 +179,7 @@ describe("syncUpcomingOdds", () => {
           impliedProbability: POLYMARKET_MAX_IMPLIED_SUM - 0.58 - 0.01,
         },
       ],
+      metadata: { volume: 600 },
       decision: {
         externalId: "polymarket-liquid-distance",
         decisionProbability: 0.7,
@@ -206,6 +207,94 @@ describe("syncUpcomingOdds", () => {
     expect(document.events[0]?.bouts[0]?.decision).toMatchObject({
       source: "polymarket",
       decisionProbability: 0.7,
+    });
+  });
+
+  it("defers to odds-api-io when Polymarket's distance volume is below $500", async () => {
+    const polymarket = {
+      ...kalshiMainEvent(),
+      externalId: "polymarket-thin-volume",
+      quotes: [
+        {
+          side: "first" as const,
+          native: { kind: "polymarket-price" as const, price: 0.58 },
+          impliedProbability: 0.58,
+        },
+        {
+          side: "second" as const,
+          native: {
+            kind: "polymarket-price" as const,
+            price: POLYMARKET_MAX_IMPLIED_SUM - 0.58 - 0.01,
+          },
+          impliedProbability: POLYMARKET_MAX_IMPLIED_SUM - 0.58 - 0.01,
+        },
+      ],
+      metadata: { volume: 499 },
+      decision: {
+        externalId: "polymarket-thin-volume-distance",
+        decisionProbability: 0.7,
+        finishProbability: 0.3,
+      },
+    };
+    const sportsbook = {
+      ...kalshiMainEvent(),
+      externalId: "sportsbook-distance",
+      decision: {
+        externalId: "sportsbook-distance-market",
+        decisionProbability: 0.4,
+        finishProbability: 0.6,
+      },
+    };
+    const document = await syncUpcomingOdds({
+      cards: [CARD],
+      providers: [
+        stubProvider("polymarket", [polymarket]),
+        stubProvider("odds-api-io", [sportsbook]),
+      ],
+      now: NOW,
+    });
+
+    expect(document.events[0]?.bouts[0]?.decision).toMatchObject({
+      source: "odds-api-io",
+      decisionProbability: 0.4,
+    });
+  });
+
+  it("still uses a thin Polymarket distance market when odds-api-io has none", async () => {
+    const polymarket = {
+      ...kalshiMainEvent(),
+      externalId: "polymarket-thin-volume-only",
+      quotes: [
+        {
+          side: "first" as const,
+          native: { kind: "polymarket-price" as const, price: 0.58 },
+          impliedProbability: 0.58,
+        },
+        {
+          side: "second" as const,
+          native: {
+            kind: "polymarket-price" as const,
+            price: POLYMARKET_MAX_IMPLIED_SUM - 0.58 - 0.01,
+          },
+          impliedProbability: POLYMARKET_MAX_IMPLIED_SUM - 0.58 - 0.01,
+        },
+      ],
+      metadata: { volume: 100 },
+      decision: {
+        externalId: "polymarket-thin-volume-only-distance",
+        decisionProbability: 0.65,
+        finishProbability: 0.35,
+      },
+    };
+    const document = await syncUpcomingOdds({
+      cards: [CARD],
+      providers: [stubProvider("polymarket", [polymarket])],
+      now: NOW,
+    });
+
+    expect(document.events[0]?.bouts[0]?.decision).toMatchObject({
+      source: "polymarket",
+      decisionProbability: 0.65,
     });
   });
 

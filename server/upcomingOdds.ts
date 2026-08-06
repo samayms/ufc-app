@@ -155,6 +155,16 @@ const DECISION_PROVIDER_ORDER = [
 /** Maximum combined implied probability accepted from Polymarket (110%). */
 export const POLYMARKET_MAX_IMPLIED_SUM = 1.1;
 
+/**
+ * Below this volume, Polymarket's distance market defers to odds-api-io
+ * (Bet365) the same way `MARKET_PRIORITY_VOLUME_THRESHOLD` gates the live
+ * round-winner market: a thin Polymarket book is noisy, and a sportsbook
+ * line is the steadier read. There is no distance-specific volume field, so
+ * this reuses the provider's win-market volume for the same bout — the only
+ * volume figure Polymarket's discovery response carries.
+ */
+export const POLYMARKET_DECISION_VOLUME_THRESHOLD = 500;
+
 function toSnapshot(
   provider: UpcomingProviderId,
   boutId: string,
@@ -242,6 +252,10 @@ function resolveDecision(
   >,
 ): UpcomingDecisionOdds {
   let providerError: string | undefined;
+  // A Polymarket distance market below the volume threshold defers to
+  // odds-api-io, but is kept here so it still beats no market at all if
+  // odds-api-io doesn't have one either.
+  let thinPolymarket: UpcomingDecisionOdds | undefined;
 
   for (const providerId of DECISION_PROVIDER_ORDER) {
     const outcome = outcomes.get(providerId);
@@ -268,7 +282,7 @@ function resolveDecision(
       }
     }
 
-    return {
+    const resolved: UpcomingDecisionOdds = {
       state: "loaded",
       decisionProbability: decision.decisionProbability,
       finishProbability: decision.finishProbability,
@@ -280,14 +294,27 @@ function resolveDecision(
         : { updatedAt: decision.marketUpdatedAt }),
       externalId: decision.externalId,
     };
+
+    if (
+      providerId === "polymarket" &&
+      (attachment.market.metadata?.volume ?? 0) <
+        POLYMARKET_DECISION_VOLUME_THRESHOLD
+    ) {
+      thinPolymarket = resolved;
+      continue;
+    }
+
+    return resolved;
   }
 
-  return {
-    state: providerError === undefined ? "not_listed" : "provider_error",
-    fetchedAt,
-    synthetic,
-    ...(providerError === undefined ? {} : { message: providerError }),
-  };
+  return (
+    thinPolymarket ?? {
+      state: providerError === undefined ? "not_listed" : "provider_error",
+      fetchedAt,
+      synthetic,
+      ...(providerError === undefined ? {} : { message: providerError }),
+    }
+  );
 }
 
 export async function syncUpcomingOdds(
