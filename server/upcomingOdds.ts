@@ -146,24 +146,19 @@ const SNAPSHOT_MARKET: Record<
   "odds-api": "sportsbook",
 };
 
-const DECISION_PROVIDER_ORDER = [
-  "kalshi",
-  "polymarket",
-  "odds-api-io",
-] as const;
-
-/** Maximum combined implied probability accepted from Polymarket (110%). */
-export const POLYMARKET_MAX_IMPLIED_SUM = 1.1;
+/** Maximum combined implied probability accepted from Polymarket (115%). */
+export const POLYMARKET_MAX_IMPLIED_SUM = 1.15;
 
 /**
- * Below this volume, Polymarket's distance market defers to odds-api-io
- * (Bet365) the same way `MARKET_PRIORITY_VOLUME_THRESHOLD` gates the live
- * round-winner market: a thin Polymarket book is noisy, and a sportsbook
- * line is the steadier read. There is no distance-specific volume field, so
- * this reuses the provider's win-market volume for the same bout — the only
- * volume figure Polymarket's discovery response carries.
+ * Kalshi wins the distance market outright once its volume clears this —
+ * strictly over, not at. Below it, Kalshi doesn't drop out entirely; it
+ * just stops being an automatic win and re-enters the final volume
+ * tiebreak against Polymarket (see `resolveDecision`). There is no
+ * distance-specific volume field, so this reuses the provider's win-market
+ * volume for the same bout — the only volume figure Kalshi's discovery
+ * response carries.
  */
-export const POLYMARKET_DECISION_VOLUME_THRESHOLD = 500;
+export const KALSHI_DECISION_VOLUME_THRESHOLD = 500;
 
 function toSnapshot(
   provider: UpcomingProviderId,
@@ -241,80 +236,139 @@ function preserveOrDefault(
   };
 }
 
+type DecisionAttachments = ReadonlyMap<
+  string,
+  { market: UpcomingProviderMarket; cornersReversed: boolean; confidence: number }
+>;
+
+interface DecisionCandidate {
+  decision: UpcomingDecisionOdds;
+  /** The provider's win-market volume for this bout — see the threshold doc comment. */
+  volume: number;
+}
+
+/**
+ * Evaluates one provider's distance-market entry for a bout in isolation:
+ * a provider error, no usable price, or a priced (and, for Polymarket,
+ * vig-sane) candidate. Kept separate from `resolveDecision` because Kalshi
+ * is evaluated once but consulted at two different points in the priority
+ * order (the outright-win check, then the final tiebreak).
+ */
+function evaluateDecisionProvider(
+  providerId: "kalshi" | "polymarket" | "odds-api-io",
+  boutId: string,
+  fetchedAt: string,
+  synthetic: boolean,
+  outcomes: ReadonlyMap<UpcomingProviderId, ProviderOutcome>,
+  attachments: DecisionAttachments,
+): { candidate?: DecisionCandidate; error?: string } {
+  const outcome = outcomes.get(providerId);
+  if (outcome?.error !== undefined) return { error: outcome.error };
+
+  const key = providerId + " " + boutId;
+  const attachment = attachments.get(key);
+  const decision = attachment?.market.decision;
+  if (attachment === undefined || decision === undefined) return {};
+
+  if (providerId === "polymarket") {
+    const impliedValues = attachment.market.quotes.map(
+      (quote) => quote.impliedProbability,
+    );
+    const impliedSum = impliedValues.reduce((sum, value) => sum + value, 0);
+    if (
+      impliedValues.length !== 2 ||
+      impliedValues.some((value) => !Number.isFinite(value)) ||
+      impliedSum >= POLYMARKET_MAX_IMPLIED_SUM
+    ) {
+      return {};
+    }
+  }
+
+  return {
+    candidate: {
+      decision: {
+        state: "loaded",
+        decisionProbability: decision.decisionProbability,
+        finishProbability: decision.finishProbability,
+        source: providerId,
+        fetchedAt,
+        synthetic,
+        ...(decision.marketUpdatedAt === undefined
+          ? {}
+          : { updatedAt: decision.marketUpdatedAt }),
+        externalId: decision.externalId,
+      },
+      volume: attachment.market.metadata?.volume ?? 0,
+    },
+  };
+}
+
+/**
+ * Resolves the "Fight to Go the Distance" decision market for one bout:
+ *
+ *   1. Kalshi wins outright if its volume is strictly over $500.
+ *   2. Otherwise, odds-api-io (Bet365) wins if it has a price — it carries
+ *      no volume figure of its own, so there's nothing to gate here.
+ *   3. Otherwise, whichever of Polymarket/Kalshi has the higher volume
+ *      wins — Kalshi re-enters this comparison even if step 1 rejected it.
+ *      An exact tie favors Kalshi (no tie-break was specified; this
+ *      matches Kalshi's priority everywhere else in the rule).
+ *   4. Otherwise, not_listed (or provider_error if a consulted provider
+ *      failed and nothing else produced a usable price).
+ */
 function resolveDecision(
   boutId: string,
   fetchedAt: string,
   synthetic: boolean,
   outcomes: ReadonlyMap<UpcomingProviderId, ProviderOutcome>,
-  attachments: ReadonlyMap<
-    string,
-    { market: UpcomingProviderMarket; cornersReversed: boolean; confidence: number }
-  >,
+  attachments: DecisionAttachments,
 ): UpcomingDecisionOdds {
   let providerError: string | undefined;
-  // A Polymarket distance market below the volume threshold defers to
-  // odds-api-io, but is kept here so it still beats no market at all if
-  // odds-api-io doesn't have one either.
-  let thinPolymarket: UpcomingDecisionOdds | undefined;
-
-  for (const providerId of DECISION_PROVIDER_ORDER) {
-    const outcome = outcomes.get(providerId);
-    if (outcome?.error !== undefined) {
-      providerError ??= outcome.error;
-      continue;
-    }
-
-    const attachment = attachments.get(`${providerId}\u0000${boutId}`);
-    const decision = attachment?.market.decision;
-    if (attachment === undefined || decision === undefined) continue;
-
-    if (providerId === "polymarket") {
-      const impliedValues = attachment.market.quotes.map(
-        (quote) => quote.impliedProbability,
-      );
-      const impliedSum = impliedValues.reduce((sum, value) => sum + value, 0);
-      if (
-        impliedValues.length !== 2 ||
-        impliedValues.some((value) => !Number.isFinite(value)) ||
-        impliedSum >= POLYMARKET_MAX_IMPLIED_SUM
-      ) {
-        continue;
-      }
-    }
-
-    const resolved: UpcomingDecisionOdds = {
-      state: "loaded",
-      decisionProbability: decision.decisionProbability,
-      finishProbability: decision.finishProbability,
-      source: providerId,
+  const evaluate = (providerId: "kalshi" | "polymarket" | "odds-api-io") =>
+    evaluateDecisionProvider(
+      providerId,
+      boutId,
       fetchedAt,
       synthetic,
-      ...(decision.marketUpdatedAt === undefined
-        ? {}
-        : { updatedAt: decision.marketUpdatedAt }),
-      externalId: decision.externalId,
-    };
+      outcomes,
+      attachments,
+    );
 
-    if (
-      providerId === "polymarket" &&
-      (attachment.market.metadata?.volume ?? 0) <
-        POLYMARKET_DECISION_VOLUME_THRESHOLD
-    ) {
-      thinPolymarket = resolved;
-      continue;
-    }
-
-    return resolved;
+  const kalshi = evaluate("kalshi");
+  providerError ??= kalshi.error;
+  if (
+    kalshi.candidate !== undefined &&
+    kalshi.candidate.volume > KALSHI_DECISION_VOLUME_THRESHOLD
+  ) {
+    return kalshi.candidate.decision;
   }
 
-  return (
-    thinPolymarket ?? {
-      state: providerError === undefined ? "not_listed" : "provider_error",
-      fetchedAt,
-      synthetic,
-      ...(providerError === undefined ? {} : { message: providerError }),
+  const oddsApiIo = evaluate("odds-api-io");
+  providerError ??= oddsApiIo.error;
+  if (oddsApiIo.candidate !== undefined) {
+    return oddsApiIo.candidate.decision;
+  }
+
+  const polymarket = evaluate("polymarket");
+  providerError ??= polymarket.error;
+
+  const finalists: DecisionCandidate[] = [];
+  if (kalshi.candidate !== undefined) finalists.push(kalshi.candidate);
+  if (polymarket.candidate !== undefined) finalists.push(polymarket.candidate);
+  if (finalists.length > 0) {
+    let winner = finalists[0] as DecisionCandidate;
+    for (const candidate of finalists.slice(1)) {
+      if (candidate.volume > winner.volume) winner = candidate;
     }
-  );
+    return winner.decision;
+  }
+
+  return {
+    state: providerError === undefined ? "not_listed" : "provider_error",
+    fetchedAt,
+    synthetic,
+    ...(providerError === undefined ? {} : { message: providerError }),
+  };
 }
 
 export async function syncUpcomingOdds(
@@ -339,7 +393,7 @@ export async function syncUpcomingOdds(
   const overrideIndex = new Map<string, string>();
   for (const override of options.overrides ?? []) {
     overrideIndex.set(
-      `${override.provider} ${override.externalId}`,
+      `${override.provider} ${override.externalId}`,
       override.boutId,
     );
   }
@@ -357,7 +411,7 @@ export async function syncUpcomingOdds(
     for (const [providerId, outcome] of outcomes) {
       for (const market of outcome.markets) {
         const overrideBoutId = overrideIndex.get(
-          `${providerId} ${market.externalId}`,
+          `${providerId} ${market.externalId}`,
         );
         const result = matchBout(
           matchable,
@@ -378,7 +432,7 @@ export async function syncUpcomingOdds(
         );
 
         if (result.status === "matched") {
-          const key = `${providerId} ${result.boutId}`;
+          const key = providerId + " " + result.boutId;
           const existing = attachments.get(key);
           // Two provider markets can plausibly hit the same bout (a relisted
           // fight). Keep the more confident one rather than the later one.
@@ -435,7 +489,7 @@ export async function syncUpcomingOdds(
         }
 
         const attachment = attachments.get(
-          `${providerId} ${bout.boutId}`,
+          providerId + " " + bout.boutId,
         );
         if (attachment === undefined) {
           // The provider answered but has nothing for this fight. That is a
