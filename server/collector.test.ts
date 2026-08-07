@@ -550,6 +550,46 @@ describe.skipIf(!localhostAvailable)(
     });
   });
 
+  it("GET /api/archived-events lists archived events and /api/archived-events/:id serves one", async () => {
+    const connection = new Database(":memory:");
+    const db = drizzle(connection, { schema });
+    migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+    db.insert(schema.events)
+      .values({
+        id: "e1",
+        name: "UFC 300",
+        archivedAt: "2026-01-02T00:00:00.000Z",
+      })
+      .run();
+
+    const collector = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage: new MemoryStorage(),
+      sse: { heartbeatMs: 50, flushIntervalMs: 0 },
+      db,
+    });
+    collectors.push(collector);
+    const port = await collector.start();
+
+    const listResponse = await fetch(
+      `http://127.0.0.1:${port}/api/archived-events`,
+    );
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toEqual([
+      expect.objectContaining({ id: "e1", name: "UFC 300" }),
+    ]);
+
+    const missingResponse = await fetch(
+      `http://127.0.0.1:${port}/api/archived-events/unknown`,
+    );
+    expect(missingResponse.status).toBe(404);
+    await expect(missingResponse.json()).resolves.toEqual({
+      error: "not found",
+    });
+
+    connection.close();
+  });
+
   it("leaves the lifecycle driver stopped by default in fixture mode", async () => {
     const { collector } = await startCollector();
 

@@ -156,6 +156,7 @@ import { isEventCalendarDay } from "./espnPollingSchedule.ts";
 import { serveStaticSpa } from "./staticSpa.ts";
 import { getDb, type AppDatabase } from "./db/client.ts";
 import { persistDashboardState } from "./eventPersistence.ts";
+import { listArchivedEvents, loadArchivedEvent } from "./archivedEvents.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
 export const COLLECTOR_HEALTH_STREAM = SOURCE_HEALTH_STORAGE_STREAM;
@@ -1584,6 +1585,36 @@ export async function createCollector(
         await review.getReviewRecords(),
         secrets,
       );
+      return;
+    }
+    // NOTE: these deliberately live at /api/archived-events, not the
+    // plan's original /api/events — that path is already claimed by
+    // SsePush's DEFAULT_SSE_PATH (server/push.ts) and collectorClient.ts's
+    // live EventSource connection. Both are GET requests to the identical
+    // path, so there is no way to keep them apart there; the archive API
+    // gets its own path instead of relocating the live SSE stream.
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/archived-events"
+    ) {
+      const db = persistenceDb ?? getDb();
+      sendJson(response, 200, await listArchivedEvents(db), secrets);
+      return;
+    }
+    if (
+      request.method === "GET" &&
+      url.pathname.startsWith("/api/archived-events/")
+    ) {
+      const eventId = decodeURIComponent(
+        url.pathname.slice("/api/archived-events/".length),
+      );
+      const db = persistenceDb ?? getDb();
+      const archived = await loadArchivedEvent(db, eventId);
+      if (!archived) {
+        sendJson(response, 404, { error: "not found" }, secrets);
+        return;
+      }
+      sendJson(response, 200, archived, secrets);
       return;
     }
     if (

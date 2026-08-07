@@ -1,6 +1,10 @@
 /**
  * Client-side access to the permanently-archived event history served by
- * GET /api/events and GET /api/events/:id (server/collector.ts). Matches the
+ * GET /api/archived-events and GET /api/archived-events/:id
+ * (server/collector.ts). Deliberately not /api/events — that path is
+ * already the live SSE stream (server/push.ts's DEFAULT_SSE_PATH, wired up
+ * in src/store/collectorClient.ts), and a GET to an identical path can't be
+ * routed both ways. Matches the
  * hand-rolled useEffect + useState pattern used by useEspnSchedule.ts and
  * useUpcomingOdds.ts (no React Query/SWR in this project): a pure fetch
  * function that is unit-testable without a renderer, plus a thin hook that
@@ -34,7 +38,7 @@ export interface ArchivedEventsState {
 export async function fetchArchivedEvents(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ArchivedEventSummary[]> {
-  const response = await fetchImpl("/api/events");
+  const response = await fetchImpl("/api/archived-events");
   if (!response.ok) {
     throw new Error(`archived events request failed: ${response.status}`);
   }
@@ -91,7 +95,9 @@ export async function fetchArchivedEvent(
   eventId: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<DashboardState> {
-  const response = await fetchImpl(`/api/events/${encodeURIComponent(eventId)}`);
+  const response = await fetchImpl(
+    `/api/archived-events/${encodeURIComponent(eventId)}`,
+  );
   if (!response.ok) {
     throw new Error(`archived event request failed: ${response.status}`);
   }

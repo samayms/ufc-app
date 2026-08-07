@@ -17,8 +17,9 @@ import { pathToFileURL } from "node:url";
 
 import { createCollector } from "./collector.ts";
 import { loadConfig } from "./config.ts";
-import { closeDb } from "./db/client.ts";
+import { closeDb, getDb } from "./db/client.ts";
 import { runMigrations } from "./db/migrate.ts";
+import { EventArchiver } from "./eventArchiver.ts";
 import {
   EVENT_ROTATION_STORAGE_STREAM,
   EventRotationSupervisor,
@@ -88,6 +89,9 @@ export async function startApp(): Promise<{
   const port = await collector.start();
   console.log(`UFC app listening on http://127.0.0.1:${port}`);
 
+  const eventArchiver = new EventArchiver({ db: getDb() });
+  eventArchiver.start();
+
   let activeEventId = collector.getBootstrap().state?.event.id;
   const rotation =
     config.dataMode === "live"
@@ -148,6 +152,7 @@ export async function startApp(): Promise<{
   const stop = async (): Promise<void> => {
     if (stopped) return;
     stopped = true;
+    eventArchiver.stop();
     await rotation?.close();
     await collector.close();
     closeDb();
