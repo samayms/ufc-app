@@ -154,6 +154,8 @@ import {
 import { TheOddsApiRoundJob } from "./theOddsApiJob.ts";
 import { isEventCalendarDay } from "./espnPollingSchedule.ts";
 import { serveStaticSpa } from "./staticSpa.ts";
+import { getDb, type AppDatabase } from "./db/client.ts";
+import { persistDashboardState } from "./eventPersistence.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
 export const COLLECTOR_HEALTH_STREAM = SOURCE_HEALTH_STORAGE_STREAM;
@@ -279,6 +281,12 @@ export interface CreateCollectorOptions {
   env?: CollectorEnvironment;
   storage?: Storage;
   stateLoader?: NormalizedStateLoader;
+  /** Injectable DB for persisting DashboardState. Defaults to the shared
+   *  process DB in live mode, and to no persistence otherwise (tests must
+   *  opt in explicitly). */
+  db?: AppDatabase;
+  /** How often the persistence tick runs while a db is configured. */
+  persistenceIntervalMs?: number;
   manualBoutMappingOverrides?: readonly ManualBoutMappingOverride[];
   host?: string;
   sse?: Pick<
@@ -860,6 +868,23 @@ export async function createCollector(
   } else {
     state = loaded;
   }
+
+  const persistenceDb =
+    options.db ?? (config.dataMode === "live" ? getDb() : undefined);
+  const persistenceIntervalMs = options.persistenceIntervalMs ?? 60_000;
+  const persistState = (): void => {
+    if (!persistenceDb || !state) return;
+    void persistDashboardState(persistenceDb, state).catch((error) => {
+      console.warn(`[collector] persistence tick failed: ${String(error)}`);
+    });
+  };
+  persistState();
+  if (persistenceDb) {
+    const persistTimer = setInterval(persistState, persistenceIntervalMs);
+    persistTimer.unref?.();
+    unsubscribers.push(() => clearInterval(persistTimer));
+  }
+
   const initializedBoutMappings = await createBoutMappingRegistry({
     event: loaded.event,
     storage,
@@ -1456,6 +1481,10 @@ export async function createCollector(
 
   unsubscribers.push(
     eventBus.subscribe("FIGHT_STARTED", (event) => {
+      // Lock the fighter snapshot for this bout as close to fight-start as
+      // possible instead of waiting up to persistenceIntervalMs for the
+      // next tick.
+      persistState();
       // Covers the first bout of a card as well as a restart where no prior
       // FIGHT_ENDED event was observed locally.
       capturePreFightOdds(event.boutId, event.detectedAt);

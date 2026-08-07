@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "node:http";
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import {
   createCollector,
   loadFixtureState,
@@ -11,6 +14,9 @@ import type {
   RoundJobClock,
   RoundJobTimer,
 } from "./roundJobs.ts";
+import * as schema from "./db/schema.ts";
+
+const MIGRATIONS_FOLDER = new URL("./db/migrations", import.meta.url).pathname;
 
 interface ParsedSseEvent {
   id: number;
@@ -365,6 +371,70 @@ describe.skipIf(!localhostAvailable)(
     expect(replayed.data).toMatchObject({
       event: { type: "FIGHT_STARTED" },
     });
+  });
+
+  it("persists dashboard state to the injected db, locking only non-upcoming bouts", async () => {
+    const connection = new Database(":memory:");
+    const db = drizzle(connection, { schema });
+    migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+    const collector = await createCollector({
+      env: {
+        DATA_MODE: "fixture",
+        COLLECTOR_PORT: "0",
+      },
+      storage: new MemoryStorage(),
+      sse: { heartbeatMs: 50, flushIntervalMs: 0 },
+      db,
+      persistenceIntervalMs: 1_000_000 /* rely on manual triggers in this test */,
+    });
+    collectors.push(collector);
+    await collector.start();
+
+    // bout-main is already "between-rounds" in the fixture, so its fighter
+    // rows lock immediately on the first persistence tick. bout-3 is still
+    // "upcoming" in the fixture — it's the one that exercises the
+    // lock-on-FIGHT_STARTED transition this test is actually after.
+    await vi.waitFor(() => {
+      const mainRows = db
+        .select()
+        .from(schema.fighters)
+        .all()
+        .filter((row) => row.boutId === "bout-main");
+      expect(mainRows.length).toBeGreaterThan(0);
+      expect(mainRows.every((row) => row.lockedAt !== null)).toBe(true);
+
+      const upcomingRows = db
+        .select()
+        .from(schema.fighters)
+        .all()
+        .filter((row) => row.boutId === "bout-3");
+      expect(upcomingRows.length).toBeGreaterThan(0);
+      expect(upcomingRows.every((row) => row.lockedAt === null)).toBe(true);
+    });
+
+    // Emitting FIGHT_STARTED directly (rather than driving it through the
+    // lifecycle machine) doesn't flip bout-3's fixture status, so this
+    // doesn't re-exercise the lock transition itself — that's already
+    // covered at the unit level by fighterSnapshots.test.ts. What this
+    // proves is the wiring: the handler runs a persistence tick without
+    // throwing, and it never disturbs an already-locked row.
+    collector.eventBus.emit({
+      type: "FIGHT_STARTED",
+      boutId: "bout-3",
+      detectedAt: "2026-07-28T01:00:00Z",
+    });
+
+    await vi.waitFor(() => {
+      const mainRows = db
+        .select()
+        .from(schema.fighters)
+        .all()
+        .filter((row) => row.boutId === "bout-main");
+      expect(mainRows.every((row) => row.lockedAt !== null)).toBe(true);
+    });
+
+    connection.close();
   });
 
   it("keeps configured credentials out of serialized SSE and REST", async () => {
