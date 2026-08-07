@@ -31,25 +31,6 @@ export const people = sqliteTable("people", {
     .default(sql`(current_timestamp)`),
 });
 
-export const fighters = sqliteTable("fighters", {
-  personId: text("person_id")
-    .primaryKey()
-    .references(() => people.id, { onDelete: "cascade" }),
-  nickname: text("nickname"),
-  stance: text("stance"),
-  heightCm: real("height_cm"),
-  reachCm: real("reach_cm"),
-  country: text("country"),
-  wins: integer("wins").notNull().default(0),
-  losses: integer("losses").notNull().default(0),
-  draws: integer("draws").notNull().default(0),
-  noContests: integer("no_contests").notNull().default(0),
-  ranking: text("ranking"),
-  updatedAt: text("updated_at")
-    .notNull()
-    .default(sql`(current_timestamp)`),
-});
-
 export const aliases = sqliteTable(
   "aliases",
   {
@@ -122,6 +103,10 @@ export const events = sqliteTable("events", {
   city: text("city"),
   country: text("country"),
   status: text("status"),
+  /** Set once, 24h after the event's last bout goes final. Presence means
+   *  every row tied to this event (bouts, fighters, round_stats,
+   *  commentary) is permanently immutable. */
+  archivedAt: text("archived_at"),
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`(current_timestamp)`),
@@ -167,6 +152,44 @@ export const boutParticipants = sqliteTable(
       table.corner,
     ),
     index("bout_participants_person_id_idx").on(table.personId),
+  ],
+);
+
+export const fighters = sqliteTable(
+  "fighters",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    boutId: text("bout_id")
+      .notNull()
+      .references(() => bouts.id, { onDelete: "cascade" }),
+    personId: text("person_id")
+      .notNull()
+      .references(() => people.id, { onDelete: "cascade" }),
+    corner: text("corner").notNull(), // 'red' | 'blue'
+    nickname: text("nickname"),
+    stance: text("stance"),
+    heightCm: real("height_cm"),
+    reachCm: real("reach_cm"),
+    country: text("country"),
+    wins: integer("wins").notNull().default(0),
+    losses: integer("losses").notNull().default(0),
+    draws: integer("draws").notNull().default(0),
+    noContests: integer("no_contests").notNull().default(0),
+    ranking: text("ranking"),
+    /**
+     * Set once, the moment this bout leaves "upcoming". Once set, this row
+     * is never written to again — it is the fighter's record/rank/bio as
+     * they walked into this specific bout, permanently.
+     */
+    lockedAt: text("locked_at"),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (table) => [
+    unique("fighters_bout_person_unique").on(table.boutId, table.personId),
+    index("fighters_bout_id_idx").on(table.boutId),
+    index("fighters_person_id_idx").on(table.personId),
   ],
 );
 
