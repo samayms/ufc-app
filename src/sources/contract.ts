@@ -56,7 +56,13 @@ export type MarketSource =
   | "odds-api-io"
   | "the-odds-api";
 
-/** One normalized source update. History retains every accepted tick. */
+/**
+ * One normalized source update. History retains every accepted tick since
+ * the last confirmed round boundary — not the whole event's runtime. See
+ * server/tickStore.ts's snapshotBoundary, which prunes everything at or
+ * before a "confirmed" boundary the moment it's taken, since no later
+ * boundary can ever need to look back past it.
+ */
 export interface MarketTick {
   source: MarketSource;
   boutId: string;

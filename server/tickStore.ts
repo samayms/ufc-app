@@ -434,6 +434,46 @@ function bookKey(tick: {
   ]);
 }
 
+/**
+ * Drops everything a "confirmed" boundary at `boundaryTime` can prove is
+ * unreachable by any future boundary for `boutId`, while preserving every
+ * key's ability to still carry forward a "last known state" — a market that
+ * goes quiet for a round must not lose its most recent price just because
+ * that price predates this boundary. Concretely: keep every tick strictly
+ * after `boundaryTime`, plus — per book key — only the single most recent
+ * tick at or before it (older ticks for that key are provably superseded,
+ * since `applyTick`/`shouldReplace` never prefers an older tick anyway).
+ * Ticks for other bouts are untouched.
+ */
+function prunedHistoryAfterConfirmedBoundary(
+  history: readonly MarketTick[],
+  boutId: string,
+  boundaryTime: number,
+): MarketTick[] {
+  const other: MarketTick[] = [];
+  const after: MarketTick[] = [];
+  const latestAtOrBeforeByKey = new Map<string, MarketTick>();
+  for (const tick of history) {
+    if (tick.boutId !== boutId) {
+      other.push(tick);
+      continue;
+    }
+    if (Date.parse(tick.receivedAt) > boundaryTime) {
+      after.push(tick);
+      continue;
+    }
+    const key = bookKey(tick);
+    const current = latestAtOrBeforeByKey.get(key);
+    if (
+      current === undefined ||
+      Date.parse(tick.receivedAt) > Date.parse(current.receivedAt)
+    ) {
+      latestAtOrBeforeByKey.set(key, tick);
+    }
+  }
+  return [...other, ...latestAtOrBeforeByKey.values(), ...after];
+}
+
 function pairedMarketKey(state: {
   source: MarketSource;
   boutId: string;
@@ -799,7 +839,7 @@ export class MarketTickStore implements TickHistorySource {
       ) => Promise<void>)
     | undefined;
 
-  private readonly history: MarketTick[] = [];
+  private history: MarketTick[] = [];
 
   private readonly latest = new Map<string, BookState>();
 
@@ -1092,12 +1132,18 @@ export class MarketTickStore implements TickHistorySource {
       // No copyTick() here, unlike appendTick(): `persisted.tick` came
       // straight out of JSON.parse in storage.read() and isn't aliased by
       // any caller that could later mutate it, so history can hold it
-      // directly. market-ticks.jsonl retains every accepted tick by design
-      // (src/sources/contract.ts) and routinely runs into the hundreds of
-      // thousands of records; cloning every one of them here doubled peak
-      // memory during restore (the full parsed array and a full cloned copy
-      // alive at once) for no safety benefit, which is what was OOM-crashing
-      // the deployed machine on boot (see PROGRESS.md, 2026-08-04/05).
+      // directly.
+      //
+      // market-ticks.jsonl used to retain every accepted tick for the whole
+      // life of an event and routinely ran into the hundreds of thousands
+      // of records — replaying that (even without the extra clone this
+      // comment used to warn against) OOM-crashed the deployed machine on
+      // boot (2026-08-04/05, then again 2026-08-07 once the file crossed
+      // ~1M lines). `snapshotBoundary` now prunes and compacts this stream
+      // down to the active round's ticks the moment a "confirmed" boundary
+      // makes everything before it permanently unreachable, so this file —
+      // and this restore — should never again scale with an event's total
+      // runtime, only with one round's worth of ticks.
       this.history.push(persisted.tick);
       applyTick(this.latest, persisted.tick);
     }
@@ -1334,6 +1380,31 @@ export class MarketTickStore implements TickHistorySource {
       await this.onSnapshot?.(copySnapshot(snapshot)).catch(() => undefined);
       await this.publish?.(copySnapshot(snapshot)).catch(() => undefined);
     }
+    // A "confirmed" boundary is permanent — unlike "provisional", it is
+    // never recomputed or superseded (see handleProvisionalSupersession,
+    // which only ever touches provisional snapshots). Every future boundary
+    // for this bout can only occur at or after this one, so a tick at or
+    // before it can only ever matter as a carry-forward "last known state"
+    // for a market that goes quiet — never as raw history to replay again.
+    // Pruning here (and nowhere else — "provisional" and "pre-fight" are
+    // left untouched, since a provisional round-end can still be superseded
+    // and needs its ticks intact) is what keeps `history` and
+    // market-ticks.jsonl bounded to roughly one round's worth of ticks
+    // instead of growing for the life of the whole event. See
+    // docs/superpowers/specs for the incident this fixes: unbounded tick
+    // retention OOM-crashed the deployed machine on boot once the file
+    // passed ~1M lines.
+    if (boundaryType === "confirmed") {
+      const before = this.history.length;
+      this.history = prunedHistoryAfterConfirmedBoundary(
+        this.history,
+        boutId,
+        boundaryTime,
+      );
+      if (this.history.length !== before) {
+        await this.persistHistory();
+      }
+    }
     return produced;
   }
 
@@ -1415,5 +1486,19 @@ export class MarketTickStore implements TickHistorySource {
           }) satisfies PersistedSnapshot,
       );
     await this.storage.replace(MARKET_SNAPSHOTS_STORAGE_STREAM, records);
+  }
+
+  /**
+   * Rewrites market-ticks.jsonl from the current (already-pruned)
+   * `history`, physically shrinking the durable file to match — an append
+   * can only grow a stream, so this is the only way a prune (see the
+   * "confirmed" branch in snapshotBoundary) ever takes effect on disk
+   * rather than just in memory.
+   */
+  private async persistHistory(): Promise<void> {
+    const records = this.history.map(
+      (tick) => ({ version: 1, tick }) satisfies PersistedTick,
+    );
+    await this.storage.replace(MARKET_TICKS_STORAGE_STREAM, records);
   }
 }

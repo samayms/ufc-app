@@ -529,9 +529,68 @@ describe("MarketTickStore", () => {
         }),
       ]),
     );
-    await expect(store.getTickHistory(BOUT_ID)).resolves.toHaveLength(
-      ticks.length,
+    // A "confirmed" boundary prunes down to, per key, everything strictly
+    // after "2026-07-26T02:40:30Z" plus the single latest tick at or before
+    // it (see snapshotBoundary in tickStore.ts): for each of the two
+    // outcomes on each source, that's the :40:29/:40:28 tick (superseding
+    // the earlier :39:51/:39:53 one) plus the :40:36/:40:38 tick after —
+    // 2 keys x 2 sources x 2 survivors = 8 of the twelve total.
+    await expect(store.getTickHistory(BOUT_ID)).resolves.toHaveLength(8);
+    await store.close();
+  });
+
+  it("prunes superseded ticks at a confirmed round boundary but keeps one carry-forward anchor per key", async () => {
+    const { bus, store, storage } = await setup();
+
+    // Two ticks for "red", both before the boundary — only the later one
+    // should survive as red's carry-forward anchor.
+    await store.appendTick(
+      tick("red", { receivedAt: at(1_000), sourceUpdatedAt: at(1_000) }),
     );
+    await store.appendTick(
+      tick("red", { receivedAt: at(2_000), sourceUpdatedAt: at(2_000) }),
+    );
+    // "blue" never ticks again before the boundary or after — a market
+    // gone quiet must still carry forward its last known price, not vanish.
+    await store.appendTick(
+      tick("blue", { receivedAt: at(1_500), sourceUpdatedAt: at(1_500) }),
+    );
+    bus.emit({
+      type: "PROVISIONAL_ROUND_ENDED",
+      boutId: BOUT_ID,
+      round: 1,
+      detectedAt: at(2_500),
+    });
+    await store.idle();
+    // Provisional boundaries can still be superseded, so nothing is pruned.
+    await expect(store.getTickHistory(BOUT_ID)).resolves.toHaveLength(3);
+
+    bus.emit({
+      type: "ROUND_ENDED",
+      boutId: BOUT_ID,
+      round: 1,
+      detectedAt: at(4_000),
+      confirmation: "period_transition",
+    });
+    await store.idle();
+
+    // red@1_000 is superseded by red@2_000 and dropped; red@2_000 and
+    // blue@1_500 both survive as their key's carry-forward anchor.
+    const remaining = await store.getTickHistory(BOUT_ID);
+    expect(remaining).toHaveLength(2);
+    expect(remaining.map((t) => t.receivedAt).sort()).toEqual(
+      [at(1_500), at(2_000)].sort(),
+    );
+    await expect(
+      storage.read(MARKET_TICKS_STORAGE_STREAM),
+    ).resolves.toHaveLength(2);
+
+    // A tick after the confirmed boundary survives normally, alongside the
+    // still-carried-forward anchors.
+    await store.appendTick(
+      tick("red", { receivedAt: at(5_000), sourceUpdatedAt: at(5_000) }),
+    );
+    await expect(store.getTickHistory(BOUT_ID)).resolves.toHaveLength(3);
     await store.close();
   });
 });
