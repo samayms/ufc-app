@@ -390,14 +390,20 @@ export function ScheduledFightPreview({
 }) {
   const [active, setActive] = useState<FightSection>("tale");
   const previousActiveRef = useRef<string | null>(null);
+  // A finished fight has no odds left to show, and this preview (unlike the
+  // live/archived Fight tab) never had round data to back a Fight or Stats
+  // tab either — Tale is the only section that ever had anything real to
+  // show for a fight ESPN reports as already over.
+  const sections: FightSection[] = fight.status === "final" ? ["tale"] : PREVIEW_SECTIONS;
+  const effectiveActive = sections.includes(active) ? active : (sections[0] ?? "tale");
   const activeDirection = directionBetween(
     previousActiveRef.current,
-    active,
+    effectiveActive,
     previewSectionDepth,
   );
   useEffect(() => {
-    previousActiveRef.current = active;
-  }, [active]);
+    previousActiveRef.current = effectiveActive;
+  }, [effectiveActive]);
 
   // ESPN's fightcenter payload has no explicit scheduled-rounds field for
   // future fights; inferred from modern UFC convention (title fights and
@@ -428,14 +434,15 @@ export function ScheduledFightPreview({
       <MarketStrip
         latestOdds={stripOdds}
         preFightOdds={{}}
-        onOpen={() => setActive("odds")}
+        {...(sections.includes("odds") ? { onOpen: () => setActive("odds") } : {})}
+        {...(fight.status === "final" ? { resultWinner: fight.result?.winner } : {})}
       />
 
-      <SectionTabs active={active} onChange={setActive} sections={PREVIEW_SECTIONS} />
+      <SectionTabs active={effectiveActive} onChange={setActive} sections={sections} />
 
-      <ScreenTransition screenKey={active} direction={activeDirection}>
-        {active === "odds" && <UpcomingOddsSection fight={fight} upcoming={upcoming} />}
-        {active === "tale" && <TaleSection fight={fight} />}
+      <ScreenTransition screenKey={effectiveActive} direction={activeDirection}>
+        {effectiveActive === "odds" && <UpcomingOddsSection fight={fight} upcoming={upcoming} />}
+        {effectiveActive === "tale" && <TaleSection fight={fight} />}
       </ScreenTransition>
     </div>
   );

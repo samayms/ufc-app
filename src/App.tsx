@@ -387,8 +387,17 @@ export default function App() {
                 selected: fightTabBoutId,
                 section: "summary",
                 selectedFutureFight: null,
+                // The Fight tab always means the live current event's own
+                // bout — never a browsed/archived one. Without this reset,
+                // scheduleSelection stays pinned to whatever archived event
+                // was last drilled into (it's carried forward by every
+                // navigateTo call that doesn't explicitly set it), which
+                // makes renderFightScreen read fightTabBoutId against that
+                // archived event's boutViews instead of the live ones and
+                // come up empty.
+                scheduleSelection: null,
               }
-            : { tab: "fight" };
+            : { tab: "fight", scheduleSelection: null };
     const staysOnSameScreen =
       screenKeyOf({ ...currentNav, ...changes }) === screenKey;
     navigateTo(changes);

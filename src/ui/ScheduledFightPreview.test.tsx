@@ -89,6 +89,24 @@ describe("ScheduledFightPreview", () => {
     expect(html).toContain("tot-winner-arrow-red");
   });
 
+  it("drops the Odds tab for a finished fight, leaving only Tale", () => {
+    const finishedBout: Bout = {
+      ...bout,
+      id: "fixture-past-bout-odds-check",
+      status: "final",
+      result: { winner: "red", method: "ko-tko", round: 2, time: "3:14" },
+    };
+    const fight = boutToScheduledFight(finishedBout);
+    const html = renderToStaticMarkup(
+      <ScheduledFightPreview fight={fight} upcoming={upcoming} />,
+    );
+
+    expect(html).toContain(">Tale</button>");
+    expect(html).not.toContain(">Odds</button>");
+    expect(html).not.toContain(">Fight</button>");
+    expect(html).not.toContain(">Stats</button>");
+  });
+
   it("renders the fight-outlook heading and text when outlook is present", () => {
     const html = renderToStaticMarkup(
       <UpcomingTaleSection
