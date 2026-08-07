@@ -397,7 +397,25 @@ export default function App() {
                 // come up empty.
                 scheduleSelection: null,
               }
-            : { tab: "fight", scheduleSelection: null };
+            : selectedFutureFight !== null
+              ? {
+                  // Nothing on the live event has started, but the screen
+                  // was showing an unrelated browsed fight (a different
+                  // event's card, reached via Event > Upcoming). FIGHT still
+                  // means "the live event" — leaving selectedFutureFight in
+                  // place here would highlight the Fight tab as active while
+                  // the screen kept showing that other fight, with no way to
+                  // reach the live event's own screen from this tap.
+                  tab: "fight",
+                  selected: null,
+                  section: "summary",
+                  selectedFutureFight: null,
+                  scheduleSelection: null,
+                }
+              : // Already viewing the live event itself (or its default
+                // screen) with nothing started yet — keep showing whatever
+                // that was rather than jumping to an arbitrary bout.
+                { tab: "fight", scheduleSelection: null };
     const staysOnSameScreen =
       screenKeyOf({ ...currentNav, ...changes }) === screenKey;
     navigateTo(changes);
