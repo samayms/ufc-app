@@ -51,6 +51,7 @@ import {
   selectFightTabBoutId,
 } from "./lib/eventIdentity.ts";
 import { useEspnCard, useUpcomingEspnEvents } from "./store/useEspnSchedule.ts";
+import { useArchivedEvent, useArchivedEvents } from "./store/useArchivedEvents.ts";
 import { useUpcomingOdds } from "./store/useUpcomingOdds.ts";
 import {
   fighterEspnAthleteId,
@@ -155,6 +156,7 @@ export default function App() {
   const forcedSkipRemountRef = useRef(false);
 
   const upcomingEspn = useUpcomingEspnEvents();
+  const archivedEvents = useArchivedEvents();
   // Loaded at the app level rather than per preview: one document covers every
   // upcoming card, so drilling between fights must not refetch it.
   const upcomingOdds = useUpcomingOdds();
@@ -176,6 +178,16 @@ export default function App() {
     upcomingEspn.status === "ready" ? upcomingEspn.events : [],
   );
   const currentEventAthletePhotos = useCurrentEventAthletePhotos(state?.event);
+  // Names an archived event only once it's neither the list screen (null)
+  // nor the live current event's own id — same shape as futureEventId
+  // above, but resolved against the archive rather than the ESPN schedule.
+  const archivedSelectionId =
+    scheduleSelection !== null &&
+    scheduleSelection !== currentEventId &&
+    archivedEvents.events.some((archived) => archived.id === scheduleSelection)
+      ? scheduleSelection
+      : null;
+  const archivedEvent = useArchivedEvent(archivedSelectionId);
 
   useEffect(() => {
     if (!state) return;
@@ -464,6 +476,19 @@ export default function App() {
           : {}),
       };
     });
+  // Archived events the live ESPN schedule no longer lists at all (it drops
+  // events once they're old enough). An event that just left the live view
+  // but isn't archived yet is still covered by the dashboardEventEntry
+  // fallback below, so this only ever adds ids not already present.
+  const archivedEventEntries: EventListEntry[] = archivedEvents.events
+    .filter((archived) => !scheduleEventEntries.some((entry) => entry.id === archived.id))
+    .map((archived) => ({
+      id: archived.id,
+      name: archived.name,
+      startsAt: archived.startsAt,
+      isComplete: true,
+    }));
+  scheduleEventEntries.push(...archivedEventEntries);
   if (
     currentEventEntry === null &&
     !scheduleEventEntries.some((entry) => sameEvent(entry, dashboardEventEntry))
@@ -549,15 +574,22 @@ export default function App() {
         </section>
       );
     }
+    // The browsed-to archived event's own bout order, once its DashboardState
+    // has loaded — distinct from both the live event's card (event.bouts)
+    // and a still-upcoming ESPN card (espnCard.card).
+    const isArchivedSelection =
+      virtualSelection !== event.id && virtualSelection === archivedSelectionId;
     const boutCount =
       virtualSelection === event.id
         ? event.bouts.length
-        : espnCard.card
-          ? espnCard.card.sections.reduce(
-              (total, sec) => total + sec.fights.length,
-              0,
-            )
-          : undefined;
+        : isArchivedSelection
+          ? archivedEvent.data?.event.bouts.length
+          : espnCard.card
+            ? espnCard.card.sections.reduce(
+                (total, sec) => total + sec.fights.length,
+                0,
+              )
+            : undefined;
     return (
       <section className="card-screen" aria-labelledby={titleId}>
         <div className="page-heading">
@@ -566,7 +598,9 @@ export default function App() {
             <h2 id={titleId} className="event-title">
               {virtualSelection === event.id
                 ? event.name
-                : (espnCard.card?.name ?? "Event card")}
+                : isArchivedSelection
+                  ? (archivedEvent.data?.event.name ?? "Event card")
+                  : (espnCard.card?.name ?? "Event card")}
             </h2>
           </div>
           {boutCount !== undefined && (
@@ -580,6 +614,24 @@ export default function App() {
             onSelect={selectBout}
             photosByBoutId={photosByBoutId}
           />
+        ) : isArchivedSelection ? (
+          archivedEvent.data ? (
+            <CardRail
+              bouts={archivedEvent.data.event.bouts}
+              selectedId={boutIdFor(entry) ?? ""}
+              onSelect={selectBout}
+            />
+          ) : archivedEvent.status === "error" ? (
+            <div className="state-notice" role="status">
+              <strong>Card unavailable</strong>
+              <span>
+                {archivedEvent.message ??
+                  "This archived event's fight card could not be loaded."}
+              </span>
+            </div>
+          ) : (
+            <SkeletonRows count={4} className="card-row-skeleton" />
+          )
         ) : espnCard.status === "loading" || espnCard.status === "idle" ? (
           <SkeletonRows count={4} className="card-row-skeleton" />
         ) : espnCard.status === "error" ? (
@@ -620,7 +672,14 @@ export default function App() {
       );
     }
     const entryId = boutIdFor(entry);
-    const entryView = entryId ? boutViews[entryId] : undefined;
+    // Reads through the archived DashboardState instead of the live one when
+    // this entry names an archived (non-live) event — the live boutViews
+    // closure has no data for an event that was never the current one.
+    const activeBoutViews =
+      archivedSelectionId && archivedEvent.data
+        ? archivedEvent.data.boutViews
+        : boutViews;
+    const entryView = entryId ? activeBoutViews[entryId] : undefined;
     if (!entryView) {
       return (
         <div className="empty-state">

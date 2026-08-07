@@ -7,6 +7,9 @@ import {
   collectorSnapshotIsStale,
   dashboardDemoState,
 } from "../store/useDashboard.ts";
+import { BoutHeader } from "./BoutHeader.tsx";
+import { EventList, type EventListEntry } from "./EventList.tsx";
+import { fmtRecord } from "./format.ts";
 import { FightSummary } from "./FightSummary.tsx";
 import { OddsPanel } from "./OddsPanel.tsx";
 import {
@@ -351,5 +354,91 @@ describe("dashboard state surfaces", () => {
     );
     expect(panel).toContain("delivery-freshness");
     expect(panel).toContain("Stale");
+  });
+
+  // App.tsx has no runnable interaction-simulation harness in this repo (its
+  // tests are all `renderToStaticMarkup` snapshots of the actual rendering
+  // components, never a rendered+clicked <App/> — there's no
+  // testing-library/jsdom-event setup here), so this exercises the same two
+  // rendering paths App.tsx wires archived events through — EventList's
+  // "Past events" grouping, and the final-bout SectionTabs/BoutHeader
+  // combination a selected archived event's boutViews resolve to — rather
+  // than driving App's own internal navigation state.
+  it("feeds an archived event into Past events and its own locked bout data into the fight view", async () => {
+    const liveState = await assembleDashboard();
+    const liveView = liveState.boutViews["bout-main"];
+    expect(liveView).toBeDefined();
+    if (!liveView) return;
+
+    // A record that differs from the live mock event's own bout-main
+    // fighters, so the assertions below can only pass by actually reading
+    // the archived payload, not by coincidentally matching the live one.
+    const archivedRedRecord = { wins: 30, losses: 1, draws: 0, noContests: 0 };
+    const archivedBout = {
+      ...liveView.bout,
+      id: "archived-bout-1",
+      status: "final" as const,
+      fighters: {
+        red: {
+          ...liveView.bout.fighters.red,
+          name: "Archived Red",
+          record: archivedRedRecord,
+        },
+        blue: { ...liveView.bout.fighters.blue, name: "Archived Blue" },
+      },
+    };
+    const archivedView: BoutView = { ...liveView, bout: archivedBout };
+
+    const archivedEntry: EventListEntry = {
+      id: "archived-event-1",
+      name: "UFC 000: Archived vs. Event",
+      startsAt: "2026-01-01T00:00:00.000Z",
+      isComplete: true,
+    };
+
+    // Step 1: an archived summary lands in EventList's "Past events" group
+    // (the shape App.tsx's archivedEventEntries maps ArchivedEventSummary
+    // into).
+    const eventListMarkup = renderToStaticMarkup(
+      <EventList
+        currentEvent={null}
+        events={[archivedEntry]}
+        selectedId=""
+        onSelect={() => undefined}
+      />,
+    );
+    expect(eventListMarkup).toContain("Past events");
+    expect(eventListMarkup).toContain("UFC 000: Archived vs. Event");
+
+    // Step 2: selecting that event resolves its bout data from the
+    // archived payload — a final bout's SectionTabs drops Odds, and its
+    // BoutHeader shows the archived record, not the live mock's.
+    const tabsMarkup = renderToStaticMarkup(
+      <SectionTabs
+        active="summary"
+        onChange={() => undefined}
+        sections={
+          archivedView.bout.status === "final"
+            ? ["summary", "stats", "tale"]
+            : undefined
+        }
+      />,
+    );
+    expect(tabsMarkup).not.toContain(">Odds</button>");
+
+    const headerMarkup = renderToStaticMarkup(
+      <BoutHeader
+        weightClassLabel=""
+        titleFight={archivedBout.titleFight}
+        scheduledRounds={archivedBout.scheduledRounds}
+        fighters={archivedBout.fighters}
+        status={archivedBout.status}
+        currentRound={archivedBout.currentRound}
+        result={archivedBout.result}
+      />,
+    );
+    expect(headerMarkup).toContain("Archived");
+    expect(headerMarkup).toContain(fmtRecord(archivedRedRecord));
+    expect(headerMarkup).not.toContain(fmtRecord(liveView.bout.fighters.red.record));
   });
 });
