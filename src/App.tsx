@@ -269,6 +269,43 @@ export default function App() {
     mainContentRef.current?.scrollTo({ top: 0 });
   }, [screenKey]);
 
+  // Every navigation into a bout hardcodes section: "summary" ("Fight"),
+  // which is wrong the moment that bout's own allowed sections don't
+  // include it — walkouts (status already "in-round" but no round has
+  // started) drops both Fight and Stats (see fightSectionsFor above). Left
+  // uncorrected, entry.section === "summary" && !sectionAllowed("summary")
+  // renders nothing at all rather than falling back to a valid tab. Correct
+  // it here, once, for every path that lands on a bout screen, rather than
+  // patching every individual navigation call site. Placed above the
+  // loading/error early returns below (and re-deriving what it needs from
+  // `state` itself, rather than the later `boutIdFor`/`selectedId` consts
+  // that only exist past those returns) so this hook always runs — a hook
+  // call that only some renders reach is a Rules-of-Hooks violation that
+  // crashes the whole app the moment dashboard.status flips from "loading"
+  // to "ready".
+  useEffect(() => {
+    if (!state || currentNav.tab !== "fight" || currentNav.selectedFutureFight) {
+      return;
+    }
+    const live = state.event.bouts.find(
+      (b) => b.status === "in-round" || b.status === "between-rounds",
+    );
+    const id =
+      currentNav.selected ?? live?.id ?? state.event.bouts[0]?.id;
+    const view = id ? state.boutViews[id] : undefined;
+    if (!view || view.bout.status === "upcoming") return;
+    const allowed = fightSectionsFor(view.bout.status, view.bout.currentRound);
+    if (allowed && !allowed.includes(section)) {
+      setSection(allowed[0] ?? "tale");
+    }
+  }, [
+    state,
+    currentNav.tab,
+    currentNav.selected,
+    currentNav.selectedFutureFight,
+    section,
+  ]);
+
   const applyNav = (entry: NavEntry) => {
     setTab(entry.tab);
     setScheduleSelection(entry.scheduleSelection);
@@ -380,23 +417,6 @@ export default function App() {
   const boutIdFor = (entry: NavEntry) =>
     entry.selected ?? live?.id ?? event.bouts[0]?.id;
   const selectedId = boutIdFor(currentNav);
-  // Every navigation into a bout hardcodes section: "summary" ("Fight"),
-  // which is wrong the moment that bout's own allowed sections don't
-  // include it — walkouts (status already "in-round" but no round has
-  // started) drops both Fight and Stats (see fightSectionsFor above). Left
-  // uncorrected, entry.section === "summary" && !sectionAllowed("summary")
-  // renders nothing at all rather than falling back to a valid tab. Correct
-  // it here, once, for every path that lands on a bout screen, rather than
-  // patching every individual navigation call site.
-  useEffect(() => {
-    if (currentNav.tab !== "fight" || currentNav.selectedFutureFight) return;
-    const view = selectedId ? boutViews[selectedId] : undefined;
-    if (!view || view.bout.status === "upcoming") return;
-    const allowed = fightSectionsFor(view.bout.status, view.bout.currentRound);
-    if (allowed && !allowed.includes(section)) {
-      setSection(allowed[0] ?? "tale");
-    }
-  }, [currentNav.tab, currentNav.selectedFutureFight, selectedId, boutViews, section]);
   // "total" means the scorecard feed should show through the last round the
   // collector has actually recorded for that bout.
   const resolveRound = (
