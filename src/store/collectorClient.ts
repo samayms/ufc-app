@@ -183,6 +183,7 @@ interface ParsedLifecycleObservation {
   period: number;
   completed: boolean;
   clockSeconds?: number;
+  result?: BoutResult;
   receivedAt: string;
 }
 
@@ -816,6 +817,7 @@ function parseLifecycleObservation(
       (typeof value.clockSeconds !== "number" ||
         !Number.isFinite(value.clockSeconds) ||
         value.clockSeconds < 0)) ||
+    (value.result !== undefined && parseBoutResult(value.result) === undefined) ||
     !isTimestamp(value.receivedAt)
   ) {
     return null;
@@ -830,6 +832,7 @@ function parseLifecycleObservation(
     ...(value.clockSeconds === undefined
       ? {}
       : { clockSeconds: value.clockSeconds }),
+    ...(value.result === undefined ? {} : { result: parseBoutResult(value.result)! }),
     receivedAt: value.receivedAt,
   };
 }
@@ -1372,6 +1375,7 @@ function applyCollectorObservations(
           ...(observation.period > 0
             ? { currentRound: observation.period }
             : {}),
+          ...(observation.result === undefined ? {} : { result: observation.result }),
         };
       }
       // The dedicated "lifecycle" event stream (FIGHT_STARTED/ROUND_ENDED/
@@ -1397,12 +1401,18 @@ function applyCollectorObservations(
         observation.clockSeconds > 0;
       const isConfirmedRoundEnd =
         observation.clockSeconds === 0 && observation.period > 0;
+      const isWalkoutsAwaitingLifecycleEvent =
+        observation.state === "in" &&
+        observation.period === 0 &&
+        bout.status === "upcoming";
       return {
         ...bout,
         status: isActivelyTicking
           ? "in-round"
           : isConfirmedRoundEnd
             ? "between-rounds"
+            : isWalkoutsAwaitingLifecycleEvent
+              ? "in-round"
             : bout.status,
         ...(observation.period > 0
           ? { currentRound: observation.period }

@@ -414,7 +414,7 @@ describe("parseEspnFightcenterCard", () => {
     });
   });
 
-  it("treats a draw (no winning competitor) as a draw result rather than throwing", () => {
+  it("does not fabricate a draw when ESPN has not named a winner", () => {
     const final = {
       event: { id: "1", name: "Test Event" },
       cards: {
@@ -438,8 +438,7 @@ describe("parseEspnFightcenterCard", () => {
     const card = parseEspnFightcenterCard(final, "1");
     const fight = card?.sections[0]?.fights[0];
 
-    expect(fight?.result?.winner).toBe("draw");
-    expect(fight?.result?.method).toBe("decision-majority");
+    expect(fight?.result).toBeUndefined();
   });
 });
 

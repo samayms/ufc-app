@@ -451,6 +451,53 @@ describe("collector browser client", () => {
     client.close();
   });
 
+  it("applies an authoritative result supplied with a final lifecycle observation", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () => bootstrapResponse({
+        state: fixture,
+        boutMappings: [], health: {}, unifiedRounds: [],
+        lifecycleObservations: [{
+          boutId: "bout-main", source: "espn", state: "post", period: 2,
+          completed: true, clockSeconds: 0, receivedAt: "2026-07-28T01:00:00Z",
+          result: { winner: "blue", method: "submission", round: 2, time: "1:38" },
+        }],
+      }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+
+    await client.start();
+    expect(client.getSnapshot().dashboard?.boutViews["bout-main"]?.bout).toMatchObject({
+      status: "final",
+      result: { winner: "blue", method: "submission", round: 2, time: "1:38" },
+    });
+    client.close();
+  });
+
+  it("restores walkouts from a period-zero ESPN observation after a missed lifecycle push", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () => bootstrapResponse({
+        state: fixture,
+        boutMappings: [], health: {}, unifiedRounds: [],
+        lifecycleObservations: [{
+          boutId: "bout-3", source: "espn", state: "in", period: 0,
+          completed: false, receivedAt: "2026-07-28T01:00:00Z",
+        }],
+      }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+
+    await client.start();
+    expect(client.getSnapshot().dashboard?.boutViews["bout-3"]?.bout).toMatchObject({
+      status: "in-round",
+    });
+    expect(client.getSnapshot().dashboard?.boutViews["bout-3"]?.bout.currentRound).toBeUndefined();
+    client.close();
+  });
+
   it("stays in walkouts (no round yet) when FIGHT_STARTED fires, instead of defaulting straight to round 1", async () => {
     // ESPN flips a competition's state to "in" the moment the walkouts
     // broadcast begins — well before round 1 actually starts, when its own

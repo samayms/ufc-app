@@ -577,6 +577,12 @@ function parseFightStatus(competition: RawEspnFightcenterCompetition): BoutStatu
   const status = competition.status;
 
   if (status?.type?.completed || status?.type?.state === "post") return "final";
+  if (
+    status?.type?.name === "STATUS_SCHEDULED" ||
+    status?.type?.name === "STATUS_PRE"
+  ) {
+    return "upcoming";
+  }
   if (status?.type?.name === "STATUS_HALFTIME") return "between-rounds";
   if (status?.type?.state === "in") return "in-round";
   return "upcoming";
@@ -595,16 +601,24 @@ function parseFightResult(
   const winnerRaw = (competition.competitors ?? []).find(
     (competitor) => competitor.winner === true,
   );
-  const winnerCorner = winnerRaw ? cornerForRawCompetitor(winnerRaw) : "draw";
-  const method = parseAthleteBioMethod(
+  const resultText =
     competition.status?.result?.displayName ??
       competition.status?.result?.name ??
       competition.result?.method?.displayName ??
-      competition.result?.method?.name,
-  );
+      competition.result?.method?.name;
+  const method = parseAthleteBioMethod(resultText);
+  const winner = winnerRaw
+    ? cornerForRawCompetitor(winnerRaw)
+    : method === "nc" || /\bno contest\b|\bnc\b/i.test(resultText ?? "")
+      ? "nc"
+      : /\bdraw\b/i.test(resultText ?? "")
+        ? "draw"
+        : undefined;
+
+  if (winner === undefined) return undefined;
 
   return {
-    winner: method === "nc" ? "nc" : winnerCorner,
+    winner,
     method,
     ...(competition.status?.period === undefined
       ? {}

@@ -19,6 +19,10 @@ import type {
   FightDataSource,
   SourceConfig,
 } from "./contract.ts";
+import {
+  buildEspnFightcenterUrl,
+  parseEspnFightcenterCard,
+} from "./espnSchedule.ts";
 
 interface EspnRecord {
   type?: string;
@@ -818,7 +822,42 @@ export function createLiveEspnLifecycleFetcher(
         fetchImpl,
       });
       // Filtering happens here, not in the query string: ESPN ignores `event`.
-      return parseEspnScoreboardLifecycle(payload, eventExternalId);
+      const entries = parseEspnScoreboardLifecycle(payload, eventExternalId);
+      // The scoreboard is authoritative for the live clock/state, but its
+      // completed competitions omit the finish method. Fightcenter carries
+      // that result on the same event; enrich only finals missing a result so
+      // a browser can converge after its first FIGHT_ENDED transition.
+      if (!entries.some(
+        (entry) =>
+          entry.completed &&
+          (entry.result === undefined || entry.result.method === "other"),
+      )) {
+        return entries;
+      }
+
+      const fightcenterPayload = await fetchJsonWithLimits(
+        buildEspnFightcenterUrl(eventExternalId),
+        {
+          timeoutMs: ESPN_SCOREBOARD_REQUEST_TIMEOUT_MS,
+          maxBytes: ESPN_SCOREBOARD_MAX_RESPONSE_BYTES,
+          fetchImpl,
+        },
+      );
+      const card = parseEspnFightcenterCard(fightcenterPayload, eventExternalId);
+      if (card === null) return entries;
+      const results = new Map(
+        card.sections
+          .flatMap((section) => section.fights)
+          .flatMap((fight) =>
+            fight.status === "final" && fight.result !== undefined
+              ? [[fight.competitionId, fight.result] as const]
+              : [],
+          ),
+      );
+      return entries.map((entry) => {
+        const result = results.get(entry.externalId);
+        return result === undefined ? entry : { ...entry, result };
+      });
     },
   };
 }

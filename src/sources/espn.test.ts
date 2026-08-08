@@ -461,4 +461,55 @@ describe("createLiveEspnLifecycleFetcher", () => {
       createLiveEspnLifecycleFetcher({ mode: "live" }),
     ).not.toThrow();
   });
+
+  it("enriches a scoreboard final with Fightcenter's authoritative finish", async () => {
+    const scoreboard = {
+      events: [{
+        id: "600060621",
+        competitions: [{
+          id: "401902680",
+          status: {
+            period: 2,
+            displayClock: "1:38",
+            type: { name: "STATUS_FINAL", state: "post", completed: true },
+          },
+          competitors: [{ order: 1, winner: true }, { order: 2, winner: false }],
+        }],
+      }],
+    };
+    const fightcenter = {
+      event: { id: "600060621", name: "UFC Test" },
+      cards: { main: { competitions: [{
+        id: "401902680",
+        matchNumber: 1,
+        status: {
+          period: 2,
+          displayClock: "1:38",
+          type: { name: "STATUS_FINAL", state: "post", completed: true },
+          result: { name: "submission", displayName: "Submission" },
+        },
+        competitors: [
+          { order: 1, winner: true, athlete: { id: "a", displayName: "Red" } },
+          { order: 2, winner: false, athlete: { id: "b", displayName: "Blue" } },
+        ],
+      }] } },
+    };
+    const fetchImpl = async (url: string | URL) =>
+      new Response(JSON.stringify(String(url).includes("fightcenter") ? fightcenter : scoreboard), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    const fetcher = createLiveEspnLifecycleFetcher({ mode: "live" }, fetchImpl as typeof fetch);
+
+    await expect(fetcher.fetchLifecycle("600060621")).resolves.toEqual([
+      {
+        externalId: "401902680",
+        state: "post",
+        period: 2,
+        completed: true,
+        clockSeconds: 98,
+        result: { winner: "red", method: "submission", round: 2, time: "1:38" },
+      },
+    ]);
+  });
 });
