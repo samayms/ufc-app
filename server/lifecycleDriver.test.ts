@@ -372,6 +372,62 @@ describe("LifecycleDriver", () => {
     await driver.close();
   });
 
+  it("does not let a slow onObservations callback delay the poll loop", async () => {
+    // Reproduces the production round-transition delay: onObservations
+    // feeds auxiliary reporting work (in production, ESPN's own per-round
+    // Core stats fetch — a real network call awaited before publishing the
+    // browser's clock sync). If pollOnce awaits that callback before
+    // scheduling the next poll, the whole scoreboard poll loop is
+    // throttled down to that callback's own latency instead of the
+    // intended interval — live production evidence showed poll cadence
+    // stretch from the intended 1s to 9-19s while a slow Core stats fetch
+    // ran every cycle, which is what actually produced "In R2 0:00" for
+    // several seconds: the server simply hadn't polled again yet.
+    const { machine } = await createMachine();
+    const time = new ManualDriverTime();
+    let fetchCount = 0;
+    const espnProvider: LifecycleObservationProvider = {
+      fetchObservations: async () => {
+        fetchCount += 1;
+        return [
+          observationInput(time, {
+            receivedAt: new Date(time.now()).toISOString(),
+          }),
+        ];
+      },
+    };
+    // Never resolves for the life of this test — stands in for a stuck
+    // external call (e.g. ESPN's Core stats endpoint hanging or timing
+    // out).
+    const hungObservationReport = new Promise<void>(() => undefined);
+    const driver = new LifecycleDriver({
+      machine,
+      espnProvider,
+      espnPollingMs: 1_000,
+      clock: time,
+      timer: time,
+      onObservations: () => hungObservationReport,
+    });
+
+    const timedOut = Symbol("timed out");
+    const raced = await Promise.race([
+      driver.start().then(() => "started" as const),
+      new Promise((resolve) => setTimeout(() => resolve(timedOut), 20)),
+    ]);
+
+    expect(raced).toBe("started");
+    expect(fetchCount).toBe(1);
+
+    // The poll loop itself must keep advancing on schedule too, not just
+    // the initial start() — the same hung callback is still in flight from
+    // the first poll.
+    time.advance(1_000);
+    await driver.idle();
+    expect(fetchCount).toBe(2);
+
+    await driver.close();
+  });
+
   it("switches to the Cito fallback after consecutive ESPN failures and switches back on recovery", async () => {
     const { machine } = await createMachine();
     const time = new ManualDriverTime();

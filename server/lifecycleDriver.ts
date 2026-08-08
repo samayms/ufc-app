@@ -430,7 +430,6 @@ export class LifecycleDriver {
       for (const input of observations) {
         await this.machine.observe({ ...input, source: usedSource });
       }
-      await this.onObservations?.(taggedObservations);
 
       if (observations.length > 0) {
         this.eventInProgress = observations.some(
@@ -440,6 +439,20 @@ export class LifecycleDriver {
           (observation) => observation.completed,
         );
       }
+
+      // Deliberately not awaited: onObservations is a reporting side-channel
+      // (browser clock-sync push, per-round stat subtraction) that in
+      // production can involve a slow external call — ESPN's own per-round
+      // Core stats fetch. Awaiting it here used to gate scheduleNext() on
+      // that latency, throttling the *entire* scoreboard poll loop down to
+      // it instead of the intended interval. Confirmed live: real poll
+      // cadence measured at 9-19s (vs. ESPN_EVENT_IN_PROGRESS_MS's 1s)
+      // whenever a round's Core stats fetch was in flight, which delayed the
+      // server's own detection of a round/fight boundary by the same
+      // amount — the actual mechanism behind the "In R2 0:00" freeze.
+      void Promise.resolve(this.onObservations?.(taggedObservations)).catch(
+        () => undefined,
+      );
     }
 
     this.scheduleNext();

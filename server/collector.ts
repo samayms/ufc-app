@@ -907,6 +907,14 @@ export async function createCollector(
 
   const lifecycleGetBouts = () => loaded.event.bouts;
   const finalizedEspnStatsBouts = new Set<string>();
+  // LifecycleDriver no longer waits for onObservations before scheduling its
+  // next poll (see lifecycleDriver.ts), so this callback can now be invoked
+  // again for the same bout before a prior Core stats fetch below has
+  // resolved. Core's own cumulative-to-round-delta accumulator assumes
+  // strictly in-order observations per bout, so a bout already being
+  // fetched skips this cycle's fetch entirely rather than risking two
+  // fetches applying out of order.
+  const coreStatsFetchInFlight = new Set<string>();
   const requiredEventExternalId = (source: "espn"): string => {
     const id = loaded.event.externalRefs.find(
       (ref) => ref.source === source,
@@ -957,7 +965,7 @@ export async function createCollector(
         const blueAthleteId = bout?.fighters.blue.externalRefs.find((ref) => ref.source === "espn")?.id;
         // Core has the current cumulative total; scoreboard inline statistics
         // are only a fallback because they are commonly absent in live MMA.
-        const shouldFetchCore =
+        const eligibleForCore =
           config.dataMode === "live" &&
           (observation.state === "in" ||
             (observation.completed &&
@@ -967,6 +975,13 @@ export async function createCollector(
           competitionId !== undefined &&
           redAthleteId !== undefined &&
           blueAthleteId !== undefined;
+        const alreadyFetchingCore = coreStatsFetchInFlight.has(
+          observation.boutId,
+        );
+        const shouldFetchCore = eligibleForCore && !alreadyFetchingCore;
+        if (shouldFetchCore) {
+          coreStatsFetchInFlight.add(observation.boutId);
+        }
         const coreStats = shouldFetchCore
           ? await Promise.all([
               fetchEspnCoreCumulativeStats({
@@ -982,7 +997,12 @@ export async function createCollector(
             ])
               .then(([fighterA, fighterB]) => ({ fighterA, fighterB }))
               .catch(() => observation.cumulativeStats)
-          : observation.cumulativeStats;
+              .finally(() => {
+                coreStatsFetchInFlight.delete(observation.boutId);
+              })
+          : eligibleForCore && alreadyFetchingCore
+            ? undefined // a fetch is already in flight for this bout this cycle
+            : observation.cumulativeStats;
         if (coreStats !== undefined && observation.period >= 1) {
           const stats = initializedRoundStats.observeEspnCumulative(
             {
