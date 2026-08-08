@@ -1147,6 +1147,20 @@ function applyMarketUpdateResult(
   const quote: OddsQuote = { corner, native, impliedProbability };
   const key = quoteKey(quote);
   const existingSnapshot = view.latestOdds[market];
+  const replacesExistingQuote = existingSnapshot?.quotes.some(
+    (existing) => quoteKey(existing) === key,
+  ) ?? false;
+  // Websocket messages can arrive after a newer REST/reconciliation tick.
+  // Reject an older update only when it would replace the same outcome; a
+  // missing opposite corner must still be allowed to complete the pair.
+  if (
+    replacesExistingQuote &&
+    tick.sourceUpdatedAt !== undefined &&
+    existingSnapshot?.marketUpdatedAt !== undefined &&
+    Date.parse(tick.sourceUpdatedAt) < Date.parse(existingSnapshot.marketUpdatedAt)
+  ) {
+    return null;
+  }
   const nextQuotes = [
     ...(existingSnapshot?.quotes.filter((q) => quoteKey(q) !== key) ?? []),
     quote,
@@ -1156,8 +1170,13 @@ function applyMarketUpdateResult(
     market,
     quotes: nextQuotes,
     ...(tick.sourceUpdatedAt === undefined
-      ? {}
-      : { marketUpdatedAt: tick.sourceUpdatedAt }),
+      ? existingSnapshot?.marketUpdatedAt === undefined
+        ? {}
+        : { marketUpdatedAt: existingSnapshot.marketUpdatedAt }
+      : existingSnapshot?.marketUpdatedAt !== undefined &&
+          Date.parse(existingSnapshot.marketUpdatedAt) > Date.parse(tick.sourceUpdatedAt)
+        ? { marketUpdatedAt: existingSnapshot.marketUpdatedAt }
+        : { marketUpdatedAt: tick.sourceUpdatedAt }),
     // A price/book delta usually has no cumulative-volume field. Keep the
     // most recently reported value instead of making the live market footer
     // disappear after the next quote update.

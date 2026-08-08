@@ -1014,6 +1014,41 @@ describe("collector browser client", () => {
     client.close();
   });
 
+  it("does not let an older source timestamp overwrite a newer market outcome", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () => bootstrapResponse({ state: fixture, boutMappings: [], health: {}, unifiedRounds: [] }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+    await client.start();
+    const events = MockEventSource.latest;
+    events?.open();
+    const baseTick = {
+      source: "polymarket",
+      boutId: "bout-main",
+      marketType: "fight-winner",
+      outcome: "Danilo Reyes",
+      receivedAt: "2026-07-28T01:55:58Z",
+      stale: false,
+    } as const;
+    events?.emit("update", {
+      kind: "market-tick",
+      tick: { ...baseTick, bid: 0.95, ask: 0.97, sourceUpdatedAt: "2026-07-28T01:55:42Z", volume: 12345 },
+    });
+    events?.emit("update", {
+      kind: "market-tick",
+      tick: { ...baseTick, bid: 0.36, ask: 0.39, sourceUpdatedAt: "2026-07-28T01:49:55Z" },
+    });
+
+    const current = client.getSnapshot().dashboard?.boutViews["bout-main"]?.latestOdds.polymarket;
+    expect(current?.quotes.find((quote) => quote.corner === "red")?.native).toEqual(
+      { kind: "polymarket-price", price: 0.96 },
+    );
+    expect(current?.volume).toBe(12345);
+    client.close();
+  });
+
   it("applies a market-snapshot SSE event into the matching unified round's marketAtEnd", async () => {
     const fixture = await assembleDashboard();
     const client = createCollectorClient({
