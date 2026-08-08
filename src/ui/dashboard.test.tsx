@@ -101,6 +101,44 @@ describe("dashboard state surfaces", () => {
     ).toBe(false);
   });
 
+  it("ignores market/commentary sources idling and only reacts to the round-data sources (espn/cito)", async () => {
+    // A quiet sportsbook or a commentary lull between rounds is normal, not
+    // a round-data outage — flagging on it made the "stale snapshot" notice
+    // fire constantly even while ESPN itself was polling fine.
+    const active = await assembleDashboard();
+    const idleMarketsAndCommentary = {
+      espn: {
+        source: "espn",
+        status: "healthy" as const,
+        fresh: true,
+        checkedAt: "2026-08-01T19:30:00.000Z",
+      },
+      kalshi: {
+        source: "kalshi",
+        status: "stale" as const,
+        fresh: false,
+        checkedAt: "2026-08-01T19:30:00.000Z",
+      },
+      sherdog: {
+        source: "sherdog",
+        status: "stale" as const,
+        fresh: false,
+        checkedAt: "2026-08-01T19:30:00.000Z",
+      },
+    };
+    expect(
+      collectorSnapshotIsStale({
+        connection: "connected",
+        dashboard: active,
+        health: idleMarketsAndCommentary,
+        unifiedRounds: [],
+        lifecycle: {},
+        clocks: {},
+        marketDeliveries: {},
+      }),
+    ).toBe(false);
+  });
+
   it("keeps the fight navigation focused on the remaining views", () => {
     const tabs = renderToStaticMarkup(
       <SectionTabs active="summary" onChange={() => undefined} />,

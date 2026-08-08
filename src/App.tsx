@@ -758,14 +758,6 @@ export default function App() {
           // passed them through.
           photosByCorner={photosByBoutId[entryView.bout.id]}
         />
-        {dashboard.stale && (
-          <div className="state-notice" role="status">
-            <strong>Stale snapshot</strong>
-            <span>
-              Showing the last valid completed-round data while sources reconnect.
-            </span>
-          </div>
-        )}
         <MarketStrip
           latestOdds={withoutSportsbookOnEventDay(
             entryView.latestOdds,

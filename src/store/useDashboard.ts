@@ -169,6 +169,14 @@ function applyLiveDemo(state: DashboardState): DashboardState {
   };
 }
 
+// The only sources that back "completed-round data" (the thing the stale
+// notice claims to be substituting a cached copy of) are ESPN and its Cito
+// fallback. Market sources (kalshi/polymarket/odds-api-io/the-odds-api) and
+// commentary sources (sherdog/x) idle normally — a quiet betting market or a
+// commentary lull between rounds is not a round-data outage, so their
+// freshness must not flip this flag.
+const ROUND_DATA_HEALTH_SOURCES = ["espn", "cito"] as const;
+
 export function collectorSnapshotIsStale(
   snapshot: CollectorSnapshot,
 ): boolean {
@@ -179,7 +187,9 @@ export function collectorSnapshotIsStale(
   return (
     hasActiveBout === true &&
     (snapshot.connection !== "connected" ||
-      Object.values(snapshot.health).some((health) => !health.fresh))
+      ROUND_DATA_HEALTH_SOURCES.some(
+        (source) => snapshot.health[source]?.fresh === false,
+      ))
   );
 }
 
