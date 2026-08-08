@@ -58,7 +58,7 @@ import {
   useCurrentEventAthletePhotos,
   useUpcomingEventPhotos,
 } from "./store/useEventPhotos.ts";
-import type { BoutView } from "./schema.ts";
+import type { BoutStatus, BoutView } from "./schema.ts";
 import type { EspnScheduledFight } from "./sources/espnSchedule.ts";
 import "./ui/dashboard.css";
 
@@ -120,6 +120,24 @@ export function nextRoundSync(
 ): { round: RoundSelection; syncedBoutId: string } | null {
   if (!boutId || !view || boutId === lastSyncedBoutId) return null;
   return { round: defaultRoundSelection(view), syncedBoutId: boutId };
+}
+
+// Which SectionTabs a bout should show, given its lifecycle status. `undefined`
+// means the default full order (SectionTabs' own DEFAULT_SECTIONS). A final
+// bout drops Odds (nothing left to bet on); walkouts — status already
+// "in-round" but no round has actually started yet, the same condition
+// BoutHeader.tsx uses for its own walkouts card — drops Fight and Stats,
+// since neither a fight summary nor round stats exist before a round has
+// started. Mirrors BoutHeader.tsx's `isWalkouts` check so both surfaces
+// agree on what "before data is posted" means.
+export function fightSectionsFor(
+  status: BoutStatus,
+  currentRound: number | undefined,
+): FightSection[] | undefined {
+  if (status === "final") return ["summary", "stats", "tale"];
+  const isWalkouts = status === "in-round" && (currentRound ?? 0) < 1;
+  if (isWalkouts) return ["odds", "tale"];
+  return undefined;
 }
 
 /** Whether the reader has asked the OS to keep motion to a minimum — the
@@ -769,6 +787,12 @@ export default function App() {
     // is also what the round-syncing effect above settles on once the
     // navigation actually lands.
     const entryRound = forUnderlay ? defaultRoundSelection(entryView) : round;
+    const activeSections = fightSectionsFor(
+      entryView.bout.status,
+      entryView.bout.currentRound,
+    );
+    const sectionAllowed = (id: FightSection) =>
+      !activeSections || activeSections.includes(id);
     return (
       <div className="fight-screen">
         <BoutHeader
@@ -808,17 +832,13 @@ export default function App() {
         <SectionTabs
           active={entry.section}
           onChange={changeSection}
-          sections={
-            entryView.bout.status === "final"
-              ? ["summary", "stats", "tale"]
-              : undefined
-          }
+          sections={activeSections}
         />
         <ScreenTransition
           screenKey={entry.section}
           direction={forUnderlay ? "none" : sectionDirection}
         >
-          {entry.section === "summary" && (
+          {entry.section === "summary" && sectionAllowed("summary") && (
             <>
               <RoundSelector
                 view={entryView}
@@ -839,7 +859,7 @@ export default function App() {
               />
             </>
           )}
-          {entry.section === "stats" && (
+          {entry.section === "stats" && sectionAllowed("stats") && (
             <>
               <RoundSelector
                 view={entryView}

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { BoutView } from "../schema.ts";
-import { nextRoundSync } from "../App.tsx";
+import { fightSectionsFor, nextRoundSync } from "../App.tsx";
 import {
   assembleDashboard,
   collectorDisabled,
@@ -159,6 +159,24 @@ describe("dashboard state surfaces", () => {
       />,
     );
     expect(tabs).not.toContain(">Odds</button>");
+  });
+
+  it("hides the Fight and Stats tabs during walkouts (in-round with no round started yet)", () => {
+    expect(fightSectionsFor("in-round", 0)).toEqual(["odds", "tale"]);
+    expect(fightSectionsFor("in-round", undefined)).toEqual(["odds", "tale"]);
+  });
+
+  it("shows the full tab set once a round has actually started", () => {
+    expect(fightSectionsFor("in-round", 1)).toBeUndefined();
+    expect(fightSectionsFor("between-rounds", 1)).toBeUndefined();
+  });
+
+  it("keeps the completed-fight tab set unaffected by the walkouts rule", () => {
+    expect(fightSectionsFor("final", undefined)).toEqual([
+      "summary",
+      "stats",
+      "tale",
+    ]);
   });
 
   it("does not re-sync the round on a live-data poll of the same bout, only on navigation to a new one", async () => {
