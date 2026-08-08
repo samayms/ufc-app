@@ -145,6 +145,26 @@ function depthPrices(
     );
 }
 
+/**
+ * Which side of a resolved market this subscription's own token landed on —
+ * `1` if it won, `0` if it lost, `undefined` if the payload names no winner
+ * we can match (leaves the tick as a bare status change).
+ */
+function resolvedOutcomePrice(
+  message: Record<string, unknown>,
+  subscription: MarketSubscription,
+): number | undefined {
+  const winningAssetId = message.winning_asset_id;
+  if (typeof winningAssetId === "string") {
+    return winningAssetId === subscription.externalId ? 1 : 0;
+  }
+  const winningOutcome = message.winning_outcome;
+  if (typeof winningOutcome === "string") {
+    return winningOutcome === subscription.outcome ? 1 : 0;
+  }
+  return undefined;
+}
+
 function baseTick(
   subscription: MarketSubscription,
   receivedAt: string,
@@ -284,6 +304,16 @@ function normalizeOne(
     eventType === "market_resolved" ||
     eventType === "new_market"
   ) {
+    // A resolved market's true outcome is binary (100/0), which a bid/ask
+    // spread can only ever approach, never reach — the last live quote
+    // before resolution might read 95/5. `winning_asset_id` (falling back to
+    // `winning_outcome` matched against the subscription's own corner) tells
+    // us which token actually won, so a resolved tick can carry the real
+    // 1.0/0.0 price instead of leaving the stale spread as the last word.
+    const resolvedPrice =
+      eventType === "market_resolved"
+        ? resolvedOutcomePrice(message, subscription)
+        : undefined;
     return [
       {
         kind: "lifecycle",
@@ -292,6 +322,9 @@ function normalizeOne(
           baseTick(subscription, receivedAt, timestamp, {
             status:
               eventType === "market_resolved" ? "resolved" : "active",
+            ...(resolvedPrice === undefined
+              ? {}
+              : { bid: resolvedPrice, ask: resolvedPrice }),
           }),
         ],
       },

@@ -194,7 +194,46 @@ describe("normalizePolymarketMessage", () => {
       )[0],
     ).toMatchObject({
       kind: "lifecycle",
-      ticks: [{ status: "resolved" }],
+      ticks: [{ status: "resolved", bid: 1, ask: 1, impliedProbability: 1 }],
+    });
+  });
+
+  it("prices a resolved market at the true 100/0 outcome, not the last bid/ask midpoint", () => {
+    const samples = fixture.sampleMessages;
+    const winningSubscription: MarketSubscription = SUBSCRIPTION;
+    const losingSubscription: MarketSubscription = {
+      ...SUBSCRIPTION,
+      externalId: "some-other-losing-token-id",
+      outcome: "Some Other Fighter",
+    };
+    const losingResolvedMessage = {
+      ...(samples.lifecycle as Record<string, unknown>),
+      asset_id: losingSubscription.externalId,
+    };
+
+    // The winning side's own token resolves to a true 1.0 (100%) — not
+    // whatever the last bid/ask midpoint happened to be before resolution.
+    expect(
+      normalizePolymarketMessage(
+        samples.lifecycle,
+        [winningSubscription, losingSubscription],
+        RECEIVED_AT,
+      )[0],
+    ).toMatchObject({
+      kind: "lifecycle",
+      ticks: [{ bid: 1, ask: 1, impliedProbability: 1 }],
+    });
+
+    // The losing side's token resolves to a true 0.0 (0%).
+    expect(
+      normalizePolymarketMessage(
+        losingResolvedMessage,
+        [winningSubscription, losingSubscription],
+        RECEIVED_AT,
+      )[0],
+    ).toMatchObject({
+      kind: "lifecycle",
+      ticks: [{ bid: 0, ask: 0, impliedProbability: 0 }],
     });
   });
 });
