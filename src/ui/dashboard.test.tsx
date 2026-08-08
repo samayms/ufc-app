@@ -255,6 +255,31 @@ describe("dashboard state surfaces", () => {
     expect(stale).toContain("completed-round data stays");
   });
 
+  it("omits the round-summary container entirely when no source has any narrative for this fight", () => {
+    const noNarrative = {
+      bout: {
+        status: "in-round",
+        id: "bout-x",
+        fighters: { red: { name: "Red Fighter" }, blue: { name: "Blue Fighter" } },
+      },
+      rounds: {
+        espn: [
+          {
+            round: 1,
+            stats: { red: { significantStrikesLanded: 3 } },
+            provenance: { source: "espn", fetchedAt: "2026-08-01T00:00:00Z", synthetic: false },
+          },
+        ],
+      },
+    } as unknown as BoutView;
+
+    const html = renderToStaticMarkup(
+      <FightSummary view={noNarrative} selection={1} />,
+    );
+    expect(html).not.toContain("round-summary");
+    expect(html).not.toContain("No narrative source has published this round yet.");
+  });
+
   it("does not label fixture live odds as completed-round odds", async () => {
     const state = await assembleDashboard();
     const main = state.boutViews["bout-main"];

@@ -97,6 +97,17 @@ export function FightSummary({
   }));
   const hasStats = rows.some((row) => row.red != null || row.blue != null);
   const summary = preferredSummary(view, selection);
+  // Canceled/postponed/upcoming get an explanatory placeholder — those are
+  // legitimate states where "there's no narrative" is expected and worth
+  // saying. Once a round is actually live or finished, no summary text means
+  // no source ever published one for it, so there's nothing to show — the
+  // container itself disappears rather than rendering an empty placeholder
+  // box.
+  const showNarrativeContainer =
+    summary?.summary != null ||
+    view.bout.status === "canceled" ||
+    view.bout.status === "postponed" ||
+    view.bout.status === "upcoming";
 
   return (
     <div className="fight-summary">
@@ -169,17 +180,17 @@ export function FightSummary({
         />
       </section>
 
-      <section className="round-summary" aria-label="Round summary">
-        <p>
-          {summary?.summary ??
-            (view.bout.status === "canceled" ||
-            view.bout.status === "postponed"
-              ? `This bout was ${view.bout.status}; no round summary is expected.`
-              : view.bout.status === "upcoming"
-              ? "A grounded summary will appear after the round is complete."
-              : "No narrative source has published this round yet.")}
-        </p>
-      </section>
+      {showNarrativeContainer && (
+        <section className="round-summary" aria-label="Round summary">
+          <p>
+            {summary?.summary ??
+              (view.bout.status === "canceled" ||
+              view.bout.status === "postponed"
+                ? `This bout was ${view.bout.status}; no round summary is expected.`
+                : "A grounded summary will appear after the round is complete.")}
+          </p>
+        </section>
+      )}
     </div>
   );
 }
