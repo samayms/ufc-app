@@ -109,8 +109,8 @@ function findEspnFight(
 // displayed round to defaultRoundSelection — and, if so, what the new
 // "synced" bout id is. Pulled out as a pure function so it only fires on an
 // actual navigation into a (possibly different) bout, never merely because
-// `state` got a new object identity from a live collector poll (~every
-// 2.5s while a fight is live). Without this guard, tapping an earlier round
+// `state` got a new object identity from a live collector poll (~every 1s
+// while a fight is live). Without this guard, tapping an earlier round
 // while a later round is live got immediately stomped back to the live
 // round by the very next poll.
 export function nextRoundSync(
