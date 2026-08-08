@@ -218,4 +218,18 @@ describe("Kalshi REST metadata", () => {
     expect(ticks).toHaveLength(2);
     for (const tick of ticks) expect(tick.volume).toBeCloseTo(1_252_605.61, 6);
   });
+
+  it("parses current fixed-point dollar books and uses market prices when the book is absent", async () => {
+    const fetcher = createKalshiRestOrderbookFetcher({
+      clock: { now: () => Date.parse(RECEIVED_AT) },
+      baseUrl: "https://kalshi.test",
+      fetchImpl: async (url) => String(url).endsWith("/orderbook")
+        ? new Response(JSON.stringify({
+            orderbook_fp: { yes_dollars: [["0.4200", "5"]], no_dollars: [["0.5700", "5"]] },
+          }))
+        : new Response(JSON.stringify({ market: { volume_fp: "654740.67" } })),
+    });
+    const [tick] = await fetcher([SUBSCRIPTION]);
+    expect(tick).toMatchObject({ bid: 42, ask: 43, volume: 654740.67 });
+  });
 });

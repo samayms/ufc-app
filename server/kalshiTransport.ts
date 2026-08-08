@@ -37,10 +37,18 @@ interface KalshiOrderbookResponse {
     yes?: unknown;
     no?: unknown;
   };
+  orderbook_fp?: {
+    yes_dollars?: unknown;
+    no_dollars?: unknown;
+  };
 }
 
 interface KalshiMarketResponse {
-  market?: { volume_fp?: unknown };
+  market?: {
+    volume_fp?: unknown;
+    yes_bid_dollars?: unknown;
+    yes_ask_dollars?: unknown;
+  };
 }
 
 interface KalshiBook {
@@ -152,6 +160,11 @@ function prices(
       ? []
       : [Number((price * factor).toFixed(4))];
   });
+}
+
+/** NO bids are equivalent to YES asks at the complementary price. */
+function complementaryPrices(levels: unknown, factor = 100): number[] {
+  return prices(levels, factor).map((price) => Number((100 - price).toFixed(4)));
 }
 
 function levelSizes(
@@ -537,19 +550,29 @@ export function createKalshiRestOrderbookFetcher(options: {
           ),
           fetchImpl(`${baseUrl}/markets/${encodeURIComponent(subscription.externalId)}`),
         ]);
-        const volume = marketResponse.ok
-          ? finite(((await marketResponse.json()) as KalshiMarketResponse).market?.volume_fp)
+        const market = marketResponse.ok
+          ? ((await marketResponse.json()) as KalshiMarketResponse).market
           : undefined;
-        if (!orderbookResponse.ok) return [];
-        const payload = (await orderbookResponse.json()) as KalshiOrderbookResponse;
+        const volume = finite(market?.volume_fp);
+        const payload = orderbookResponse.ok
+          ? (await orderbookResponse.json()) as KalshiOrderbookResponse
+          : undefined;
         const bids = sortedUnique(
-          prices(payload.orderbook?.yes),
+          payload?.orderbook_fp === undefined
+            ? prices(payload?.orderbook?.yes, 1)
+            : prices(payload.orderbook_fp.yes_dollars),
           "descending",
         );
         const asks = sortedUnique(
-          prices(payload.orderbook?.no),
+          payload?.orderbook_fp === undefined
+            ? complementaryPrices(payload?.orderbook?.no, 1)
+            : complementaryPrices(payload.orderbook_fp.no_dollars),
           "ascending",
         );
+        const fallbackBid = finite(market?.yes_bid_dollars);
+        const fallbackAsk = finite(market?.yes_ask_dollars);
+        if (bids.length === 0 && fallbackBid !== undefined) bids.push(fallbackBid * 100);
+        if (asks.length === 0 && fallbackAsk !== undefined) asks.push(fallbackAsk * 100);
         if (bids.length === 0 && asks.length === 0) return [];
         const book: KalshiBook = { bids, asks };
         return [

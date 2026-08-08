@@ -296,7 +296,11 @@ describe("Polymarket REST metadata", () => {
       clock: { now: () => Date.parse(RECEIVED_AT) },
       fetchImpl: async (url) => {
         if (String(url).startsWith("https://gamma.test")) {
-          return new Response(JSON.stringify([{ volume: "384153.8023580001" }]));
+          expect(String(url)).toContain("condition_ids=0xcondition");
+          return new Response(JSON.stringify([{
+            conditionId: "0xcondition",
+            volume: "384153.8023580001",
+          }]));
         }
         return new Response(JSON.stringify({
           bids: [{ price: "0.59", size: "10" }],

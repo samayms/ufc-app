@@ -395,11 +395,15 @@ export function createPolymarketRestBookFetcher(options: {
       [...new Set(subscriptions.flatMap(({ marketId }) => marketId === undefined ? [] : [marketId]))]
         .map(async (marketId) => {
           const response = await fetchImpl(
-            `${gammaBaseUrl}/markets?condition_id=${encodeURIComponent(marketId)}`,
+            `${gammaBaseUrl}/markets?condition_ids=${encodeURIComponent(marketId)}`,
           );
           if (!response.ok) return;
           const markets = (await response.json()) as unknown;
-          const market = Array.isArray(markets) ? markets[0] as PolymarketGammaMarket | undefined : undefined;
+          const market = Array.isArray(markets)
+            ? markets.find((candidate) =>
+                record(candidate)?.conditionId === marketId,
+              ) as PolymarketGammaMarket | undefined
+            : undefined;
           const volume = finite(market?.volume);
           if (volume !== undefined) gammaVolumes.set(marketId, volume);
         }),
