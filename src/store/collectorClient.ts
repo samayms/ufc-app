@@ -1274,11 +1274,15 @@ export function applyCollectorLifecycle(
   return replaceBout(dashboard, event.boutId, (bout) => {
     switch (event.type) {
       case "FIGHT_STARTED":
-        return {
-          ...bout,
-          status: "in-round",
-          currentRound: bout.currentRound ?? 1,
-        };
+        // ESPN flips a competition's state to "in" the instant the walkouts
+        // broadcast begins, well before round 1 itself starts — its own
+        // `period` is still 0 at that point. Defaulting currentRound to 1
+        // here invented a round that hadn't started yet, which both defeats
+        // BoutHeader's walkouts branch (`currentRound < 1`) and forced a
+        // countdown clock to render for a round that has no clock to show.
+        // Leave currentRound as-is; applyCollectorObservations will set it
+        // for real once a poll actually reports period >= 1.
+        return { ...bout, status: "in-round" };
       case "PROVISIONAL_ROUND_ENDED":
       case "ROUND_ENDED":
         return {

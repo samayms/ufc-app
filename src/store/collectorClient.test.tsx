@@ -451,6 +451,49 @@ describe("collector browser client", () => {
     client.close();
   });
 
+  it("stays in walkouts (no round yet) when FIGHT_STARTED fires, instead of defaulting straight to round 1", async () => {
+    // ESPN flips a competition's state to "in" the moment the walkouts
+    // broadcast begins — well before round 1 actually starts, when its own
+    // `period` is still 0. FIGHT_STARTED must not invent round 1 ahead of
+    // that; BoutHeader's walkouts branch depends on `currentRound` staying
+    // unset (or 0) until a real observation reports period >= 1.
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+      now: () => "2026-07-28T01:00:00Z",
+    });
+
+    await client.start();
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-3"]?.bout,
+    ).toMatchObject({ status: "upcoming" });
+
+    MockEventSource.latest?.emit("update", {
+      kind: "lifecycle",
+      event: {
+        type: "FIGHT_STARTED",
+        boutId: "bout-3",
+        detectedAt: "2026-07-28T01:00:00Z",
+      },
+    });
+
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-3"]?.bout,
+    ).toMatchObject({ status: "in-round" });
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-3"]?.bout.currentRound,
+    ).toBeUndefined();
+    client.close();
+  });
+
   it("doesn't regress an already-ended round back to in-round when the next raw poll's clock isn't a fresh positive number", async () => {
     // The "lifecycle" event stream (ROUND_ENDED etc.) is authoritative for
     // in-round vs. between-rounds. The "lifecycle-observations" stream keeps
