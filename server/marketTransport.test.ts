@@ -276,6 +276,10 @@ describe("SupervisedMarketTransport", () => {
       subscribe: () => undefined,
       normalize: (raw) => raw as NormalizedTransportMessage,
     });
+    const delivered: MarketTick[] = [];
+    transport.on((event) => {
+      if (event.type === "tick") delivered.push(event.tick);
+    });
 
     await transport.connect();
     socket.open();
@@ -310,6 +314,10 @@ describe("SupervisedMarketTransport", () => {
       bid: 0.62,
       ask: 0.64,
     });
+    // Reconnect/replay frames are still retained in the durable history for
+    // auditability, but only the monotonic current book may reach SSE.
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]).toMatchObject({ bid: 0.62, ask: 0.64 });
     await transport.disconnect();
     await store.close();
   });

@@ -666,7 +666,19 @@ export class SupervisedMarketTransport implements MarketTransport {
 
   private async ingestTicks(ticks: readonly MarketTick[]): Promise<void> {
     for (const tick of ticks) {
-      await this.tickStore.ingest(tick);
+      const current = await this.tickStore.ingest(tick);
+      // The durable store deliberately retains an out-of-order frame in
+      // history while keeping its newer source state as the latest book.
+      // Do not broadcast that rejected frame: an SSE client cannot apply the
+      // store's monotonic guard itself and would otherwise rewind the UI on a
+      // reconnect replay merely because it arrived later locally.
+      if (
+        current.receivedAt !== tick.receivedAt ||
+        (tick.sourceUpdatedAt !== undefined &&
+          current.sourceUpdatedAt !== tick.sourceUpdatedAt)
+      ) {
+        continue;
+      }
       this.emit({ type: "tick", source: this.source, tick: { ...tick } });
     }
   }
