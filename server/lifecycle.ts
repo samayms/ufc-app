@@ -335,11 +335,26 @@ function transition(
   if (fightCompleted) {
     const finalRound =
       next.activeProvisional?.round ?? observation.period;
+    // A decision can be announced well after the final round's clock
+    // actually hit zero — ESPN's own `completed` flip lags real time by
+    // however long the judges take. addConfirmedRound's `detectedAt` also
+    // becomes this round's market-snapshot boundary timestamp (see
+    // MarketTickStore.onBoundary), so using the decision-announcement time
+    // here pulled in every market tick between the true end of the round
+    // and the announcement — including the market's eventual resolution —
+    // into what was supposed to be "the odds right as round N ended". Use
+    // the round's own provisional-end detection time when one is on record;
+    // it's only absent when the fight ended by finish mid-round, in which
+    // case the round and the fight ended at the same instant anyway.
+    const finalRoundDetectedAt =
+      next.activeProvisional?.round === finalRound
+        ? next.activeProvisional.detectedAt
+        : observation.receivedAt;
 
     addConfirmedRound(
       next,
       finalRound,
-      observation.receivedAt,
+      finalRoundDetectedAt,
       "fight_completed",
       events,
     );

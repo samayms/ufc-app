@@ -128,7 +128,12 @@ describe("FightLifecycleMachine", () => {
         type: "ROUND_ENDED",
         boutId: BOUT_ID,
         round: 3,
-        detectedAt: at(7),
+        // Round 3's own clock hit zero at t=6 (see its
+        // PROVISIONAL_ROUND_ENDED above) — that's the true end of the round
+        // and what this boundary's market snapshot should be taken at, even
+        // though the decision confirming the fight is over doesn't land
+        // until t=7.
+        detectedAt: at(6),
         confirmation: "fight_completed",
       },
       {
@@ -194,6 +199,41 @@ describe("FightLifecycleMachine", () => {
       confirmation: "fight_completed",
     });
     expect(eventsOfType(bus.getEventLog(), "FIGHT_ENDED")).toHaveLength(1);
+  });
+
+  it("timestamps a decision's final-round boundary at the round's own end, not the later decision announcement", async () => {
+    // A judges' decision can be announced well after the final round's
+    // clock actually hit zero. That confirmed-round timestamp doubles as
+    // the round's market-snapshot boundary (MarketTickStore.onBoundary), so
+    // using the announcement time instead pulls every market tick between
+    // the round truly ending and the decision being read — including the
+    // market's own eventual resolution — into what should be "the odds as
+    // of the round actually ending".
+    const { bus, machine } = await createMachine();
+
+    await machine.observe(
+      observation(0, { state: "pre", clockSeconds: undefined }),
+    );
+    await machine.observe(observation(1));
+    // Round 1 (the fight's only/final round here) ends for real at t=2.
+    await machine.observe(observation(2, { period: 1, clockSeconds: 0 }));
+    // The decision isn't confirmed by ESPN until well after — t=60.
+    await machine.observe(
+      observation(60, {
+        state: "post",
+        period: 1,
+        clockSeconds: 0,
+        completed: true,
+      }),
+    );
+
+    const roundEnded = eventsOfType(bus.getEventLog(), "ROUND_ENDED");
+    expect(roundEnded).toHaveLength(1);
+    expect(roundEnded[0]).toMatchObject({
+      round: 1,
+      confirmation: "fight_completed",
+      detectedAt: at(2),
+    });
   });
 
   it("confirms the current round before ending an early stoppage", async () => {
