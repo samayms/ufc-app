@@ -981,6 +981,26 @@ export class RoundStatsPipeline {
       this.confirmedRounds.add(roundKey(event.boutId, round));
     }
 
+    // A fight that ends by mid-round stoppage never fires a
+    // PROVISIONAL_ROUND_ENDED/ROUND_ENDED boundary for its final round — the
+    // round just never "ends" normally, the fight ends inside it. Without a
+    // unified round record already on file for that round,
+    // persistEspnRoundStats has nowhere to attach the final round's ESPN
+    // stats and silently drops them. Ensure the record exists via the same
+    // boundary-creation path onRoundBoundary uses, but only when nothing
+    // already created one (a fight that goes the distance already got this
+    // round's boundary from its own ROUND_ENDED event, with a detectedAt
+    // that must not be clobbered by FIGHT_ENDED's later timestamp).
+    if (this.unified.get(roundKey(event.boutId, event.round)) === undefined) {
+      await this.updateUnifiedBoundary({
+        type: "ROUND_ENDED",
+        boutId: event.boutId,
+        round: event.round,
+        detectedAt: event.detectedAt,
+        confirmation: "fight_completed",
+      });
+    }
+
     if (!this.citoJobsEnabled) return;
     await this.scheduler.schedule({
       boutId: event.boutId,

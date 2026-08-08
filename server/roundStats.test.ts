@@ -250,6 +250,47 @@ describe("RoundStatsPipeline", () => {
     await restored.pipeline.close();
   });
 
+  it("persists the final round's ESPN stats when a fight ends by mid-round stoppage (no boundary event for that round)", async () => {
+    // A KO/TKO/submission ends the fight inside a round that never got its
+    // own PROVISIONAL_ROUND_ENDED or ROUND_ENDED boundary — the round just
+    // never "ends" normally, the fight ends inside it. Only FIGHT_ENDED
+    // fires for that round. Reproduces the production bug: UFC Fight Night
+    // Gamrot vs. Salkilld, Miller vs. Oliveira (boutId 401902680) ended up
+    // with no unified round record at all for its final round despite ESPN
+    // stats having been computed and pushed live right up to the finish.
+    const storage = new MemoryStorage();
+    const { bus, pipeline } = await setup(fetcher([]), { storage });
+
+    const stats = pipeline.observeEspnCumulative({
+      boutId: BOUT_ID,
+      round: 2,
+      fighterA: espnFighter,
+      fighterB: { ...espnFighter, knockdowns: 0 },
+      observedAt: "2026-07-28T00:05:00Z",
+    }, true);
+    await pipeline.persistEspnRoundStats(stats);
+
+    // No PROVISIONAL_ROUND_ENDED / ROUND_ENDED for round 2 — the stoppage
+    // happened mid-round, so the normal boundary path never ran.
+    bus.emit({
+      type: "FIGHT_ENDED",
+      boutId: BOUT_ID,
+      round: 2,
+      detectedAt: new Date(BASE_TIME + 30_000).toISOString(),
+    });
+    await pipeline.idle();
+
+    expect(pipeline.getUnifiedRound(BOUT_ID, 2)).toMatchObject({
+      provisional: false,
+      endingSignal: "fight_completed",
+      espnStats: {
+        finalized: true,
+        fighterA: { significantStrikesLanded: 13, knockdowns: 1 },
+      },
+    });
+    await pipeline.close();
+  });
+
   it("still derives a correct round-2 delta after a restart wipes the ESPN accumulator's in-memory baseline", async () => {
     // Reproduces the real production bug: a process restart mid-fight
     // constructs a brand new EspnRoundStatsAccumulator with no memory of
