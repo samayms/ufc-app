@@ -451,6 +451,76 @@ describe("collector browser client", () => {
     client.close();
   });
 
+  it("doesn't regress an already-ended round back to in-round when the next raw poll's clock isn't a fresh positive number", async () => {
+    // The "lifecycle" event stream (ROUND_ENDED etc.) is authoritative for
+    // in-round vs. between-rounds. The "lifecycle-observations" stream keeps
+    // arriving every ~2.5s purely to feed the live countdown, and ESPN
+    // routinely omits (or hasn't yet advanced) the clock in the gap right
+    // after a round ends — that must not overwrite a just-confirmed
+    // between-rounds status back to in-round with a dead clock.
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [],
+          lifecycleObservations: [
+            {
+              boutId: "bout-main",
+              source: "espn",
+              state: "in",
+              period: 1,
+              completed: false,
+              clockSeconds: 3,
+              receivedAt: "2026-07-28T01:00:00Z",
+            },
+          ],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+      now: () => "2026-07-28T01:00:05Z",
+    });
+
+    await client.start();
+    MockEventSource.latest?.emit("update", {
+      kind: "lifecycle",
+      event: {
+        type: "ROUND_ENDED",
+        boutId: "bout-main",
+        round: 1,
+        detectedAt: "2026-07-28T01:00:03Z",
+        confirmation: "period_transition",
+      },
+    });
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-main"]?.bout,
+    ).toMatchObject({ status: "between-rounds", currentRound: 1 });
+
+    // ESPN's period hasn't advanced yet on this particular poll, and it
+    // isn't reporting a clock either — the round is still over, this poll
+    // just has nothing new to say about it.
+    MockEventSource.latest?.emit("update", {
+      kind: "lifecycle-observations",
+      observations: [
+        {
+          boutId: "bout-main",
+          source: "espn",
+          state: "in",
+          period: 1,
+          completed: false,
+          receivedAt: "2026-07-28T01:00:06Z",
+        },
+      ],
+    });
+
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-main"]?.bout,
+    ).toMatchObject({ status: "between-rounds", currentRound: 1 });
+    client.close();
+  });
+
   it("renders the model's summary in place of the raw play-by-play", async () => {
     const fixture = await assembleDashboard();
     const client = createCollectorClient({

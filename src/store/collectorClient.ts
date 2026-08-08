@@ -1314,12 +1314,29 @@ function applyCollectorObservations(
             : {}),
         };
       }
+      // The dedicated "lifecycle" event stream (FIGHT_STARTED/ROUND_ENDED/
+      // FIGHT_ENDED — see applyCollectorLifecycle) is the authoritative
+      // source for the in-round vs. between-rounds transition. This raw
+      // per-poll observation only exists to feed the live countdown, and
+      // ESPN routinely reports no clock (or a stale one) in the gap right
+      // after a round ends — treating anything other than exactly 0 as "the
+      // fight resumed" silently reverted an already-confirmed
+      // between-rounds status back to in-round with a dead clock, which is
+      // what actually produced the stuck "-:--" the between-rounds label
+      // exists to avoid. Only a clearly-running clock (a defined, positive
+      // clockSeconds) is trusted to mean the round is actually live; a
+      // 0/undefined reading leaves an already-ended round alone instead of
+      // asserting it's back in progress.
+      const isActivelyTicking =
+        observation.clockSeconds !== undefined &&
+        observation.clockSeconds > 0;
       return {
         ...bout,
-        status:
-          observation.clockSeconds === 0
-            ? "between-rounds"
-            : "in-round",
+        status: isActivelyTicking
+          ? "in-round"
+          : bout.status === "between-rounds" || bout.status === "final"
+            ? bout.status
+            : "between-rounds",
         ...(observation.period > 0
           ? { currentRound: observation.period }
           : {}),
