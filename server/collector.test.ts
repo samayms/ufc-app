@@ -347,6 +347,46 @@ describe.skipIf(!localhostAvailable)(
     });
   });
 
+  it("pushes the fight result over SSE and records it on the collector's own state", async () => {
+    const { collector, port } = await startCollector();
+    const client = await connectSse(port);
+    await client.nextEvent();
+
+    const result = {
+      winner: "blue" as const,
+      method: "ko-tko" as const,
+      round: 2,
+      time: "3:17",
+    };
+    collector.eventBus.emit({
+      type: "FIGHT_ENDED",
+      boutId: "bout-main",
+      round: 2,
+      detectedAt: "2026-07-28T01:02:03Z",
+      result,
+    });
+    const update = await client.nextEvent();
+
+    expect(update.event).toBe("update");
+    expect(update.data).toEqual({
+      kind: "lifecycle",
+      event: {
+        type: "FIGHT_ENDED",
+        boutId: "bout-main",
+        round: 2,
+        detectedAt: "2026-07-28T01:02:03Z",
+        result,
+      },
+    });
+
+    // A browser that reconnects fresh (rather than staying on the SSE
+    // connection through FIGHT_ENDED) must also see the result — it reads
+    // from the collector's own state via a new bootstrap, not the push.
+    const bootstrapState = collector.getBootstrap().state;
+    expect(bootstrapState?.event.bouts.find((bout) => bout.id === "bout-main")?.result).toEqual(result);
+    expect(bootstrapState?.boutViews["bout-main"]?.bout.result).toEqual(result);
+  });
+
   it("restores the replay sequence from storage after restart", async () => {
     const storage = new MemoryStorage();
     const first = await startCollector(storage);

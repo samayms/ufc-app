@@ -177,7 +177,12 @@ describe("parseEspnScoreboardLifecycle", () => {
                 period: 2,
                 displayClock: "3:17",
                 type: { name: "STATUS_FINAL", state: "post", completed: true },
+                result: { displayName: "Submission" },
               },
+              competitors: [
+                { order: 1, winner: true },
+                { order: 2, winner: false },
+              ],
             },
             {
               id: "401770003",
@@ -210,6 +215,12 @@ describe("parseEspnScoreboardLifecycle", () => {
         period: 2,
         completed: true,
         clockSeconds: 197,
+        result: {
+          winner: "red",
+          method: "submission",
+          round: 2,
+          time: "3:17",
+        },
       },
       {
         externalId: "401770003",
@@ -217,6 +228,47 @@ describe("parseEspnScoreboardLifecycle", () => {
         period: 0,
         completed: false,
         clockSeconds: 300,
+      },
+    ]);
+  });
+
+  it("includes the fight result once a competition is final", () => {
+    const payload = {
+      event: {
+        header: {
+          id: "600051234",
+          competitions: [
+            {
+              id: "401770002",
+              status: {
+                period: 2,
+                displayClock: "3:17",
+                type: { name: "STATUS_FINAL", state: "post", completed: true },
+                result: { displayName: "KO/TKO" },
+              },
+              competitors: [
+                { order: 1, winner: false },
+                { order: 2, winner: true },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    expect(parseEspnScoreboardLifecycle(payload)).toEqual([
+      {
+        externalId: "401770002",
+        state: "post",
+        period: 2,
+        completed: true,
+        clockSeconds: 197,
+        result: {
+          winner: "blue",
+          method: "ko-tko",
+          round: 2,
+          time: "3:17",
+        },
       },
     ]);
   });

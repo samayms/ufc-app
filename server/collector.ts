@@ -1492,6 +1492,20 @@ export async function createCollector(
       applyActiveSubscriptions();
     }),
     eventBus.subscribe("FIGHT_ENDED", (event) => {
+      // Keep the collector's own state in sync with the decision the
+      // lifecycle observation carried, not just the "lifecycle" SSE push:
+      // an already-connected browser gets the result from that push, but a
+      // fresh bootstrap (reconnect, new tab) reads it from here instead.
+      if (event.result !== undefined) {
+        const bout = loaded.event.bouts.find(
+          (candidate) => candidate.id === event.boutId,
+        );
+        if (bout !== undefined) {
+          bout.result = event.result;
+          const view = loaded.boutViews[bout.id];
+          if (view !== undefined) view.bout.result = event.result;
+        }
+      }
       endedMarketBouts.add(event.boutId);
       if (
         relevantMarketBouts.has(event.boutId) &&

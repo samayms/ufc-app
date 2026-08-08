@@ -154,6 +154,40 @@ describe("FightLifecycleMachine", () => {
     });
   });
 
+  it("carries the decision on FIGHT_ENDED when the observation reports one", async () => {
+    const { bus, machine } = await createMachine();
+    const result = {
+      winner: "blue" as const,
+      method: "ko-tko" as const,
+      round: 2,
+      time: "3:17",
+    };
+
+    await machine.observe(
+      observation(0, { state: "pre", clockSeconds: undefined }),
+    );
+    await machine.observe(observation(1));
+    await machine.observe(
+      observation(2, {
+        state: "post",
+        period: 2,
+        clockSeconds: 0,
+        completed: true,
+        result,
+      }),
+    );
+
+    expect(eventsOfType(bus.getEventLog(), "FIGHT_ENDED")).toEqual([
+      {
+        type: "FIGHT_ENDED",
+        boutId: BOUT_ID,
+        round: 2,
+        detectedAt: at(2),
+        result,
+      },
+    ]);
+  });
+
   it("confirms the fifth round of a decision when the fight completes", async () => {
     const { bus, machine } = await createMachine();
 

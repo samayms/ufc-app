@@ -497,6 +497,13 @@ export interface EspnLifecycleEntry {
   completed: boolean;
   clockSeconds?: number;
   cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
+  /**
+   * The decision (winner/method/round/time), parsed from the same scoreboard
+   * payload the moment ESPN marks a competition complete. Without this, a
+   * browser connected live through FIGHT_ENDED never learns the result —
+   * only a fresh bootstrap after the collector reloads its event would.
+   */
+  result?: BoutResult;
 }
 
 export interface EspnCumulativeStats {
@@ -665,6 +672,7 @@ export function parseEspnScoreboardLifecycle(
     const competitors = [...(competition.competitors ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const fighterA = competitors[0] === undefined ? undefined : parseCumulativeStats(competitors[0]);
     const fighterB = competitors[1] === undefined ? undefined : parseCumulativeStats(competitors[1]);
+    const result = parseResult(competition);
 
     return [
       {
@@ -674,6 +682,7 @@ export function parseEspnScoreboardLifecycle(
         completed: status?.type?.completed === true,
         ...(clockSeconds === undefined ? {} : { clockSeconds }),
         ...(fighterA === undefined || fighterB === undefined ? {} : { cumulativeStats: { fighterA, fighterB } }),
+        ...(result === undefined ? {} : { result }),
       },
     ];
   });

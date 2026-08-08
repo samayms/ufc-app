@@ -1,5 +1,6 @@
 import type { CollectorEvent, CollectorEventBus } from "./eventBus.ts";
 import type { EspnCumulativeStats } from "../src/sources/espn.ts";
+import type { BoutResult } from "../src/schema.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
 import type { Storage } from "./storage.ts";
 
@@ -19,6 +20,12 @@ export interface FightLifecycleState {
 
 export interface FightLifecycleObservation extends FightLifecycleState {
   source: LifecycleSource;
+  /**
+   * The decision, when this observation's source reported one alongside
+   * completion. Carried through to the FIGHT_ENDED event only — not part of
+   * FightLifecycleState, so it is never persisted or compared across polls.
+   */
+  result?: BoutResult;
 }
 
 export interface ProvisionalRoundSupersession {
@@ -366,6 +373,7 @@ function transition(
         boutId: observation.boutId,
         round: finalRound,
         detectedAt: observation.receivedAt,
+        ...(observation.result === undefined ? {} : { result: observation.result }),
       });
     }
   }

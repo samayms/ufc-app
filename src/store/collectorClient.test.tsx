@@ -494,6 +494,51 @@ describe("collector browser client", () => {
     client.close();
   });
 
+  it("shows the fight's result the moment FIGHT_ENDED carries one, without waiting for a fresh bootstrap", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+      now: () => "2026-07-28T01:05:00Z",
+    });
+
+    await client.start();
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-main"]?.bout.result,
+    ).toBeUndefined();
+
+    MockEventSource.latest?.emit("update", {
+      kind: "lifecycle",
+      event: {
+        type: "FIGHT_ENDED",
+        boutId: "bout-main",
+        round: 2,
+        detectedAt: "2026-07-28T01:05:00Z",
+        result: {
+          winner: "blue",
+          method: "ko-tko",
+          round: 2,
+          time: "3:17",
+        },
+      },
+    });
+
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-main"]?.bout,
+    ).toMatchObject({
+      status: "final",
+      result: { winner: "blue", method: "ko-tko", round: 2, time: "3:17" },
+    });
+    client.close();
+  });
+
   it("doesn't regress an already-ended round back to in-round when the next raw poll's clock isn't a fresh positive number", async () => {
     // The "lifecycle" event stream (ROUND_ENDED etc.) is authoritative for
     // in-round vs. between-rounds. The "lifecycle-observations" stream keeps

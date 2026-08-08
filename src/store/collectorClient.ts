@@ -1,9 +1,11 @@
 import { americanToImpliedProb } from "../lib/oddsMath.ts";
 import type {
   Bout,
+  BoutResult,
   Corner,
   DashboardState,
   ExpertConsensus,
+  FinishMethod,
   NativePrice,
   OddsQuote,
   OddsSnapshot,
@@ -113,6 +115,7 @@ type CollectorLifecycleEvent =
       boutId: string;
       round: number;
       detectedAt: string;
+      result?: BoutResult;
     };
 
 export interface CollectorLifecycleDelivery {
@@ -909,6 +912,43 @@ function clockSyncs(
   return next;
 }
 
+const FINISH_METHODS: ReadonlySet<FinishMethod> = new Set([
+  "ko-tko",
+  "submission",
+  "decision-unanimous",
+  "decision-split",
+  "decision-majority",
+  "dq",
+  "nc",
+  "other",
+]);
+
+function isFinishMethod(value: unknown): value is FinishMethod {
+  return typeof value === "string" && FINISH_METHODS.has(value as FinishMethod);
+}
+
+function parseBoutResult(value: unknown): BoutResult | undefined {
+  if (
+    !isRecord(value) ||
+    (value.winner !== "red" &&
+      value.winner !== "blue" &&
+      value.winner !== "draw" &&
+      value.winner !== "nc") ||
+    !isFinishMethod(value.method) ||
+    (value.round !== undefined && typeof value.round !== "number") ||
+    (value.time !== undefined && typeof value.time !== "string")
+  ) {
+    return undefined;
+  }
+
+  return {
+    winner: value.winner,
+    method: value.method,
+    ...(value.round === undefined ? {} : { round: value.round }),
+    ...(value.time === undefined ? {} : { time: value.time }),
+  };
+}
+
 function parseLifecycleEvent(
   value: unknown,
 ): CollectorLifecycleEvent | null {
@@ -935,11 +975,16 @@ function parseLifecycleEvent(
     Number.isSafeInteger(value.round) &&
     (value.round as number) >= 1
   ) {
+    const result =
+      value.type === "FIGHT_ENDED" && value.result !== undefined
+        ? parseBoutResult(value.result)
+        : undefined;
     return {
       type: value.type,
       boutId: value.boutId,
       round: value.round as number,
       detectedAt: value.detectedAt,
+      ...(result === undefined ? {} : { result }),
     };
   }
 
@@ -1295,6 +1340,7 @@ export function applyCollectorLifecycle(
           ...bout,
           status: "final",
           currentRound: event.round,
+          ...(event.result === undefined ? {} : { result: event.result }),
         };
     }
   });

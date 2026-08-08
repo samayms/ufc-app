@@ -1,4 +1,4 @@
-import type { Bout } from "../src/schema.ts";
+import type { Bout, BoutResult } from "../src/schema.ts";
 import type { SourceConfig } from "../src/sources/contract.ts";
 import {
   createLiveCitoLifecycleFetcher,
@@ -51,6 +51,7 @@ export interface LifecycleScoreboardEntry {
   completed: boolean;
   clockSeconds?: number;
   cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
+  result?: BoutResult;
 }
 
 export interface LifecycleScoreboardFetcher {
@@ -104,6 +105,7 @@ function createScoreboardObservationProvider(options: {
             ? {}
             : { clockSeconds: entry.clockSeconds }),
           ...(entry.cumulativeStats === undefined ? {} : { cumulativeStats: entry.cumulativeStats }),
+          ...(entry.result === undefined ? {} : { result: entry.result }),
           receivedAt,
         });
       }

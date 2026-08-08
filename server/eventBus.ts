@@ -1,3 +1,5 @@
+import type { BoutResult } from "../src/schema.ts";
+
 export type CollectorEvent =
   | { type: "FIGHT_STARTED"; boutId: string; detectedAt: string }
   | {
@@ -13,7 +15,14 @@ export type CollectorEvent =
       detectedAt: string;
       confirmation: "period_transition" | "fight_completed";
     }
-  | { type: "FIGHT_ENDED"; boutId: string; round: number; detectedAt: string };
+  | {
+      type: "FIGHT_ENDED";
+      boutId: string;
+      round: number;
+      detectedAt: string;
+      /** The decision, when ESPN reported one alongside completion. */
+      result?: BoutResult;
+    };
 
 type CollectorEventType = CollectorEvent["type"];
 type CollectorEventOfType<Type extends CollectorEventType> = Extract<
