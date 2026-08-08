@@ -295,7 +295,12 @@ function parseStatus(competition: EspnCompetition): BoutStatus {
   const status = competition.status;
   const typeName = status?.type?.name;
 
-  if (status?.type?.completed || status?.type?.state === "post") return "final";
+  if (
+    status?.type?.completed ||
+    status?.type?.state === "post" ||
+    status?.type?.name === "STATUS_FIGHT_OVER" ||
+    status?.type?.name === "STATUS_END_OF_FIGHT"
+  ) return "final";
   // Trust ESPN's named scheduled state over a stale/generic `state: in`.
   // During a live card the event itself is in progress while later bouts are
   // still scheduled; treating those fights as walkouts made the UI contradict
@@ -303,7 +308,11 @@ function parseStatus(competition: EspnCompetition): BoutStatus {
   if (typeName === "STATUS_SCHEDULED" || typeName === "STATUS_PRE") {
     return "upcoming";
   }
-  if (status?.type?.name === "STATUS_HALFTIME") return "between-rounds";
+  if (
+    status?.type?.name === "STATUS_HALFTIME" ||
+    status?.type?.name === "STATUS_END_PERIOD" ||
+    status?.type?.name === "STATUS_END_OF_ROUND"
+  ) return "between-rounds";
   if (status?.type?.state === "in") return "in-round";
   return "upcoming";
 }
@@ -614,7 +623,12 @@ function parseDisplayClockSeconds(
 function parseLifecycleState(
   status: EspnCompetition["status"],
 ): "pre" | "in" | "post" {
-  if (status?.type?.completed || status?.type?.state === "post") return "post";
+  if (
+    status?.type?.completed ||
+    status?.type?.state === "post" ||
+    status?.type?.name === "STATUS_FIGHT_OVER" ||
+    status?.type?.name === "STATUS_END_OF_FIGHT"
+  ) return "post";
   if (
     status?.type?.name === "STATUS_SCHEDULED" ||
     status?.type?.name === "STATUS_PRE"
@@ -708,7 +722,16 @@ export function parseEspnScoreboardLifecycle(
     if (typeof competition.id !== "string") return [];
 
     const status = competition.status;
-    const clockSeconds = parseDisplayClockSeconds(status?.displayClock);
+    const statusName = status?.type?.name;
+    const isNamedRoundBoundary =
+      statusName === "STATUS_HALFTIME" ||
+      statusName === "STATUS_END_PERIOD" ||
+      statusName === "STATUS_END_OF_ROUND";
+    const isNamedFightOver =
+      statusName === "STATUS_FIGHT_OVER" || statusName === "STATUS_END_OF_FIGHT";
+    const clockSeconds = isNamedRoundBoundary
+      ? 0
+      : parseDisplayClockSeconds(status?.displayClock);
     const competitors = [...(competition.competitors ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const fighterA = competitors[0] === undefined ? undefined : parseCumulativeStats(competitors[0]);
     const fighterB = competitors[1] === undefined ? undefined : parseCumulativeStats(competitors[1]);
@@ -719,7 +742,7 @@ export function parseEspnScoreboardLifecycle(
         externalId: competition.id,
         state: parseLifecycleState(status),
         period: status?.period ?? 0,
-        completed: status?.type?.completed === true,
+        completed: status?.type?.completed === true || isNamedFightOver,
         ...(clockSeconds === undefined ? {} : { clockSeconds }),
         ...(fighterA === undefined || fighterB === undefined ? {} : { cumulativeStats: { fighterA, fighterB } }),
         ...(result === undefined ? {} : { result }),

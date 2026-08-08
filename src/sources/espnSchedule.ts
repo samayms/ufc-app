@@ -576,14 +576,23 @@ function buildFighter(
 function parseFightStatus(competition: RawEspnFightcenterCompetition): BoutStatus {
   const status = competition.status;
 
-  if (status?.type?.completed || status?.type?.state === "post") return "final";
+  if (
+    status?.type?.completed ||
+    status?.type?.state === "post" ||
+    status?.type?.name === "STATUS_FIGHT_OVER" ||
+    status?.type?.name === "STATUS_END_OF_FIGHT"
+  ) return "final";
   if (
     status?.type?.name === "STATUS_SCHEDULED" ||
     status?.type?.name === "STATUS_PRE"
   ) {
     return "upcoming";
   }
-  if (status?.type?.name === "STATUS_HALFTIME") return "between-rounds";
+  if (
+    status?.type?.name === "STATUS_HALFTIME" ||
+    status?.type?.name === "STATUS_END_PERIOD" ||
+    status?.type?.name === "STATUS_END_OF_ROUND"
+  ) return "between-rounds";
   if (status?.type?.state === "in") return "in-round";
   return "upcoming";
 }

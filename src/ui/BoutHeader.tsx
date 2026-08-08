@@ -180,9 +180,9 @@ function CenterStatus({
   if (status === "final") {
     return (
       <>
-        <span className="tot-live-label">Final</span>
+        <span className="tot-live-label">Fight over</span>
         <span className="tot-round-label">Result</span>
-        <span className="tot-substate">Waiting for ESPN</span>
+        <span className="tot-substate">Result pending</span>
       </>
     );
   }

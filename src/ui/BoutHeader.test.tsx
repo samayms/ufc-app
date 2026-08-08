@@ -102,6 +102,23 @@ describe("BoutHeader live clock", () => {
     expect(markup).not.toContain("Reyes wins");
   });
 
+  it("shows fight-over result-pending copy until ESPN publishes the finish", () => {
+    const bout = loadFixtureEvent().bouts[0]!;
+    const markup = renderToStaticMarkup(
+      <BoutHeader
+        weightClassLabel="Welterweight"
+        titleFight={false}
+        scheduledRounds={3}
+        fighters={bout.fighters}
+        status="final"
+      />,
+    );
+
+    expect(markup).toContain("Fight over");
+    expect(markup).toContain("Result pending");
+    expect(markup).not.toContain("0:00");
+  });
+
   it("puts the winner arrow inline beside the method, in a fixed slot on each side that never moves the method text", () => {
     const bout = loadFixtureEvent().bouts[0]!;
     const redWon = renderToStaticMarkup(

@@ -498,6 +498,37 @@ describe("collector browser client", () => {
     client.close();
   });
 
+  it("hydrates ESPN's normalized end-of-round and fight-over observations without a live clock", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () => bootstrapResponse({
+        state: fixture,
+        boutMappings: [], health: {}, unifiedRounds: [],
+        lifecycleObservations: [
+          {
+            boutId: "bout-main", source: "espn", state: "in", period: 1,
+            completed: false, clockSeconds: 0, receivedAt: "2026-07-28T01:00:00Z",
+          },
+          {
+            boutId: "bout-3", source: "espn", state: "post", period: 2,
+            completed: true, receivedAt: "2026-07-28T01:00:00Z",
+          },
+        ],
+      }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+
+    await client.start();
+    expect(client.getSnapshot().dashboard?.boutViews["bout-main"]?.bout).toMatchObject({
+      status: "between-rounds", currentRound: 1,
+    });
+    expect(client.getSnapshot().dashboard?.boutViews["bout-3"]?.bout).toMatchObject({
+      status: "final", currentRound: 2,
+    });
+    client.close();
+  });
+
   it("stays in walkouts (no round yet) when FIGHT_STARTED fires, instead of defaulting straight to round 1", async () => {
     // ESPN flips a competition's state to "in" the moment the walkouts
     // broadcast begins — well before round 1 actually starts, when its own

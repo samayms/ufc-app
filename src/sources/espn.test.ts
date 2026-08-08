@@ -334,6 +334,32 @@ describe("parseEspnScoreboardLifecycle", () => {
     ]);
   });
 
+  it("normalizes ESPN's named end-of-round and fight-over states", () => {
+    const payload = {
+      event: { header: { competitions: [
+        {
+          id: "401770006",
+          status: {
+            period: 1, displayClock: "-",
+            type: { name: "STATUS_END_OF_ROUND", state: "in", completed: false },
+          },
+        },
+        {
+          id: "401770007",
+          status: {
+            period: 2, displayClock: "-",
+            type: { name: "STATUS_END_OF_FIGHT", state: "in", completed: false },
+          },
+        },
+      ] } },
+    };
+
+    expect(parseEspnScoreboardLifecycle(payload)).toEqual([
+      { externalId: "401770006", state: "in", period: 1, completed: false, clockSeconds: 0 },
+      { externalId: "401770007", state: "post", period: 2, completed: true },
+    ]);
+  });
+
   it("skips competitions without an id and omits an unparseable clock", () => {
     const payload = {
       event: {
