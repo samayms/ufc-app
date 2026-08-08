@@ -65,6 +65,13 @@ function liveSnapshotEntry(
     confidence: 1,
     cornersReversed: false,
     snapshot,
+    // Without this, UpcomingOddsPanel's MetadataFooter has nothing to read
+    // and a live Kalshi/Polymarket block never shows Vol/OI/Liq — the same
+    // stats the same panel shows for an upcoming (not-yet-started) fight.
+    // Live snapshots only ever carry the single `volume` field (see
+    // OddsSnapshot in schema.ts); openInterest/liquidity/volume24hr/
+    // bookmakerCount are exclusive to the upcoming-odds pipeline.
+    ...(snapshot.volume === undefined ? {} : { metadata: { volume: snapshot.volume } }),
   };
 }
 

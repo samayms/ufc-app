@@ -1,10 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { Bout } from "../schema.ts";
+import type { Bout, BoutView } from "../schema.ts";
 import type { UpcomingOddsState } from "../store/useUpcomingOdds.ts";
 import {
   boutToScheduledFight,
+  liveBoutToUpcomingOdds,
   ScheduledFightPreview,
   UpcomingOddsSection,
   UpcomingTaleSection,
@@ -144,5 +145,37 @@ describe("UpcomingOddsSection loading state", () => {
       />,
     );
     expect(markup).toContain("skeleton");
+  });
+});
+
+describe("liveBoutToUpcomingOdds", () => {
+  it("carries a live snapshot's volume through as provider metadata", () => {
+    const view: BoutView = {
+      bout,
+      rounds: {},
+      latestOdds: {
+        kalshi: {
+          boutId: bout.id,
+          market: "kalshi",
+          quotes: [],
+          volume: 4_200,
+          provenance: {
+            source: "kalshi",
+            fetchedAt: "2026-08-08T00:00:00Z",
+            synthetic: false,
+          },
+        },
+      },
+      oddsHistory: {},
+      marketMoves: {},
+      preFightOdds: {},
+    };
+
+    const upcomingBout = liveBoutToUpcomingOdds(view);
+
+    // Without this, UpcomingOddsPanel's MetadataFooter has nothing to read
+    // and a live Kalshi/Polymarket block never shows Vol/OI/Liq — the exact
+    // stats the same panel shows for an upcoming (not-yet-started) fight.
+    expect(upcomingBout.providers.kalshi?.metadata?.volume).toBe(4_200);
   });
 });
