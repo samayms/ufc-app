@@ -97,11 +97,10 @@ function chooseMarket(
 function latestRoundRecord(
   records: readonly CollectorUnifiedRound[],
   boutId: string,
-  selection: number | "total",
+  round: number,
 ): CollectorUnifiedRound | undefined {
   const matching = records
-    .filter((record) => record.boutId === boutId)
-    .filter((record) => selection === "total" || record.round === selection)
+    .filter((record) => record.boutId === boutId && record.round === round)
     .sort((left, right) => right.round - left.round);
   return matching[0];
 }
@@ -119,6 +118,12 @@ export function RoundOdds({
   selection: number | "total";
   records?: readonly CollectorUnifiedRound[];
 }) {
+  // "Odds after Round N" is a single round's post-round boundary snapshot —
+  // TOTAL has no such single boundary to show (the fight-so-far reading was
+  // just whichever round happened to sort highest, which read as a random
+  // round's price mislabeled as a fight total). Nothing to render there.
+  if (selection === "total") return null;
+
   const record = latestRoundRecord(records, boutId, selection);
   // Round odds are meaningful only after the lifecycle has confirmed that
   // round. Live odds are deliberately not substituted here: that would label
@@ -129,9 +134,7 @@ export function RoundOdds({
       : chooseMarket(record, redName, blueName);
   const selectionLabel =
     record === undefined
-      ? selection === "total"
-        ? "Odds after the latest round"
-        : `Odds after Round ${selection}`
+      ? `Odds after Round ${selection}`
       : `Odds after Round ${record.round}`;
 
   if (choice === null) return null;

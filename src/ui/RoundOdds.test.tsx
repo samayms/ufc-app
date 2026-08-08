@@ -93,6 +93,57 @@ describe("RoundOdds", () => {
     expect(html).not.toContain("$0.58");
   });
 
+  it("never renders for the TOTAL selection, even with confirmed round odds on record", () => {
+    // TOTAL aggregates the whole fight; a single round's post-round odds
+    // snapshot has no meaningful "total" reading to show under it.
+    const record: CollectorUnifiedRound = {
+      boutId: "bout-main",
+      round: 2,
+      detectedEndedAt: "2026-07-28T01:02:03Z",
+      endingSignal: "period_transition",
+      provisional: false,
+      marketAtEnd: {
+        polymarket: {
+          source: "polymarket",
+          boutId: "bout-main",
+          round: 2,
+          boundaryType: "confirmed",
+          takenAt: "2026-07-28T01:02:04Z",
+          fresh: true,
+          outcomes: [
+            {
+              outcome: "Danilo Reyes",
+              marketType: "moneyline",
+              midpoint: 0.58,
+              impliedProbability: 0.58,
+              receivedAt: "2026-07-28T01:02:04Z",
+              stale: false,
+            },
+            {
+              outcome: "Artem Volkov",
+              marketType: "moneyline",
+              midpoint: 0.42,
+              impliedProbability: 0.42,
+              receivedAt: "2026-07-28T01:02:04Z",
+              stale: false,
+            },
+          ],
+        },
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <RoundOdds
+        boutId="bout-main"
+        redName="Danilo Reyes"
+        blueName="Artem Volkov"
+        selection="total"
+        records={[record]}
+      />,
+    );
+    expect(html).toBe("");
+  });
+
   it("prioritizes Kalshi when multiple round-end markets are available", () => {
     const record: CollectorUnifiedRound = {
       boutId: "bout-main",

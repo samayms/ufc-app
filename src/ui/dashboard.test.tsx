@@ -280,6 +280,41 @@ describe("dashboard state surfaces", () => {
     expect(html).not.toContain("No narrative source has published this round yet.");
   });
 
+  it("shows a full-fight TOTAL summary combining every round, only once the fight is over", () => {
+    const threeRoundBout = {
+      bout: {
+        status: "between-rounds",
+        id: "bout-y",
+        fighters: { red: { name: "Red Fighter" }, blue: { name: "Blue Fighter" } },
+      },
+      rounds: {
+        sherdog: [
+          { round: 1, summary: "Round one: a cagey feeling-out round." },
+          { round: 2, summary: "Round two: Red opens up with leg kicks." },
+        ],
+      },
+    } as unknown as BoutView;
+
+    // Not final yet — TOTAL must not show a partial combined summary, only
+    // an explicit "not yet" placeholder.
+    const midFight = renderToStaticMarkup(
+      <FightSummary view={threeRoundBout} selection="total" />,
+    );
+    expect(midFight).not.toContain("Round one:");
+    expect(midFight).not.toContain("Round two:");
+    expect(midFight).toContain("once the fight ends");
+
+    const finished = {
+      ...threeRoundBout,
+      bout: { ...threeRoundBout.bout, status: "final" },
+    } as unknown as BoutView;
+    const finalSummary = renderToStaticMarkup(
+      <FightSummary view={finished} selection="total" />,
+    );
+    expect(finalSummary).toContain("Round one: a cagey feeling-out round.");
+    expect(finalSummary).toContain("Round two: Red opens up with leg kicks.");
+  });
+
   it("does not label fixture live odds as completed-round odds", async () => {
     const state = await assembleDashboard();
     const main = state.boutViews["bout-main"];

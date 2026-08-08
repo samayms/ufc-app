@@ -55,19 +55,39 @@ function statTotal(
   return found ? total : null;
 }
 
-function preferredSummary(view: BoutView, selection: RoundSelection) {
+function preferredSummary(view: BoutView, round: number) {
   const ordered = [
     ...(view.rounds.sherdog ?? []),
     ...(view.rounds.espn ?? []),
     ...(view.rounds.cito ?? []),
   ];
-  const candidates =
-    selection === "total"
-      ? ordered.filter((update) => update.summary)
-      : ordered.filter(
-          (update) => update.round === selection && update.summary,
-        );
+  const candidates = ordered.filter(
+    (update) => update.round === round && update.summary,
+  );
   return candidates.sort((a, b) => b.round - a.round)[0];
+}
+
+/**
+ * TOTAL's narrative is the whole fight, not whichever round happened to
+ * sort highest — one round's own text isn't a fight summary. Concatenate
+ * each round's preferred summary in round order instead.
+ */
+function totalSummaryText(view: BoutView): string | undefined {
+  const rounds = new Set<number>();
+  for (const updates of [
+    view.rounds.sherdog,
+    view.rounds.espn,
+    view.rounds.cito,
+  ]) {
+    for (const update of updates ?? []) {
+      if (update.summary) rounds.add(update.round);
+    }
+  }
+  const parts = [...rounds]
+    .sort((left, right) => left - right)
+    .map((round) => preferredSummary(view, round)?.summary)
+    .filter((text): text is string => text != null);
+  return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
 export function FightSummary({
@@ -96,18 +116,30 @@ export function FightSummary({
     blueTotal: row.totalKey ? statTotal(stats, "blue", row.totalKey, row.legacyTotalKey) : null,
   }));
   const hasStats = rows.some((row) => row.red != null || row.blue != null);
-  const summary = preferredSummary(view, selection);
+  const isTotal = selection === "total";
+  const isFinal = view.bout.status === "final";
+  // TOTAL aggregates every round into one narrative — showing it before the
+  // fight is actually decided would present a partial, still-changing
+  // account as if it were the fight's story. Wait for "final" the same way
+  // the result itself waits for ESPN's decision.
+  const summaryText = isTotal
+    ? isFinal
+      ? totalSummaryText(view)
+      : undefined
+    : preferredSummary(view, selection as number)?.summary;
   // Canceled/postponed/upcoming get an explanatory placeholder — those are
   // legitimate states where "there's no narrative" is expected and worth
   // saying. Once a round is actually live or finished, no summary text means
   // no source ever published one for it, so there's nothing to show — the
   // container itself disappears rather than rendering an empty placeholder
-  // box.
+  // box. TOTAL before the fight ends gets its own explanatory placeholder
+  // for the same reason canceled/postponed/upcoming do.
   const showNarrativeContainer =
-    summary?.summary != null ||
+    summaryText != null ||
     view.bout.status === "canceled" ||
     view.bout.status === "postponed" ||
-    view.bout.status === "upcoming";
+    view.bout.status === "upcoming" ||
+    (isTotal && !isFinal);
 
   return (
     <div className="fight-summary">
@@ -183,11 +215,13 @@ export function FightSummary({
       {showNarrativeContainer && (
         <section className="round-summary" aria-label="Round summary">
           <p>
-            {summary?.summary ??
+            {summaryText ??
               (view.bout.status === "canceled" ||
               view.bout.status === "postponed"
                 ? `This bout was ${view.bout.status}; no round summary is expected.`
-                : "A grounded summary will appear after the round is complete.")}
+                : isTotal
+                  ? "A full-fight summary will appear once the fight ends."
+                  : "A grounded summary will appear after the round is complete.")}
           </p>
         </section>
       )}
