@@ -26,10 +26,15 @@ const POLYMARKET_SOCKET_URL =
   "wss://ws-subscriptions-clob.polymarket.com/ws/market";
 export const POLYMARKET_PING_INTERVAL_MS = 10_000;
 export const POLYMARKET_REST_BASE_URL = "https://clob.polymarket.com";
+export const POLYMARKET_GAMMA_BASE_URL = "https://gamma-api.polymarket.com";
 
 interface PolymarketBookResponse {
   bids?: unknown;
   asks?: unknown;
+}
+
+interface PolymarketGammaMarket {
+  volume?: unknown;
 }
 
 interface PolymarketLiveTransportOptions {
@@ -277,9 +282,8 @@ function normalizeOne(
         ticks: [
           baseTick(subscription, receivedAt, timestamp, {
             lastTrade,
-            ...(finite(message.size) === undefined
-              ? {}
-              : { volume: finite(message.size) }),
+            // `size` is this one trade's quantity, not the market's
+            // cumulative volume. REST Gamma metadata supplies the latter.
           }),
         ],
       },
@@ -376,14 +380,30 @@ export class PolymarketFixtureTransport extends FixtureReplayTransport {
 export function createPolymarketRestBookFetcher(options: {
   fetchImpl?: typeof fetch;
   baseUrl?: string;
+  gammaBaseUrl?: string;
   clock?: MarketTransportClock;
 }): (subscriptions: readonly MarketSubscription[]) => Promise<MarketTick[]> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const baseUrl = options.baseUrl ?? POLYMARKET_REST_BASE_URL;
+  const gammaBaseUrl = options.gammaBaseUrl ?? POLYMARKET_GAMMA_BASE_URL;
   const clock = options.clock ?? { now: () => Date.now() };
 
   return async (subscriptions) => {
     const receivedAt = new Date(clock.now()).toISOString();
+    const gammaVolumes = new Map<string, number>();
+    await Promise.all(
+      [...new Set(subscriptions.flatMap(({ marketId }) => marketId === undefined ? [] : [marketId]))]
+        .map(async (marketId) => {
+          const response = await fetchImpl(
+            `${gammaBaseUrl}/markets?condition_id=${encodeURIComponent(marketId)}`,
+          );
+          if (!response.ok) return;
+          const markets = (await response.json()) as unknown;
+          const market = Array.isArray(markets) ? markets[0] as PolymarketGammaMarket | undefined : undefined;
+          const volume = finite(market?.volume);
+          if (volume !== undefined) gammaVolumes.set(marketId, volume);
+        }),
+    );
     const results = await Promise.all(
       subscriptions.map(async (subscription) => {
         const response = await fetchImpl(
@@ -399,6 +419,9 @@ export function createPolymarketRestBookFetcher(options: {
             ...(bids[0] === undefined ? {} : { bid: bids[0] }),
             ...(asks[0] === undefined ? {} : { ask: asks[0] }),
             depth: { bids, asks },
+            ...(subscription.marketId === undefined || gammaVolumes.get(subscription.marketId) === undefined
+              ? {}
+              : { volume: gammaVolumes.get(subscription.marketId)! }),
           }),
         ];
       }),

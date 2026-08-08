@@ -9,6 +9,7 @@ import type {
   MarketTransportTimer,
 } from "./marketTransport.ts";
 import {
+  createPolymarketRestBookFetcher,
   normalizePolymarketMessage,
   POLYMARKET_PING_INTERVAL_MS,
   polymarketSubscriptionMessage,
@@ -174,7 +175,7 @@ describe("normalizePolymarketMessage", () => {
       )[0],
     ).toMatchObject({
       kind: "delta",
-      ticks: [{ lastTrade: 0.625, volume: 25 }],
+      ticks: [{ lastTrade: 0.625 }],
     });
     expect(
       normalizePolymarketMessage(
@@ -286,5 +287,29 @@ describe("Polymarket transports", () => {
     ]);
     await transport.disconnect();
     await store.close();
+  });
+});
+
+describe("Polymarket REST metadata", () => {
+  it("uses Gamma cumulative volume instead of websocket trade size", async () => {
+    const fetcher = createPolymarketRestBookFetcher({
+      clock: { now: () => Date.parse(RECEIVED_AT) },
+      fetchImpl: async (url) => {
+        if (String(url).startsWith("https://gamma.test")) {
+          return new Response(JSON.stringify([{ volume: "384153.8023580001" }]));
+        }
+        return new Response(JSON.stringify({
+          bids: [{ price: "0.59", size: "10" }],
+          asks: [{ price: "0.61", size: "10" }],
+        }));
+      },
+      baseUrl: "https://clob.test",
+      gammaBaseUrl: "https://gamma.test",
+    });
+
+    const ticks = await fetcher([{ ...SUBSCRIPTION, marketId: "0xcondition" }]);
+    expect(ticks).toEqual([
+      expect.objectContaining({ bid: 0.59, ask: 0.61, volume: 384153.8023580001 }),
+    ]);
   });
 });

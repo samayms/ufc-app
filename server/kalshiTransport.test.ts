@@ -8,6 +8,7 @@ import { MemoryStorage } from "./storage.ts";
 import { MarketTickStore } from "./tickStore.ts";
 import {
   KalshiFixtureTransport,
+  createKalshiRestOrderbookFetcher,
   kalshiSubscriptionMessage,
   normalizeKalshiMessage,
 } from "./kalshiTransport.ts";
@@ -191,5 +192,30 @@ describe("KalshiFixtureTransport", () => {
       ]),
     );
     await store.close();
+  });
+});
+
+describe("Kalshi REST metadata", () => {
+  it("sums both winner-market cumulative volumes for the fight", async () => {
+    const fetcher = createKalshiRestOrderbookFetcher({
+      clock: { now: () => Date.parse(RECEIVED_AT) },
+      baseUrl: "https://kalshi.test",
+      fetchImpl: async (url) => {
+        const value = String(url);
+        if (value.endsWith("/orderbook")) {
+          return new Response(JSON.stringify({ orderbook: { yes: [[60, 10]], no: [[38, 10]] } }));
+        }
+        return new Response(JSON.stringify({ market: {
+          volume_fp: value.includes("-REY") ? "654740.67" : "597864.94",
+        } }));
+      },
+    });
+    const ticks = await fetcher([
+      SUBSCRIPTION,
+      { ...SUBSCRIPTION, externalId: "KXUFCFIGHT-EXAMPLE-BLUE", outcome: "Blue Fighter" },
+    ]);
+
+    expect(ticks).toHaveLength(2);
+    for (const tick of ticks) expect(tick.volume).toBeCloseTo(1_252_605.61, 6);
   });
 });

@@ -39,6 +39,10 @@ interface KalshiOrderbookResponse {
   };
 }
 
+interface KalshiMarketResponse {
+  market?: { volume_fp?: unknown };
+}
+
 interface KalshiBook {
   bids: number[];
   asks: number[];
@@ -527,11 +531,17 @@ export function createKalshiRestOrderbookFetcher(options: {
     const receivedAt = new Date(clock.now()).toISOString();
     const results = await Promise.all(
       subscriptions.map(async (subscription) => {
-        const response = await fetchImpl(
+        const [orderbookResponse, marketResponse] = await Promise.all([
+          fetchImpl(
           `${baseUrl}/markets/${encodeURIComponent(subscription.externalId)}/orderbook`,
-        );
-        if (!response.ok) return [];
-        const payload = (await response.json()) as KalshiOrderbookResponse;
+          ),
+          fetchImpl(`${baseUrl}/markets/${encodeURIComponent(subscription.externalId)}`),
+        ]);
+        const volume = marketResponse.ok
+          ? finite(((await marketResponse.json()) as KalshiMarketResponse).market?.volume_fp)
+          : undefined;
+        if (!orderbookResponse.ok) return [];
+        const payload = (await orderbookResponse.json()) as KalshiOrderbookResponse;
         const bids = sortedUnique(
           prices(payload.orderbook?.yes),
           "descending",
@@ -547,11 +557,25 @@ export function createKalshiRestOrderbookFetcher(options: {
             ...(bids[0] === undefined ? {} : { bid: bids[0] }),
             ...(asks[0] === undefined ? {} : { ask: asks[0] }),
             depth: book,
+            ...(volume === undefined ? {} : { volume }),
           }),
         ];
       }),
     );
-    return results.flat();
+    const ticks = results.flat();
+    const volumeByBout = new Map<string, number>();
+    for (const tick of ticks) {
+      if (tick.volume !== undefined) {
+        volumeByBout.set(tick.boutId, (volumeByBout.get(tick.boutId) ?? 0) + tick.volume);
+      }
+    }
+    // Kalshi lists one winner market per fighter. The dashboard's fight-level
+    // volume is their cumulative total, attached to both outcome ticks so
+    // partial stream updates cannot replace it with one side's volume.
+    return ticks.map((tick) => {
+      const volume = volumeByBout.get(tick.boutId);
+      return volume === undefined ? tick : { ...tick, volume };
+    });
   };
 }
 

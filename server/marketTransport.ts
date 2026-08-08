@@ -18,6 +18,8 @@ export interface MarketSubscription {
   externalId: string;
   marketType: string;
   outcome: string;
+  /** Polymarket's Gamma condition id; token subscriptions share one market. */
+  marketId?: string;
 }
 
 export type NormalizedTransportMessage =
@@ -183,6 +185,11 @@ export function resolveMarketSubscriptions(
   source: StreamingMarketSource,
 ): MarketSubscription[] {
   return mappings.flatMap((mapping) => {
+    const polymarketConditionId = source === "polymarket"
+      ? mapping.externalRefs.find(
+          (ref) => ref.source === "polymarket" && ref.id.startsWith("0x"),
+        )?.id
+      : undefined;
     const refs = mapping.externalRefs.filter(
       (ref) =>
         ref.source === source &&
@@ -201,6 +208,9 @@ export function resolveMarketSubscriptions(
               externalId: ref.id,
               marketType: "fight-winner",
               outcome,
+              ...(polymarketConditionId === undefined
+                ? {}
+                : { marketId: polymarketConditionId }),
             },
           ];
     });
@@ -212,6 +222,7 @@ function subscriptionKey(subscription: MarketSubscription): string {
     subscription.source,
     subscription.boutId,
     subscription.externalId,
+    subscription.marketId ?? "",
     subscription.marketType,
     subscription.outcome,
   ].join("\u0000");
@@ -712,6 +723,9 @@ export class SupervisedMarketTransport implements MarketTransport {
       this.reconciliation !== undefined &&
       this.reconciliationHandle === undefined
     ) {
+      // The stream carries prices, but not reliable cumulative market volume.
+      // Seed REST metadata immediately rather than waiting a full cadence.
+      void this.runReconciliation(this.reconciliation);
       this.scheduleReconciliation();
     }
     if (
