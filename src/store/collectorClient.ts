@@ -295,8 +295,9 @@ function isOptionalFiniteNumber(value: unknown): boolean {
 
 /**
  * Parses both live "market-tick" payloads and bootstrap `latestMarkets`
- * entries (a superset shape) — only the fields an OddsQuote/delivery need
- * are validated; unrecognized extra fields are ignored.
+ * entries (a superset shape). Volume is included even though it does not
+ * participate in quote construction: it is the live-market metadata shown
+ * beside Kalshi and Polymarket, and must survive the server/browser boundary.
  */
 function parseMarketTick(value: unknown): MarketTick | null {
   if (
@@ -312,6 +313,7 @@ function parseMarketTick(value: unknown): MarketTick | null {
     !isOptionalFiniteNumber(value.rawOdds) ||
     !isOptionalFiniteNumber(value.impliedProbability) ||
     !isOptionalFiniteNumber(value.noVigProbability) ||
+    !isOptionalFiniteNumber(value.volume) ||
     (value.sourceUpdatedAt !== undefined &&
       !isTimestamp(value.sourceUpdatedAt)) ||
     !isTimestamp(value.receivedAt) ||
@@ -338,6 +340,7 @@ function parseMarketTick(value: unknown): MarketTick | null {
     ...(value.noVigProbability === undefined
       ? {}
       : { noVigProbability: value.noVigProbability as number }),
+    ...(value.volume === undefined ? {} : { volume: value.volume as number }),
     ...(value.sourceUpdatedAt === undefined
       ? {}
       : { sourceUpdatedAt: value.sourceUpdatedAt }),
@@ -1152,7 +1155,14 @@ function applyMarketUpdateResult(
     ...(tick.sourceUpdatedAt === undefined
       ? {}
       : { marketUpdatedAt: tick.sourceUpdatedAt }),
-    ...(tick.volume === undefined ? {} : { volume: tick.volume }),
+    // A price/book delta usually has no cumulative-volume field. Keep the
+    // most recently reported value instead of making the live market footer
+    // disappear after the next quote update.
+    ...(tick.volume === undefined
+      ? existingSnapshot?.volume === undefined
+        ? {}
+        : { volume: existingSnapshot.volume }
+      : { volume: tick.volume }),
     provenance: {
       source: schemaSourceFor(tick.source),
       fetchedAt: tick.receivedAt,

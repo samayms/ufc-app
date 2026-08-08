@@ -707,6 +707,7 @@ describe("collector browser client", () => {
               ask: 74,
               midpoint: 72,
               impliedProbability: 0.72,
+              volume: 48210,
               sourceUpdatedAt: "2026-07-28T01:10:00Z",
               receivedAt: "2026-07-28T01:10:01Z",
               stale: false,
@@ -721,6 +722,7 @@ describe("collector browser client", () => {
               ask: 28,
               midpoint: 26,
               impliedProbability: 0.26,
+              volume: 47980,
               sourceUpdatedAt: "2026-07-28T01:10:00Z",
               receivedAt: "2026-07-28T01:10:01Z",
               stale: false,
@@ -749,6 +751,9 @@ describe("collector browser client", () => {
       synthetic: false,
     });
     expect(view?.oddsHistory.kalshi).toHaveLength(1);
+    // `latestMarkets` is a server BookState superset. Its volume must cross
+    // the browser parser so the live Kalshi footer can render it.
+    expect(view?.latestOdds.kalshi?.volume).toBe(47980);
     expect(
       getCollectorMarketDelivery(snapshot, "bout-main", "kalshi"),
     ).toMatchObject({ source: "Kalshi", stale: false });
@@ -879,6 +884,55 @@ describe("collector browser client", () => {
       <DeliveryFreshness delivery={delivery!} />,
     );
     expect(markup).toContain("Stale");
+    client.close();
+  });
+
+  it("keeps a live prediction-market volume through later quote-only ticks", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () =>
+        bootstrapResponse({
+          state: fixture,
+          boutMappings: [],
+          health: {},
+          unifiedRounds: [],
+        }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+
+    await client.start();
+    const events = MockEventSource.latest;
+    events?.open();
+
+    const baseTick = {
+      source: "polymarket",
+      boutId: "bout-main",
+      marketType: "fight-winner",
+      outcome: "Danilo Reyes",
+      sourceUpdatedAt: "2026-07-28T01:20:00Z",
+      receivedAt: "2026-07-28T01:20:01Z",
+      stale: false,
+    } as const;
+    events?.emit("update", {
+      kind: "market-tick",
+      tick: { ...baseTick, bid: 0.6, ask: 0.62, volume: 12500 },
+    });
+    events?.emit("update", {
+      kind: "market-tick",
+      tick: {
+        ...baseTick,
+        bid: 0.61,
+        ask: 0.63,
+        sourceUpdatedAt: "2026-07-28T01:20:02Z",
+        receivedAt: "2026-07-28T01:20:03Z",
+      },
+    });
+
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-main"]?.latestOdds
+        .polymarket?.volume,
+    ).toBe(12500);
     client.close();
   });
 
