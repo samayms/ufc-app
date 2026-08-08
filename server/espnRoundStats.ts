@@ -125,4 +125,36 @@ export class EspnRoundStatsAccumulator {
     this.pendingFinalizations.set(`${snapshot.boutId}:${snapshot.round}`, 0);
     return this.observe(snapshot);
   }
+
+  /**
+   * Restore a round's cumulative-through-that-round baseline recovered from
+   * persisted storage, so the next round's delta is computed correctly by
+   * an accumulator that never itself observed that round live. This is what
+   * makes finalizedTotals survive a process restart mid-fight — without it,
+   * every round observed after a restart falls back to raw fight-to-date
+   * cumulative totals, since finalizedTotals is otherwise built up only from
+   * live observe()/settleStaleRounds() calls and starts empty on construction.
+   *
+   * Never overwrites a baseline observe()/settleStaleRounds() already
+   * established — a seed call is a best-effort recovery, not a source of
+   * truth once the accumulator has live data of its own.
+   */
+  seedBaseline(
+    boutId: string,
+    round: number,
+    totals: {
+      fighterA: EspnCumulativeFighterStats;
+      fighterB: EspnCumulativeFighterStats;
+    },
+  ): void {
+    const key = `${boutId}:${round}`;
+    if (this.finalizedTotals.has(key)) return;
+    this.finalizedTotals.set(key, {
+      boutId,
+      round,
+      fighterA: totals.fighterA,
+      fighterB: totals.fighterB,
+      observedAt: new Date(0).toISOString(),
+    });
+  }
 }

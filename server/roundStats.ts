@@ -334,6 +334,22 @@ function copyEspnStats(record: EspnDerivedRoundStats): EspnDerivedRoundStats {
   };
 }
 
+/**
+ * A round's persisted espnStats is already its own delta (see
+ * espnRoundStats.ts's subtract()), so the cumulative total through a round
+ * is just the running sum of every round's delta up to and including it.
+ */
+function addFighterStats(
+  left: EspnCumulativeFighterStats,
+  right: EspnCumulativeFighterStats,
+): EspnCumulativeFighterStats {
+  const result = {} as Record<keyof EspnCumulativeFighterStats, number>;
+  for (const key of Object.keys(left) as Array<keyof EspnCumulativeFighterStats>) {
+    result[key] = left[key] + right[key];
+  }
+  return result as EspnCumulativeFighterStats;
+}
+
 function copySherdog(
   observation: SherdogRoundObservation,
 ): SherdogRoundObservation {
@@ -866,6 +882,7 @@ export class RoundStatsPipeline {
         this.confirmedRounds.add(key);
       }
     }
+    this.seedEspnBaselinesFromUnified();
 
     for (const record of this.unified.values()) {
       const boundaryType = boundaryTypeForRecord(record);
@@ -884,6 +901,45 @@ export class RoundStatsPipeline {
 
     await this.quota.restore();
     await this.scheduler.restore();
+  }
+
+  /**
+   * espnAccumulator's finalizedTotals map is pure in-memory state and starts
+   * empty on every construction — including a restart mid-fight. Rebuild
+   * whatever baselines are recoverable from what was already persisted, so a
+   * round observed for the first time after a restart still gets a correct
+   * per-round delta instead of silently falling back to raw fight-to-date
+   * cumulative totals for the rest of the fight (see espnRoundStats.ts's
+   * seedBaseline for the full story).
+   */
+  private seedEspnBaselinesFromUnified(): void {
+    const byBout = new Map<string, UnifiedRoundRecord[]>();
+    for (const record of this.unified.values()) {
+      if (record.espnStats === undefined) continue;
+      const records = byBout.get(record.boutId) ?? [];
+      records.push(record);
+      byBout.set(record.boutId, records);
+    }
+    for (const [boutId, records] of byBout) {
+      records.sort((left, right) => left.round - right.round);
+      let runningA: EspnCumulativeFighterStats | undefined;
+      let runningB: EspnCumulativeFighterStats | undefined;
+      for (const record of records) {
+        const espnStats = record.espnStats!;
+        runningA =
+          runningA === undefined
+            ? espnStats.fighterA
+            : addFighterStats(runningA, espnStats.fighterA);
+        runningB =
+          runningB === undefined
+            ? espnStats.fighterB
+            : addFighterStats(runningB, espnStats.fighterB);
+        this.espnAccumulator.seedBaseline(boutId, record.round, {
+          fighterA: runningA,
+          fighterB: runningB,
+        });
+      }
+    }
   }
 
   private async onRoundBoundary(

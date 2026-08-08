@@ -250,6 +250,47 @@ describe("RoundStatsPipeline", () => {
     await restored.pipeline.close();
   });
 
+  it("still derives a correct round-2 delta after a restart wipes the ESPN accumulator's in-memory baseline", async () => {
+    // Reproduces the real production bug: a process restart mid-fight
+    // constructs a brand new EspnRoundStatsAccumulator with no memory of
+    // round 1. Restoring from persisted storage must recover round 1's
+    // baseline so round 2's stats aren't computed as raw fight-to-date
+    // cumulative totals instead of round 2's own delta.
+    const storage = new MemoryStorage();
+    const first = await setup(fetcher([]), { storage });
+    const round1 = first.pipeline.observeEspnCumulative({
+      boutId: BOUT_ID,
+      round: 1,
+      fighterA: espnFighter,
+      fighterB: { ...espnFighter, knockdowns: 0 },
+      observedAt: "2026-07-28T00:05:00Z",
+    }, false);
+    await first.pipeline.persistEspnRoundStats(round1);
+    emitConfirmed(first.bus, 1);
+    await first.pipeline.idle();
+    await first.pipeline.close();
+
+    // A fresh pipeline/process — its EspnRoundStatsAccumulator starts empty.
+    const restored = await setup(fetcher([]), { storage });
+    const round2RawCumulative = {
+      ...espnFighter,
+      // Fight-to-date cumulative: round 1's 13 landed plus round 2's own 7.
+      significantStrikesLanded: espnFighter.significantStrikesLanded + 7,
+      significantStrikesAttempted: espnFighter.significantStrikesAttempted + 7,
+    };
+    const round2 = restored.pipeline.observeEspnCumulative({
+      boutId: BOUT_ID,
+      round: 2,
+      fighterA: round2RawCumulative,
+      fighterB: { ...espnFighter, knockdowns: 0 },
+      observedAt: "2026-07-28T00:10:00Z",
+    }, false);
+
+    expect(round2.fighterA.significantStrikesLanded).toBe(7);
+    expect(round2.fighterA.significantStrikesAttempted).toBe(7);
+    await restored.pipeline.close();
+  });
+
   it("produces provisional then confirmed records in a normal round flow", async () => {
     const cito = fetcher([payload()]);
     const { bus, storage, time, pipeline } = await setup(cito);
