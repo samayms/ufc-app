@@ -273,6 +273,67 @@ describe("parseEspnScoreboardLifecycle", () => {
     ]);
   });
 
+  it("keeps a scheduled fight pre-fight even if its generic state is stale", () => {
+    const payload = {
+      event: {
+        header: {
+          competitions: [
+            {
+              id: "401770004",
+              status: {
+                period: 0,
+                displayClock: "-",
+                type: { name: "STATUS_SCHEDULED", state: "in", completed: false },
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    expect(parseEspnScoreboardLifecycle(payload)).toEqual([
+      {
+        externalId: "401770004",
+        state: "pre",
+        period: 0,
+        completed: false,
+      },
+    ]);
+  });
+
+  it("does not fabricate a draw while ESPN has only marked the bout final", () => {
+    const payload = {
+      event: {
+        header: {
+          competitions: [
+            {
+              id: "401770005",
+              status: {
+                period: 3,
+                displayClock: "0:00",
+                type: { name: "STATUS_FINAL", state: "post", completed: true },
+              },
+              competitors: [
+                { order: 1, winner: false },
+                { order: 2, winner: false },
+              ],
+            },
+          ],
+        },
+      },
+    };
+
+    expect(parseEspnScoreboardLifecycle(payload)).toEqual([
+      {
+        externalId: "401770005",
+        state: "post",
+        period: 3,
+        completed: true,
+        clockSeconds: 0,
+      },
+    ]);
+  });
+
   it("skips competitions without an id and omits an unparseable clock", () => {
     const payload = {
       event: {

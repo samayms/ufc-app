@@ -84,6 +84,8 @@ interface EspnCompetition {
       state?: string;
       completed?: boolean;
       description?: string;
+      detail?: string;
+      shortDetail?: string;
     };
     result?: {
       name?: string;
@@ -174,6 +176,18 @@ function parseMethod(method: string | undefined): FinishMethod {
   }
   if (normalized.includes("no contest") || normalized === "nc") return "nc";
   return "other";
+}
+
+function resultText(competition: EspnCompetition): string | undefined {
+  return [
+    competition.status?.result?.displayName,
+    competition.status?.result?.name,
+    competition.result?.method?.displayName,
+    competition.result?.method?.name,
+    competition.status?.type?.detail,
+    competition.status?.type?.shortDetail,
+    competition.status?.type?.description,
+  ].find((value) => value !== undefined && value.trim().length > 0);
 }
 
 function parsePastBoutResult(
@@ -275,8 +289,16 @@ function parseWeightClass(value: string | undefined): WeightClass | null {
 
 function parseStatus(competition: EspnCompetition): BoutStatus {
   const status = competition.status;
+  const typeName = status?.type?.name;
 
   if (status?.type?.completed || status?.type?.state === "post") return "final";
+  // Trust ESPN's named scheduled state over a stale/generic `state: in`.
+  // During a live card the event itself is in progress while later bouts are
+  // still scheduled; treating those fights as walkouts made the UI contradict
+  // ESPN's own pre-fight label.
+  if (typeName === "STATUS_SCHEDULED" || typeName === "STATUS_PRE") {
+    return "upcoming";
+  }
   if (status?.type?.name === "STATUS_HALFTIME") return "between-rounds";
   if (status?.type?.state === "in") return "in-round";
   return "upcoming";
@@ -318,16 +340,24 @@ function parseResult(competition: EspnCompetition): BoutResult | undefined {
   const winner = competition.competitors?.find(
     (competitor) => competitor.winner,
   );
-  const winnerCorner = winner ? cornerForCompetitor(winner) : "draw";
-  const method = parseMethod(
-    competition.status?.result?.displayName ??
-      competition.status?.result?.name ??
-      competition.result?.method?.displayName ??
-      competition.result?.method?.name,
-  );
+  const text = resultText(competition);
+  const normalizedText = text?.toLowerCase() ?? "";
+  const method = parseMethod(text);
+  // An omitted winner is not evidence of a draw. ESPN's scoreboard commonly
+  // marks a bout final before all result fields land, and the old fallback
+  // fabricated "Draw" for every such transient payload.
+  const winnerValue = winner
+    ? cornerForCompetitor(winner)
+    : method === "nc" || /\bno contest\b|\bnc\b/i.test(normalizedText)
+      ? "nc"
+      : /\bdraw\b/i.test(normalizedText)
+        ? "draw"
+        : undefined;
+
+  if (winnerValue === undefined) return undefined;
 
   return {
-    winner: method === "nc" ? "nc" : winnerCorner,
+    winner: winnerValue,
     method,
     ...(competition.status?.period === undefined
       ? {}
@@ -581,6 +611,12 @@ function parseLifecycleState(
   status: EspnCompetition["status"],
 ): "pre" | "in" | "post" {
   if (status?.type?.completed || status?.type?.state === "post") return "post";
+  if (
+    status?.type?.name === "STATUS_SCHEDULED" ||
+    status?.type?.name === "STATUS_PRE"
+  ) {
+    return "pre";
+  }
   if (status?.type?.state === "in") return "in";
   return "pre";
 }
