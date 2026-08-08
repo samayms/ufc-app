@@ -6,7 +6,7 @@ import polymarketFixture from "../src/fixtures/polymarketTicks.json" with {
   type: "json",
 };
 import { CollectorEventBus } from "./eventBus.ts";
-import { MemoryStorage } from "./storage.ts";
+import { MemoryStorage, type Storage } from "./storage.ts";
 import {
   MARKET_SNAPSHOTS_STORAGE_STREAM,
   MARKET_TICKS_STORAGE_STREAM,
@@ -591,6 +591,79 @@ describe("MarketTickStore", () => {
       tick("red", { receivedAt: at(5_000), sourceUpdatedAt: at(5_000) }),
     );
     await expect(store.getTickHistory(BOUT_ID)).resolves.toHaveLength(3);
+    await store.close();
+  });
+
+  it("does not block live tick ingestion behind a confirmed boundary's durable history rewrite", async () => {
+    // Regression for the production incident where every live Kalshi/Polymarket
+    // tick queues behind MarketTickStore's single serialized operation queue.
+    // A "confirmed" round boundary triggers persistHistory(), which rewrites
+    // the *entire* durable market-ticks stream via storage.replace(). On a
+    // long-running deployment that file can be large, so a slow replace()
+    // must not stall every subsequent appendTick() behind it — the prune is
+    // already applied in memory synchronously; only the durable rewrite may
+    // lag.
+    const inner = new MemoryStorage();
+    let releaseReplace: (() => void) | undefined;
+    const replaceGate = new Promise<void>((resolve) => {
+      releaseReplace = resolve;
+    });
+    const storage: Storage = {
+      append: (stream, record) => inner.append(stream, record),
+      replace: async (stream, records) => {
+        // Only the market-ticks rewrite is meant to be decoupled from live
+        // ingestion; gating every stream here would also stall the (small,
+        // legitimately-synchronous) snapshot persistence snapshotBoundary()
+        // does on every boundary, which is not what this test is about.
+        if (stream === MARKET_TICKS_STORAGE_STREAM) {
+          await replaceGate;
+        }
+        await inner.replace(stream, records);
+      },
+      read: (stream) => inner.read(stream),
+      listStreams: () => inner.listStreams(),
+    };
+
+    const bus = new CollectorEventBus();
+    const store = await MarketTickStore.create({
+      eventBus: bus,
+      storage,
+      staleAfterMs: 30_000,
+      persistIntervalMs: 0,
+    });
+
+    await store.appendTick(
+      tick("red", { receivedAt: at(1_000), sourceUpdatedAt: at(1_000) }),
+    );
+    await store.appendTick(
+      tick("red", { receivedAt: at(2_000), sourceUpdatedAt: at(2_000) }),
+    );
+
+    // Fires the confirmed boundary, which prunes history in memory and then
+    // kicks off the (currently gated) durable rewrite.
+    bus.emit({
+      type: "ROUND_ENDED",
+      boutId: BOUT_ID,
+      round: 1,
+      detectedAt: at(3_000),
+      confirmation: "period_transition",
+    });
+
+    // A live tick arriving immediately after must still be ingested promptly,
+    // not stuck behind the gated replace().
+    const ingested = store.appendTick(
+      tick("red", { receivedAt: at(4_000), sourceUpdatedAt: at(4_000) }),
+    );
+    const outcome = await Promise.race([
+      ingested.then(() => "ingested" as const),
+      new Promise<"timed-out">((resolve) =>
+        setTimeout(() => resolve("timed-out"), 200),
+      ),
+    ]);
+    expect(outcome).toBe("ingested");
+
+    releaseReplace?.();
+    await store.idle();
     await store.close();
   });
 });

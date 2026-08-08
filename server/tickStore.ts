@@ -853,6 +853,16 @@ export class MarketTickStore implements TickHistorySource {
 
   private operationQueue: Promise<void> = Promise.resolve();
 
+  // Durable history rewrites (see persistHistory()) run on their own queue,
+  // deliberately separate from operationQueue: on a long-running deployment
+  // market-ticks.jsonl can still be large, and a confirmed round boundary
+  // must never make every subsequent live tick wait behind a slow rewrite of
+  // the whole file. The prune itself is applied to in-memory `history`
+  // synchronously in snapshotBoundary(); only the durable write is deferred
+  // here. idle() and close() still wait for this queue, so tests and a clean
+  // shutdown continue to observe the rewrite's effect.
+  private historyPersistQueue: Promise<void> = Promise.resolve();
+
   constructor(options: MarketTickStoreOptions) {
     const staleAfterMs =
       options.staleAfterMs ?? DEFAULT_MARKET_STALE_AFTER_MS;
@@ -1094,14 +1104,21 @@ export class MarketTickStore implements TickHistorySource {
   async idle(): Promise<void> {
     while (true) {
       const queue = this.operationQueue;
-      await queue;
-      if (queue === this.operationQueue) return;
+      const persistQueue = this.historyPersistQueue;
+      await Promise.all([queue, persistQueue]);
+      if (
+        queue === this.operationQueue &&
+        persistQueue === this.historyPersistQueue
+      ) {
+        return;
+      }
     }
   }
 
   async close(): Promise<void> {
     for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
     await this.operationQueue;
+    await this.historyPersistQueue;
     for (const handle of this.persistTimers.values()) {
       this.timer.clearTimeout(handle);
     }
@@ -1402,7 +1419,7 @@ export class MarketTickStore implements TickHistorySource {
         boundaryTime,
       );
       if (this.history.length !== before) {
-        await this.persistHistory();
+        this.schedulePersistHistory();
       }
     }
     return produced;
@@ -1500,5 +1517,19 @@ export class MarketTickStore implements TickHistorySource {
       (tick) => ({ version: 1, tick }) satisfies PersistedTick,
     );
     await this.storage.replace(MARKET_TICKS_STORAGE_STREAM, records);
+  }
+
+  /**
+   * Chains the durable rewrite onto historyPersistQueue rather than the
+   * main operationQueue (see the field comment) so a slow storage.replace()
+   * never delays the next live tick's appendTick(). Failures are swallowed
+   * here the same way the rest of this class treats persistence as
+   * best-effort — an in-memory prune has already taken effect regardless.
+   */
+  private schedulePersistHistory(): void {
+    this.historyPersistQueue = this.historyPersistQueue
+      .catch(() => undefined)
+      .then(() => this.persistHistory())
+      .catch(() => undefined);
   }
 }
