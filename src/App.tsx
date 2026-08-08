@@ -380,6 +380,23 @@ export default function App() {
   const boutIdFor = (entry: NavEntry) =>
     entry.selected ?? live?.id ?? event.bouts[0]?.id;
   const selectedId = boutIdFor(currentNav);
+  // Every navigation into a bout hardcodes section: "summary" ("Fight"),
+  // which is wrong the moment that bout's own allowed sections don't
+  // include it — walkouts (status already "in-round" but no round has
+  // started) drops both Fight and Stats (see fightSectionsFor above). Left
+  // uncorrected, entry.section === "summary" && !sectionAllowed("summary")
+  // renders nothing at all rather than falling back to a valid tab. Correct
+  // it here, once, for every path that lands on a bout screen, rather than
+  // patching every individual navigation call site.
+  useEffect(() => {
+    if (currentNav.tab !== "fight" || currentNav.selectedFutureFight) return;
+    const view = selectedId ? boutViews[selectedId] : undefined;
+    if (!view || view.bout.status === "upcoming") return;
+    const allowed = fightSectionsFor(view.bout.status, view.bout.currentRound);
+    if (allowed && !allowed.includes(section)) {
+      setSection(allowed[0] ?? "tale");
+    }
+  }, [currentNav.tab, currentNav.selectedFutureFight, selectedId, boutViews, section]);
   // "total" means the scorecard feed should show through the last round the
   // collector has actually recorded for that bout.
   const resolveRound = (
