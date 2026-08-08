@@ -1119,6 +1119,23 @@ export async function createCollector(
           }),
         ];
 
+  // Transport ingestion keeps the collector's durable order book current,
+  // but it does not itself notify browsers. Forward every normalized stream
+  // tick through the same SSE update path used by the sportsbook pollers so
+  // an open dashboard updates immediately instead of waiting for bootstrap
+  // on a refresh.
+  for (const transport of marketTransports) {
+    unsubscribers.push(
+      transport.on((event) => {
+        if (event.type !== "tick") return;
+        void push.publish("update", {
+          kind: "market-tick",
+          tick: event.tick,
+        }).catch(() => undefined);
+      }),
+    );
+  }
+
   const sportsbookClock =
     options.sportsbook?.clock ??
     options.roundStats?.clock ??

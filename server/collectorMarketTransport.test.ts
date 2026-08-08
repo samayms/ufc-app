@@ -322,6 +322,16 @@ describe("collector market transport wiring", () => {
           data: {
             kind: "market-tick",
             tick: expect.objectContaining({
+              source: "kalshi",
+              boutId: "bout-main",
+            }),
+          },
+        }),
+        expect.objectContaining({
+          event: "update",
+          data: {
+            kind: "market-tick",
+            tick: expect.objectContaining({
               source: "odds-api-io",
               bookmaker: "draftkings",
             }),
