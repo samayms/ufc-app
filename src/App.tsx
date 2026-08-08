@@ -779,6 +779,7 @@ export default function App() {
         <ScheduledFightPreview
           fight={entry.selectedFutureFight}
           upcoming={upcomingOdds}
+          liveView={boutViews[entry.selectedFutureFight.competitionId]}
         />
       );
     }
@@ -815,6 +816,7 @@ export default function App() {
           }
           upcoming={upcomingOdds}
           photosByCorner={photosByBoutId[entryView.bout.id]}
+          liveView={entryView}
         />
       );
     }
@@ -986,4 +988,3 @@ export default function App() {
     </div>
   );
 }
-

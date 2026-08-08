@@ -407,10 +407,13 @@ export function ScheduledFightPreview({
   fight,
   upcoming,
   photosByCorner,
+  liveView,
 }: {
   fight: EspnScheduledFight;
   upcoming: UpcomingOddsState;
   photosByCorner?: Partial<Record<Corner, string>>;
+  /** Collector market state when this scheduled preview becomes live. */
+  liveView?: BoutView;
 }) {
   const [active, setActive] = useState<FightSection>("tale");
   const previousActiveRef = useRef<string | null>(null);
@@ -438,7 +441,13 @@ export function ScheduledFightPreview({
   // The strip above the tabs previews whatever the sync actually has, so a
   // fight with real upcoming odds shows them before the Odds tab is opened.
   const upcomingBout = findUpcomingBout(upcoming.document, fight.competitionId);
-  const stripOdds = upcomingBout === undefined ? {} : latestOddsByMarket(upcomingBout);
+  const liveBout = liveView ? liveBoutToUpcomingOdds(liveView) : undefined;
+  const stripOdds = liveBout && Object.keys(liveBout.providers).length > 0
+    ? latestOddsByMarket({
+        ...liveBout,
+        providers: { ...upcomingBout?.providers, ...liveBout.providers },
+      })
+    : upcomingBout === undefined ? {} : latestOddsByMarket(upcomingBout);
 
   return (
     <div className="scheduled-preview">
@@ -465,7 +474,9 @@ export function ScheduledFightPreview({
       <SectionTabs active={effectiveActive} onChange={setActive} sections={sections} />
 
       <ScreenTransition screenKey={effectiveActive} direction={activeDirection}>
-        {effectiveActive === "odds" && <UpcomingOddsSection fight={fight} upcoming={upcoming} />}
+        {effectiveActive === "odds" && (
+          <UpcomingOddsSection fight={fight} upcoming={upcoming} liveView={liveView} />
+        )}
         {effectiveActive === "tale" && <TaleSection fight={fight} />}
       </ScreenTransition>
     </div>

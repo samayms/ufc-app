@@ -73,6 +73,36 @@ describe("ScheduledFightPreview", () => {
     expect(html).not.toContain(">Stats</button>");
   });
 
+  it("uses collector live odds in the preview strip once a scheduled fight is live", () => {
+    const liveView: BoutView = {
+      bout: { ...bout, status: "in-round", currentRound: 1 },
+      rounds: {},
+      latestOdds: {
+        kalshi: {
+          boutId: bout.id,
+          market: "kalshi",
+          quotes: [
+            { corner: "red", native: { kind: "kalshi-cents", yesCents: 92, noCents: 8 }, impliedProbability: 0.92 },
+            { corner: "blue", native: { kind: "kalshi-cents", yesCents: 7, noCents: 93 }, impliedProbability: 0.07 },
+          ],
+          provenance: { source: "kalshi", fetchedAt: "2026-08-08T01:00:00Z", synthetic: false },
+        },
+      },
+      oddsHistory: {},
+      marketMoves: {},
+      preFightOdds: {},
+    };
+    const html = renderToStaticMarkup(
+      <ScheduledFightPreview
+        fight={boutToScheduledFight(bout)}
+        upcoming={upcoming}
+        liveView={liveView}
+      />,
+    );
+    // MarketStrip de-vigs the 92/7 native Kalshi pair before display.
+    expect(html).toContain("93%");
+  });
+
   it("shows a finished past-event fight as Final, not Upcoming", () => {
     const finishedBout: Bout = {
       ...bout,
