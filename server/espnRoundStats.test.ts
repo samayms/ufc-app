@@ -37,4 +37,22 @@ describe("EspnRoundStatsAccumulator", () => {
     const stats = new EspnRoundStatsAccumulator();
     expect(stats.finalizeFight(snapshot(1, Date.now(), 8)).finalized).toBe(true);
   });
+
+  it("still derives round 2 as a delta when ESPN's own period flips to 2 immediately, before any round-1 snapshot arrives at/after the 30s settlement point", () => {
+    // This is the real-world ESPN behavior, not the test fixture's generous
+    // assumption above: the scoreboard's `period` field can advance to the
+    // next round within a couple of poll cycles of the horn, well under the
+    // 30-second settlement window. No further round-1-tagged observation
+    // ever arrives, so finalization must not depend on one.
+    const stats = new EspnRoundStatsAccumulator();
+    const endedAt = Date.parse("2026-08-01T00:00:00.000Z");
+    expect(stats.observe(snapshot(1, endedAt - 2_000, 10))).toMatchObject({ finalized: false });
+    stats.markRoundEnded("bout", 1, new Date(endedAt).toISOString());
+    // Round flips to 2 within a couple of poll cycles — well before the 30s
+    // settlement point round 1 was waiting on.
+    const round2 = stats.observe(snapshot(2, endedAt + 5_000, 17));
+    expect(round2.finalized).toBe(false);
+    expect(round2.fighterA.significantStrikesLanded).toBe(7);
+    expect(round2.fighterA.significantStrikesAttempted).toBe(7);
+  });
 });

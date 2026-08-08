@@ -59,11 +59,26 @@ export class EspnRoundStatsAccumulator {
 
   private readonly pendingFinalizations = new Map<string, number>();
 
+  // Last raw cumulative snapshot seen while each round was still current.
+  // ESPN's own `period` field can advance to the next round within a couple
+  // of poll cycles of the horn — well under the 30s settlement window below
+  // — in which case no further snapshot tagged with the old round number
+  // ever arrives to complete finalization the normal way. Keeping the last
+  // one lets settleStaleRounds() finalize from it once play has visibly
+  // moved on, instead of leaving the baseline permanently missing (which
+  // silently turned every later round's "individual round" stats into raw
+  // fight-to-date cumulative totals).
+  private readonly lastSnapshotByRound = new Map<string, EspnCumulativeSnapshot>();
+
   observe(snapshot: EspnCumulativeSnapshot): EspnDerivedRoundStats {
+    this.settleStaleRounds(snapshot);
+
+    const key = `${snapshot.boutId}:${snapshot.round}`;
+    this.lastSnapshotByRound.set(key, snapshot);
+
     const baseline = this.finalizedTotals.get(
       `${snapshot.boutId}:${snapshot.round - 1}`,
     );
-    const key = `${snapshot.boutId}:${snapshot.round}`;
     const dueAt = this.pendingFinalizations.get(key);
     const finalized = dueAt !== undefined && Date.parse(snapshot.observedAt) >= dueAt;
     const derived: EspnDerivedRoundStats = {
@@ -85,6 +100,25 @@ export class EspnRoundStatsAccumulator {
       `${boutId}:${round}`,
       Date.parse(endedAt) + ESPN_ROUND_FINALIZATION_DELAY_MS,
     );
+  }
+
+  /**
+   * Once a later round has visibly started, every earlier round with a
+   * still-pending finalization is unambiguously over — finalize it now from
+   * the last cumulative total actually observed while it was current, since
+   * no snapshot carrying its round number is coming again.
+   */
+  private settleStaleRounds(snapshot: EspnCumulativeSnapshot): void {
+    for (const key of [...this.pendingFinalizations.keys()]) {
+      const separator = key.lastIndexOf(":");
+      const boutId = key.slice(0, separator);
+      const round = Number(key.slice(separator + 1));
+      if (boutId !== snapshot.boutId || round >= snapshot.round) continue;
+
+      const last = this.lastSnapshotByRound.get(key);
+      if (last !== undefined) this.finalizedTotals.set(key, last);
+      this.pendingFinalizations.delete(key);
+    }
   }
 
   finalizeFight(snapshot: EspnCumulativeSnapshot): EspnDerivedRoundStats {
