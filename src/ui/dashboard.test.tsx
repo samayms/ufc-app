@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { BoutView } from "../schema.ts";
+import { nextRoundSync } from "../App.tsx";
 import {
   assembleDashboard,
   collectorDisabled,
@@ -158,6 +159,30 @@ describe("dashboard state surfaces", () => {
       />,
     );
     expect(tabs).not.toContain(">Odds</button>");
+  });
+
+  it("does not re-sync the round on a live-data poll of the same bout, only on navigation to a new one", async () => {
+    const state = await assembleDashboard();
+    const view = state.boutViews["bout-main"];
+    expect(view).toBeDefined();
+    if (!view) return;
+    expect(defaultRoundSelection(view)).toBe(2);
+
+    // Landing on the bout the first time (lastSyncedBoutId is null): syncs.
+    const firstSync = nextRoundSync("bout-main", null, view);
+    expect(firstSync).toEqual({ round: 2, syncedBoutId: "bout-main" });
+
+    // A live-data poll refreshes `state` (and therefore `view`, as a new
+    // object) every ~2.5s, but the bout id the reader is looking at hasn't
+    // changed — this must NOT re-sync, or a manually tapped round (e.g. R1)
+    // would get stomped back to the live round moments after the tap.
+    const polledView: BoutView = { ...view };
+    const pollSync = nextRoundSync("bout-main", "bout-main", polledView);
+    expect(pollSync).toBeNull();
+
+    // Navigating to a different bout still syncs to its own default.
+    const navSync = nextRoundSync("bout-other", "bout-main", view);
+    expect(navSync).toEqual({ round: 2, syncedBoutId: "bout-other" });
   });
 
   it("switches the selected round without enabling future rounds", async () => {

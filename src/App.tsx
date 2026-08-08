@@ -105,6 +105,23 @@ function findEspnFight(
   return undefined;
 }
 
+// Decides whether the round-syncing effect (below, in App) should reset the
+// displayed round to defaultRoundSelection — and, if so, what the new
+// "synced" bout id is. Pulled out as a pure function so it only fires on an
+// actual navigation into a (possibly different) bout, never merely because
+// `state` got a new object identity from a live collector poll (~every
+// 2.5s while a fight is live). Without this guard, tapping an earlier round
+// while a later round is live got immediately stomped back to the live
+// round by the very next poll.
+export function nextRoundSync(
+  boutId: string | undefined,
+  lastSyncedBoutId: string | null,
+  view: BoutView | undefined,
+): { round: RoundSelection; syncedBoutId: string } | null {
+  if (!boutId || !view || boutId === lastSyncedBoutId) return null;
+  return { round: defaultRoundSelection(view), syncedBoutId: boutId };
+}
+
 /** Whether the reader has asked the OS to keep motion to a minimum — the
  *  same signal screen-transition.css honours for its slide keyframes. */
 function prefersReducedMotion(): boolean {
@@ -189,6 +206,14 @@ export default function App() {
       : null;
   const archivedEvent = useArchivedEvent(archivedSelectionId);
 
+  // Tracks which bout the round selector was last synced to a default for,
+  // so a live-data poll landing on the *same* bout (state getting a new
+  // object identity, but nothing actually navigated) doesn't re-run
+  // defaultRoundSelection and stomp a round the reader manually tapped to.
+  // See nextRoundSync above for why this can't just be a dependency-array
+  // tweak: `state` still has to be read fresh on every fire to resolve the
+  // current bout id and its view.
+  const lastSyncedBoutIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!state) return;
     const active = state.event.bouts.find(
@@ -197,7 +222,11 @@ export default function App() {
     );
     const id = selected ?? active?.id ?? state.event.bouts[0]?.id;
     const nextView = id ? state.boutViews[id] : undefined;
-    if (nextView) setRound(defaultRoundSelection(nextView));
+    const sync = nextRoundSync(id, lastSyncedBoutIdRef.current, nextView);
+    if (sync) {
+      setRound(sync.round);
+      lastSyncedBoutIdRef.current = sync.syncedBoutId;
+    }
   }, [selected, state]);
 
   // Everything that decides which screen the content area shows, as one
