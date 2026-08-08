@@ -179,3 +179,81 @@ describe("liveBoutToUpcomingOdds", () => {
     expect(upcomingBout.providers.kalshi?.metadata?.volume).toBe(4_200);
   });
 });
+
+describe("UpcomingOddsSection", () => {
+  it("keeps the real go-the-distance market once the fight goes live, instead of blanking it to not_listed", () => {
+    // The live tick pipeline has never carried a "go the distance" market —
+    // liveBoutToUpcomingOdds always stamps decision as not_listed. The
+    // moment a bout has any live moneyline odds, UpcomingOddsSection used to
+    // switch wholesale to that live view, discarding the real distance
+    // market the upcoming-odds sync already had, even though nothing about
+    // the fight starting makes that market stop existing.
+    const fight = boutToScheduledFight(bout);
+    const liveView: BoutView = {
+      bout: { ...bout, status: "in-round", currentRound: 1 },
+      rounds: {},
+      latestOdds: {
+        kalshi: {
+          boutId: bout.id,
+          market: "kalshi",
+          quotes: [],
+          volume: 5_000,
+          provenance: {
+            source: "kalshi",
+            fetchedAt: "2026-08-08T00:00:00Z",
+            synthetic: false,
+          },
+        },
+      },
+      oddsHistory: {},
+      marketMoves: {},
+      preFightOdds: {},
+    };
+    const upcomingWithDecision: UpcomingOddsState = {
+      status: "ready",
+      stale: false,
+      reload: () => undefined,
+      document: {
+        version: 1,
+        generatedAt: "2026-08-08T00:00:00Z",
+        synthetic: false,
+        events: [
+          {
+            espnEventId: bout.eventId,
+            name: "Fixture Event",
+            bouts: [
+              {
+                boutId: bout.id,
+                espnEventId: bout.eventId,
+                redFighter: bout.fighters.red.name,
+                blueFighter: bout.fighters.blue.name,
+                providers: {},
+                decision: {
+                  state: "loaded",
+                  decisionProbability: 0.62,
+                  finishProbability: 0.38,
+                  source: "kalshi",
+                  fetchedAt: "2026-08-08T00:00:00Z",
+                  synthetic: false,
+                },
+              },
+            ],
+          },
+        ],
+        providerRuns: {},
+        unmatchedMarkets: [],
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <UpcomingOddsSection
+        fight={fight}
+        upcoming={upcomingWithDecision}
+        liveView={liveView}
+      />,
+    );
+
+    expect(html).toContain("Go the distance");
+    expect(html).toContain('aria-label="Go the distance odds, available"');
+  });
+});

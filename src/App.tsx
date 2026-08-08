@@ -10,7 +10,6 @@ import { useSwipeBack } from "./hooks/useSwipeBack.ts";
 import { useBlockPullToTop } from "./hooks/useBlockPullToTop.ts";
 import { LiveStatsPanel } from "./ui/LiveStatsPanel.tsx";
 import { LoadingSplash } from "./ui/LoadingSplash.tsx";
-import { withoutSportsbookOnEventDay } from "./lib/marketPriority.ts";
 import { MarketStrip } from "./ui/MarketStrip.tsx";
 import { directionBetween, type TransitionDirection } from "./lib/screenTransition.ts";
 import {
@@ -812,14 +811,8 @@ export default function App() {
           photosByCorner={photosByBoutId[entryView.bout.id]}
         />
         <MarketStrip
-          latestOdds={withoutSportsbookOnEventDay(
-            entryView.latestOdds,
-            event.startsAt,
-          )}
-          preFightOdds={withoutSportsbookOnEventDay(
-            entryView.preFightOdds,
-            event.startsAt,
-          )}
+          latestOdds={entryView.latestOdds}
+          preFightOdds={entryView.preFightOdds}
           {...(entryView.bout.status === "final"
             ? {}
             : { onOpen: () => changeSection("odds") })}

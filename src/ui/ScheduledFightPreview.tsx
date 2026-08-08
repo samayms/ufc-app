@@ -195,7 +195,15 @@ export function UpcomingOddsSection({
   const upcomingBout = findUpcomingBout(upcoming.document, fight.competitionId);
   const liveBout = liveView ? liveBoutToUpcomingOdds(liveView) : undefined;
   const bout = liveBout && Object.keys(liveBout.providers).length > 0
-    ? liveBout
+    ? {
+        ...liveBout,
+        // liveBoutToUpcomingOdds always stamps decision as not_listed — the
+        // live tick pipeline has never carried a "go the distance" market.
+        // The fight starting doesn't make a real distance market the
+        // upcoming-odds sync already had stop existing; keep it instead of
+        // blanking it out the moment any live moneyline odds show up.
+        decision: upcomingBout?.decision ?? liveBout.decision,
+      }
     : upcomingBout;
 
   if (upcoming.status === "loading") {
