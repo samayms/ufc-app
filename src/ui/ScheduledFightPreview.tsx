@@ -197,6 +197,15 @@ export function UpcomingOddsSection({
   const bout = liveBout && Object.keys(liveBout.providers).length > 0
     ? {
         ...liveBout,
+        // A live transport can have a price for one market while another is
+        // quiet (most commonly Kalshi/Polymarket are streaming while the
+        // sportsbook poll has no new response).  Do not replace the whole
+        // pre-fight provider map in that case: retain its last real line and
+        // let a live provider overwrite only its own slot when it arrives.
+        providers: {
+          ...upcomingBout?.providers,
+          ...liveBout.providers,
+        },
         // liveBoutToUpcomingOdds always stamps decision as not_listed — the
         // live tick pipeline has never carried a "go the distance" market.
         // The fight starting doesn't make a real distance market the

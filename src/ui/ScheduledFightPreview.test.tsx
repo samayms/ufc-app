@@ -227,7 +227,41 @@ describe("UpcomingOddsSection", () => {
                 espnEventId: bout.eventId,
                 redFighter: bout.fighters.red.name,
                 blueFighter: bout.fighters.blue.name,
-                providers: {},
+                providers: {
+                  "odds-api": {
+                    status: "loaded",
+                    fetchedAt: "2026-08-08T00:00:00Z",
+                    snapshot: {
+                      boutId: bout.id,
+                      market: "sportsbook",
+                      quotes: [
+                        {
+                          corner: "red",
+                          impliedProbability: 0.61,
+                          native: {
+                            kind: "american-moneyline",
+                            moneyline: -155,
+                            book: "draftkings",
+                          },
+                        },
+                        {
+                          corner: "blue",
+                          impliedProbability: 0.39,
+                          native: {
+                            kind: "american-moneyline",
+                            moneyline: 135,
+                            book: "draftkings",
+                          },
+                        },
+                      ],
+                      provenance: {
+                        source: "odds-api",
+                        fetchedAt: "2026-08-08T00:00:00Z",
+                        synthetic: false,
+                      },
+                    },
+                  },
+                },
                 decision: {
                   state: "loaded",
                   decisionProbability: 0.62,
@@ -255,5 +289,7 @@ describe("UpcomingOddsSection", () => {
 
     expect(html).toContain("Go the distance");
     expect(html).toContain('aria-label="Go the distance odds, available"');
+    expect(html).toContain('aria-label="Sportsbooks odds, stale"');
+    expect(html).toContain("-155");
   });
 });
