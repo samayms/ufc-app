@@ -124,3 +124,59 @@ describe("espnCardToDashboardState outlook wiring", () => {
     expect(state.event.bouts).toHaveLength(2);
   });
 });
+
+describe("espnCardToDashboardState segment start times", () => {
+  it("carries each section's startsAt onto the event, keyed by segment", () => {
+    const multiSegmentCard: EspnScheduledCard = {
+      eventId: "600123456",
+      name: "UFC Belgrade: Medic vs. Rodriguez",
+      sections: [
+        {
+          key: "main",
+          displayName: "Main Card",
+          segment: "main-card",
+          startsAt: "2026-07-30T22:00:00Z",
+          fights: [
+            {
+              competitionId: "comp-1",
+              titleFight: false,
+              mainEvent: true,
+              red: { name: "Uros Medic", record: "12-4-0" },
+              blue: { name: "Daniel Rodriguez", record: "18-4-0" },
+              status: "upcoming",
+            },
+          ],
+        },
+        {
+          key: "prelims1",
+          displayName: "Prelims",
+          segment: "prelims",
+          startsAt: "2026-07-30T19:00:00Z",
+          fights: [
+            {
+              competitionId: "comp-2",
+              titleFight: false,
+              mainEvent: false,
+              red: { name: "Ikram Aliskerov", record: "16-2-0" },
+              blue: { name: "Robert Whittaker", record: "25-7-0" },
+              status: "upcoming",
+            },
+          ],
+        },
+      ],
+    };
+
+    const state = espnCardToDashboardState(multiSegmentCard, "2026-07-30T00:00:00Z");
+
+    expect(state.event.segmentStartTimes).toEqual({
+      "main-card": "2026-07-30T22:00:00Z",
+      prelims: "2026-07-30T19:00:00Z",
+    });
+  });
+
+  it("omits segmentStartTimes entirely when no section reports a start time", () => {
+    const state = espnCardToDashboardState(card(), "2026-07-30T00:00:00Z");
+
+    expect(state.event.segmentStartTimes).toBeUndefined();
+  });
+});

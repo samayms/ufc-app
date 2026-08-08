@@ -145,13 +145,15 @@ export interface BoutResult {
   time?: string;
 }
 
+export type BoutSegment = "main-card" | "prelims" | "early-prelims";
+
 export interface Bout {
   id: string;
   externalRefs: ExternalRef[];
   eventId: string;
   /** 1 = main event; ascending order walks down the card. */
   cardPosition: number;
-  segment: "main-card" | "prelims" | "early-prelims";
+  segment: BoutSegment;
   weightClass: WeightClass;
   scheduledRounds: 3 | 5;
   titleFight: boolean;
@@ -180,6 +182,14 @@ export interface UfcEvent {
   startsAt: string;
   venue?: string;
   city?: string;
+  /**
+   * When each card segment goes live, ISO 8601 — e.g. so the bout-order
+   * screen can show "Early Prelims · from 6:00 PM" the same way the
+   * upcoming-event preview already does. A missing entry means ESPN didn't
+   * report a start time for that segment (or the segment isn't on this
+   * card); never a fabricated or estimated time.
+   */
+  segmentStartTimes?: Partial<Record<BoutSegment, string>>;
   bouts: Bout[];
   provenance: Provenance;
 }

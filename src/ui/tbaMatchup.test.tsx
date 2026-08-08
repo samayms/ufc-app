@@ -98,6 +98,39 @@ describe("unannounced matchups are listings, not links", () => {
   });
 });
 
+describe("CardRail segment start times", () => {
+  it("shows each segment's start time next to its heading when provided", () => {
+    const markup = renderToStaticMarkup(
+      <CardRail
+        bouts={[
+          bout("main", "Dan Hooker", "Salahdine Parnasse"),
+          { ...bout("prelim", "Fighter A", "Fighter B"), segment: "prelims" },
+        ]}
+        selectedId=""
+        onSelect={() => {}}
+        segmentStartTimes={{
+          "main-card": "2026-07-30T22:00:00Z",
+          prelims: "2026-07-30T19:00:00Z",
+        }}
+      />,
+    );
+    expect(markup).toContain("Main card · from");
+    expect(markup).toContain("Prelims · from");
+  });
+
+  it("shows a bare segment heading, no dangling separator, when no time is known", () => {
+    const markup = renderToStaticMarkup(
+      <CardRail
+        bouts={[bout("main", "Dan Hooker", "Salahdine Parnasse")]}
+        selectedId=""
+        onSelect={() => {}}
+      />,
+    );
+    expect(markup).toContain(">Main card<");
+    expect(markup).not.toContain("·");
+  });
+});
+
 describe("TBA name rendering", () => {
   it("shows only the bare TBA, never ESPN's filler first name", () => {
     const markup = card();

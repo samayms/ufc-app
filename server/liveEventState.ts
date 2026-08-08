@@ -187,6 +187,13 @@ export function espnCardToDashboardState(
     }
   }
 
+  const segmentStartTimes: NonNullable<UfcEvent["segmentStartTimes"]> = {};
+  for (const section of card.sections) {
+    if (section.segment !== undefined && section.startsAt !== undefined) {
+      segmentStartTimes[section.segment] = section.startsAt;
+    }
+  }
+
   const event: UfcEvent = {
     id: card.eventId,
     externalRefs: [{ source: "espn", id: card.eventId }],
@@ -194,6 +201,9 @@ export function espnCardToDashboardState(
     startsAt: card.startsAt ?? fetchedAt,
     ...(card.venue === undefined ? {} : { venue: card.venue }),
     ...(card.city === undefined ? {} : { city: card.city }),
+    ...(Object.keys(segmentStartTimes).length === 0
+      ? {}
+      : { segmentStartTimes }),
     bouts,
     provenance: { source: "espn", fetchedAt, synthetic: false },
   };

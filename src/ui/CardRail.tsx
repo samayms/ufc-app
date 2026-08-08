@@ -1,6 +1,6 @@
-import type { Bout } from "../schema.ts";
+import type { Bout, BoutSegment } from "../schema.ts";
 import { FitText, MatchupCard } from "./MatchupCard.tsx";
-import { fmtFightPhase, WEIGHT_LABEL } from "./format.ts";
+import { fmtFightPhase, fmtTime, WEIGHT_LABEL } from "./format.ts";
 import { isTbaMatchup } from "../lib/tbaFighter.ts";
 import "./newComponents.css";
 
@@ -31,12 +31,15 @@ export function CardRail({
   selectedId,
   onSelect,
   photosByBoutId,
+  segmentStartTimes,
 }: {
   bouts: Bout[];
   selectedId: string;
   onSelect: (id: string) => void;
   /** Optional fighter photo URLs, keyed by bout id. Falls back to initials-in-circle when absent. */
   photosByBoutId?: Record<string, { red?: string; blue?: string }>;
+  /** When each segment goes live, ISO 8601. Absent entries render no time — never a guessed one. */
+  segmentStartTimes?: Partial<Record<BoutSegment, string>>;
 }) {
   const segments = ["main-card", "prelims", "early-prelims"] as const;
   return (
@@ -44,9 +47,13 @@ export function CardRail({
       {segments.map((seg) => {
         const segBouts = bouts.filter((b) => b.segment === seg);
         if (segBouts.length === 0) return null;
+        const startsAt = segmentStartTimes?.[seg];
         return (
           <section key={seg} className="rail-segment">
-            <h2 className="rail-heading">{SEGMENT_LABEL[seg]}</h2>
+            <h2 className="rail-heading">
+              {SEGMENT_LABEL[seg]}
+              {startsAt ? ` · from ${fmtTime(startsAt)}` : ""}
+            </h2>
             {segBouts.map((bout) => {
               const winner =
                 bout.status === "final" && bout.result

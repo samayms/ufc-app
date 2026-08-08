@@ -640,6 +640,7 @@ export default function App() {
             selectedId={boutIdFor(entry) ?? ""}
             onSelect={selectBout}
             photosByBoutId={photosByBoutId}
+            segmentStartTimes={event.segmentStartTimes}
           />
         ) : isArchivedSelection ? (
           archivedEvent.data ? (
@@ -889,6 +890,7 @@ export default function App() {
               selectedId={selectedId ?? ""}
               onSelect={selectBout}
               photosByBoutId={photosByBoutId}
+              segmentStartTimes={event.segmentStartTimes}
             />
           </aside>
         )}
