@@ -372,6 +372,18 @@
   white-space: nowrap;
 }
 
+/* The inherited display font (--font-display, a condensed italic face)
+   renders the opening and closing straight-quote glyphs asymmetrically on
+   some devices — a full double-quote shape on one side, an apostrophe-like
+   sliver on the other, confirmed on-device. A plain system font stack
+   reliably renders both quote characters identically, so pin just the two
+   quote marks to it rather than the nickname text itself, which keeps its
+   intended condensed-italic styling. */
+.tot-nickname-quote {
+  font-family: system-ui, sans-serif;
+  font-style: normal;
+}
+
 .tot-record {
   color: var(--text-faint);
   font-size: 0.57rem;

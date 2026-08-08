@@ -75,7 +75,11 @@ function FighterBlock({
         )}
       </span>
       {fighter.nickname && (
-        <span className="tot-nickname">"{fighter.nickname}"</span>
+        <span className="tot-nickname">
+          <span className="tot-nickname-quote">"</span>
+          {fighter.nickname}
+          <span className="tot-nickname-quote">"</span>
+        </span>
       )}
       <span className="tot-record num">{fmtRecord(fighter.record)}</span>
     </div>
