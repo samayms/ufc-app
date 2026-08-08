@@ -1367,26 +1367,33 @@ function applyCollectorObservations(
       // The dedicated "lifecycle" event stream (FIGHT_STARTED/ROUND_ENDED/
       // FIGHT_ENDED — see applyCollectorLifecycle) is the authoritative
       // source for the in-round vs. between-rounds transition. This raw
-      // per-poll observation only exists to feed the live countdown, and
-      // ESPN routinely reports no clock (or a stale one) in the gap right
-      // after a round ends — treating anything other than exactly 0 as "the
-      // fight resumed" silently reverted an already-confirmed
-      // between-rounds status back to in-round with a dead clock, which is
-      // what actually produced the stuck "-:--" the between-rounds label
-      // exists to avoid. Only a clearly-running clock (a defined, positive
-      // clockSeconds) is trusted to mean the round is actually live; a
-      // 0/undefined reading leaves an already-ended round alone instead of
-      // asserting it's back in progress.
+      // per-poll observation only exists to feed the live countdown. Only
+      // two readings here carry real evidence either way: a defined,
+      // positive clockSeconds means the round is actively live, and a
+      // clockSeconds of exactly 0 *for an actual round* (period >= 1, same
+      // guard the server's own boundary detection uses — see
+      // reachedProvisionalBoundary in lifecycle.ts) means it just ended.
+      // Anything else — including walkouts, where ESPN reports state "in"
+      // with period still 0 and no clock at all — is not evidence of
+      // anything and must leave the bout's current status alone: treating a
+      // missing/stale clock as "the fight resumed" wrongly reverted an
+      // already-confirmed between-rounds status back to in-round with a
+      // dead clock (producing a stuck "-:--"), and treating it as "the
+      // round just ended" wrongly promoted walkouts straight to "between
+      // rounds" (producing "End round" / "R0" before round 1 had even
+      // started).
       const isActivelyTicking =
         observation.clockSeconds !== undefined &&
         observation.clockSeconds > 0;
+      const isConfirmedRoundEnd =
+        observation.clockSeconds === 0 && observation.period > 0;
       return {
         ...bout,
         status: isActivelyTicking
           ? "in-round"
-          : bout.status === "between-rounds" || bout.status === "final"
-            ? bout.status
-            : "between-rounds",
+          : isConfirmedRoundEnd
+            ? "between-rounds"
+            : bout.status,
         ...(observation.period > 0
           ? { currentRound: observation.period }
           : {}),

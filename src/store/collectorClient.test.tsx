@@ -491,6 +491,28 @@ describe("collector browser client", () => {
     expect(
       client.getSnapshot().dashboard?.boutViews["bout-3"]?.bout.currentRound,
     ).toBeUndefined();
+
+    // The next poll during walkouts: ESPN reports state "in" but round 1
+    // hasn't started yet (period 0, no clock). This must not get promoted
+    // to "between-rounds" — there's no round to have ended, and doing so
+    // rendered "End round" / "R0" instead of "Walkouts".
+    MockEventSource.latest?.emit("update", {
+      kind: "lifecycle-observations",
+      observations: [
+        {
+          boutId: "bout-3",
+          source: "espn",
+          state: "in",
+          period: 0,
+          completed: false,
+          receivedAt: "2026-07-28T01:00:02Z",
+        },
+      ],
+    });
+
+    expect(
+      client.getSnapshot().dashboard?.boutViews["bout-3"]?.bout,
+    ).toMatchObject({ status: "in-round" });
     client.close();
   });
 
