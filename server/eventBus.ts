@@ -14,6 +14,7 @@ export type CollectorEvent =
       round: number;
       detectedAt: string;
       confirmation: "period_transition" | "fight_completed";
+      recovery?: true;
     }
   | {
       type: "FIGHT_ENDED";

@@ -79,6 +79,14 @@ describe("FightLifecycleMachine", () => {
     ]);
   });
 
+  it("recovers missed earlier confirmations when ESPN explicitly ends a later round", async () => {
+    const { bus, machine } = await createMachine();
+    await machine.observe(observation(0, { state: "pre", clockSeconds: undefined }));
+    await machine.observe(observation(1, { period: 3, clockSeconds: 0, namedRoundBoundary: true }));
+
+    expect(eventsOfType(bus.getEventLog(), "ROUND_ENDED").map((event) => event.round)).toEqual([1, 2, 3]);
+  });
+
   it("runs a normal three-round fight through every round boundary", async () => {
     const { bus, machine } = await createMachine();
 

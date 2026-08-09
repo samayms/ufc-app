@@ -1264,26 +1264,26 @@ export class MarketTickStore implements TickHistorySource {
       return;
     }
 
-    const hasChangedProvisional = [...this.snapshots.values()].some(
+    const priorProvisional = [...this.snapshots.values()].find(
       (snapshot) =>
         snapshot.boutId === event.boutId &&
         snapshot.round === event.round &&
-        snapshot.boundaryType === "provisional" &&
-        snapshot.takenAt !== event.detectedAt,
+        snapshot.boundaryType === "provisional",
     );
-    if (hasChangedProvisional) {
-      await this.snapshotBoundary(
-        event.boutId,
-        event.round,
-        "provisional",
-        event.detectedAt,
-      );
+    if (event.recovery !== true && priorProvisional?.takenAt !== event.detectedAt) {
+      await this.snapshotBoundary(event.boutId, event.round, "provisional", event.detectedAt);
     }
+    // Promote the actual provisional boundary when recovery confirms it.
+    // Re-snapshotting at a later named ESPN boundary would incorrectly fold
+    // intervening ticks into an earlier round's post-round odds.
+    const takenAt = event.recovery === true
+      ? priorProvisional?.takenAt ?? event.detectedAt
+      : event.detectedAt;
     await this.snapshotBoundary(
       event.boutId,
       event.round,
       "confirmed",
-      event.detectedAt,
+      takenAt,
     );
   }
 

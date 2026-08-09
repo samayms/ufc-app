@@ -286,6 +286,7 @@ function addConfirmedRound(
   detectedAt: string,
   confirmation: "period_transition" | "fight_completed",
   events: CollectorEvent[],
+  recovery = false,
 ): void {
   if (round < 1 || persisted.confirmedRounds.includes(round)) return;
 
@@ -297,6 +298,7 @@ function addConfirmedRound(
     round,
     detectedAt,
     confirmation,
+    ...(recovery ? { recovery: true as const } : {}),
   });
 
   if (persisted.activeProvisional?.round === round) {
@@ -343,13 +345,22 @@ function transition(
   }
 
   if (observation.namedRoundBoundary === true) {
-    addConfirmedRound(
-      next,
-      observation.period,
-      observation.receivedAt,
-      "period_transition",
-      events,
-    );
+    // A collector restart can retain provisional snapshots for earlier
+    // rounds while losing the corresponding lifecycle confirmations. ESPN's
+    // explicit end of round N proves rounds 1..N have happened, so recover
+    // only those missing confirmations. TickStore retains each provisional
+    // snapshot's own boundary timestamp when it promotes it (rather than
+    // relabeling old odds with this later observation's time).
+    for (let round = 1; round <= observation.period; round += 1) {
+      addConfirmedRound(
+        next,
+        round,
+        observation.receivedAt,
+        "period_transition",
+        events,
+        round < observation.period,
+      );
+    }
   }
 
   const fightCompleted = !previousState.completed && observation.completed;
