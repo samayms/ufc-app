@@ -8,6 +8,7 @@ import {
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type {
+  Bout,
   BoutView,
   DashboardState,
   ExternalRef,
@@ -71,6 +72,7 @@ import {
   LifecycleDriver,
   type LifecycleDriverClock,
   type LifecycleDriverTimer,
+  type LifecycleObservationInput,
   type LifecycleObservationProvider,
 } from "./lifecycleDriver.ts";
 import {
@@ -343,6 +345,79 @@ export interface Collector {
 interface PersistedCollectorState {
   version: 1;
   state: DashboardState;
+}
+
+/**
+ * Mirrors an authoritative lifecycle observation into the collector's own
+ * dashboard snapshot. SSE clients apply the same transitions in
+ * collectorClient.ts, but the server snapshot is what SQLite persistence and
+ * immutable event archives read. Returning whether anything changed lets the
+ * caller checkpoint only semantic transitions instead of appending a JSONL
+ * record on every clock poll.
+ */
+export function applyLifecycleObservationToDashboard(
+  dashboard: DashboardState,
+  observation: LifecycleObservationInput,
+): boolean {
+  const eventBout = dashboard.event.bouts.find(
+    (candidate) => candidate.id === observation.boutId,
+  );
+  const viewBout = dashboard.boutViews[observation.boutId]?.bout;
+  if (eventBout === undefined && viewBout === undefined) return false;
+
+  const update = (bout: Bout): boolean => {
+    let nextStatus = bout.status;
+    let nextRound = bout.currentRound;
+
+    if (observation.state === "post" || observation.completed) {
+      nextStatus = "final";
+      if (observation.period > 0) nextRound = observation.period;
+    } else if (
+      bout.status !== "final" &&
+      bout.status !== "canceled" &&
+      bout.status !== "postponed"
+    ) {
+      if (observation.state === "pre") {
+        // Never rewind a fight that has already begun because of one stale
+        // ESPN pre-fight poll.
+        if (bout.status === "upcoming") nextStatus = "upcoming";
+      } else if (observation.period === 0) {
+        nextStatus = "in-round";
+      } else if (observation.clockSeconds === 0) {
+        nextStatus = "between-rounds";
+        nextRound = observation.period;
+      } else if (
+        observation.clockSeconds !== undefined &&
+        observation.clockSeconds > 0
+      ) {
+        nextStatus = "in-round";
+        nextRound = observation.period;
+      }
+    }
+
+    const nextResult = observation.result ?? bout.result;
+    const resultChanged = JSON.stringify(nextResult) !== JSON.stringify(bout.result);
+    if (
+      nextStatus === bout.status &&
+      nextRound === bout.currentRound &&
+      !resultChanged
+    ) {
+      return false;
+    }
+
+    bout.status = nextStatus;
+    if (nextRound !== undefined) bout.currentRound = nextRound;
+    if (nextResult !== undefined) bout.result = nextResult;
+    return true;
+  };
+
+  const eventChanged = eventBout === undefined ? false : update(eventBout);
+  // Most live states share the same Bout object between event.bouts and the
+  // view, but archived/fixture states are allowed not to. Avoid applying the
+  // same mutation twice when they do share it.
+  const viewChanged =
+    viewBout === undefined || viewBout === eventBout ? false : update(viewBout);
+  return eventChanged || viewChanged;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -877,15 +952,15 @@ export async function createCollector(
   const persistenceDb =
     options.db ?? (config.dataMode === "live" ? getDb() : undefined);
   const persistenceIntervalMs = options.persistenceIntervalMs ?? 60_000;
-  const persistState = (): void => {
+  const persistState = async (): Promise<void> => {
     if (!persistenceDb || !state) return;
-    void persistDashboardState(persistenceDb, state).catch((error) => {
+    await persistDashboardState(persistenceDb, state).catch((error) => {
       console.warn(`[collector] persistence tick failed: ${String(error)}`);
     });
   };
-  persistState();
+  void persistState();
   if (persistenceDb) {
-    const persistTimer = setInterval(persistState, persistenceIntervalMs);
+    const persistTimer = setInterval(() => void persistState(), persistenceIntervalMs);
     persistTimer.unref?.();
     unsubscribers.push(() => clearInterval(persistTimer));
   }
@@ -964,11 +1039,26 @@ export async function createCollector(
       ? {}
       : { timer: options.lifecycle.timer }),
     onObservations: async (observations) => {
+      let dashboardChanged = false;
       for (const observation of observations) {
         latestLifecycleObservations.set(
           observation.boutId,
           observation,
         );
+        dashboardChanged =
+          applyLifecycleObservationToDashboard(loaded, observation) ||
+          dashboardChanged;
+      }
+      if (dashboardChanged) {
+        state = loaded;
+        await storage.append(COLLECTOR_STATE_STREAM, {
+          version: 1,
+          state: loaded,
+        } satisfies PersistedCollectorState);
+        await persistState();
+      }
+
+      for (const observation of observations) {
         const bout = loaded.event.bouts.find((candidate) => candidate.id === observation.boutId);
         const eventId = loaded.event.externalRefs.find((ref) => ref.source === "espn")?.id;
         const competitionId = bout?.externalRefs.find((ref) => ref.source === "espn")?.id;
@@ -1532,7 +1622,7 @@ export async function createCollector(
       // Lock the fighter snapshot for this bout as close to fight-start as
       // possible instead of waiting up to persistenceIntervalMs for the
       // next tick.
-      persistState();
+      void persistState();
       // Covers the first bout of a card as well as a restart where no prior
       // FIGHT_ENDED event was observed locally.
       capturePreFightOdds(event.boutId, event.detectedAt);

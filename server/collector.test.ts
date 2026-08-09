@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import {
+  applyLifecycleObservationToDashboard,
   createCollector,
   loadFixtureState,
   type Collector,
@@ -224,6 +225,73 @@ async function connectSse(
 describe.skipIf(!localhostAvailable)(
   "collector SSE and REST delivery",
   () => {
+  it("checkpoints authoritative lifecycle results into the durable dashboard state", async () => {
+    const storage = new MemoryStorage();
+    const result = {
+      winner: "blue" as const,
+      method: "submission" as const,
+      round: 2,
+      time: "1:38",
+    };
+    const collector = await createCollector({
+      env: {
+        DATA_MODE: "fixture",
+        COLLECTOR_PORT: "0",
+      },
+      storage,
+      sse: { heartbeatMs: 50, flushIntervalMs: 0 },
+      lifecycle: {
+        enabled: true,
+        espnProvider: {
+          async fetchObservations() {
+            return [{
+              boutId: "bout-3",
+              state: "post" as const,
+              period: 2,
+              completed: true,
+              result,
+              receivedAt: "2026-07-28T01:02:03.000Z",
+            }];
+          },
+        },
+      },
+    });
+    collectors.push(collector);
+    await collector.start();
+
+    await vi.waitFor(() => {
+      expect(
+        collector.getBootstrap().state?.event.bouts.find(
+          (bout) => bout.id === "bout-3",
+        ),
+      ).toMatchObject({ status: "final", currentRound: 2, result });
+    });
+    await vi.waitFor(async () => {
+      const records = await storage.read<{
+        version?: number;
+        state?: Awaited<ReturnType<typeof loadFixtureState>>;
+      }>("collector-state");
+      expect(records.at(-1)?.state?.event.bouts.find(
+        (bout) => bout.id === "bout-3",
+      )).toMatchObject({ status: "final", currentRound: 2, result });
+    });
+  });
+
+  it("does not rewind a started durable bout on a stale pre-fight observation", async () => {
+    const dashboard = await loadFixtureState();
+    const bout = dashboard.event.bouts.find((candidate) => candidate.id === "bout-main");
+    expect(bout?.status).toBe("between-rounds");
+
+    expect(applyLifecycleObservationToDashboard(dashboard, {
+      boutId: "bout-main",
+      state: "pre",
+      period: 0,
+      completed: false,
+      receivedAt: "2026-07-28T01:02:03.000Z",
+    })).toBe(false);
+    expect(bout?.status).toBe("between-rounds");
+  });
+
   it("sends a normalized last-known-state bootstrap", async () => {
     const { port } = await startCollector();
     const client = await connectSse(port);
