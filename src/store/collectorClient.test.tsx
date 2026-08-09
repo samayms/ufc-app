@@ -965,6 +965,55 @@ describe("collector browser client", () => {
     client.close();
   });
 
+  it("updates and de-vigs paired live distance ticks without a refresh", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () => bootstrapResponse({ state: fixture, boutMappings: [], health: {}, unifiedRounds: [] }),
+      createEventSource: (url) => new MockEventSource(url),
+    });
+    await client.start();
+    const events = MockEventSource.latest;
+    events?.open();
+    const baseTick = {
+      source: "polymarket",
+      boutId: "bout-main",
+      marketType: "fight-distance",
+      receivedAt: "2026-07-28T01:20:01Z",
+      stale: false,
+    } as const;
+
+    events?.emit("update", { kind: "market-tick", tick: {
+      ...baseTick, outcome: "Decision", bid: 0.59, ask: 0.61,
+      sourceUpdatedAt: "2026-07-28T01:20:00Z",
+    } });
+    events?.emit("update", { kind: "market-tick", tick: {
+      ...baseTick, outcome: "Finish", bid: 0.49, ask: 0.51,
+      sourceUpdatedAt: "2026-07-28T01:20:00Z",
+    } });
+
+    expect(client.getSnapshot().dashboard?.boutViews["bout-main"]?.liveDecisionOdds?.polymarket)
+      .toMatchObject({ decisionProbability: 6 / 11, finishProbability: 5 / 11 });
+
+    events?.emit("update", { kind: "market-tick", tick: {
+      ...baseTick, outcome: "Finish", bid: 0.39, ask: 0.41,
+      receivedAt: "2026-07-28T01:20:03Z",
+      sourceUpdatedAt: "2026-07-28T01:20:02Z",
+    } });
+    expect(client.getSnapshot().dashboard?.boutViews["bout-main"]?.liveDecisionOdds?.polymarket)
+      .toMatchObject({ decisionProbability: 0.6, finishProbability: 0.4 });
+
+    // A delayed provider message must not roll the live display backward.
+    events?.emit("update", { kind: "market-tick", tick: {
+      ...baseTick, outcome: "Finish", bid: 0.69, ask: 0.71,
+      receivedAt: "2026-07-28T01:20:04Z",
+      sourceUpdatedAt: "2026-07-28T01:19:59Z",
+    } });
+    expect(client.getSnapshot().dashboard?.boutViews["bout-main"]?.liveDecisionOdds?.polymarket)
+      .toMatchObject({ decisionProbability: 0.6, finishProbability: 0.4 });
+    client.close();
+  });
+
   it("keeps a live prediction-market volume through later quote-only ticks", async () => {
     const fixture = await assembleDashboard();
     const client = createCollectorClient({

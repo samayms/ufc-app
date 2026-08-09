@@ -417,6 +417,8 @@ export interface BoutView {
     /** Retained only while waiting for Polymarket's paired token. */
     _decisionRaw?: number;
     _finishRaw?: number;
+    _decisionSourceUpdatedAt?: string;
+    _finishSourceUpdatedAt?: string;
   }>>;
 }
 
