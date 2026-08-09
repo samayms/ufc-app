@@ -99,7 +99,10 @@ export async function loadArchivedEvent(
         red: toFighter(redRow, redPerson?.name ?? redRow.personId),
         blue: toFighter(blueRow, bluePerson?.name ?? blueRow.personId),
       },
-      status: (boutRow.status as BoutStatus) ?? "final",
+      // An archived event is immutable review data. ESPN can leave stale
+      // `upcoming`/`between-rounds` rows behind when rotation happens, but
+      // replaying those statuses hides the Fight/Stats review UI.
+      status: "final" as BoutStatus,
       ...(boutRow.resultWinnerCorner
         ? {
             result: {

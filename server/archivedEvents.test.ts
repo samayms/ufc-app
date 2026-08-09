@@ -64,6 +64,16 @@ describe("listArchivedEvents / loadArchivedEvent", () => {
     expect(state?.boutViews.b1?.rounds.espn?.[0]?.stats?.red?.significantStrikesLanded).toBe(12);
   });
 
+  it("renders stale archived lifecycle rows as terminal review bouts", async () => {
+    const db = freshDb();
+    seedArchivedEvent(db);
+    db.update(schema.bouts).set({ status: "between-rounds" }).run();
+
+    const state = await loadArchivedEvent(db, "e1");
+    expect(state?.event.bouts[0]?.status).toBe("final");
+    expect(state?.boutViews.b1?.rounds.espn?.[0]?.stats?.red?.significantStrikesLanded).toBe(12);
+  });
+
   it("returns undefined for an event that is not archived", async () => {
     const db = freshDb();
     db.insert(schema.events).values({ id: "e2", name: "Live Event" }).run();
