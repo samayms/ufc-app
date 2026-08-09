@@ -90,6 +90,9 @@ export async function startApp(): Promise<{
   console.log(`UFC app listening on http://127.0.0.1:${port}`);
 
   const eventArchiver = new EventArchiver({ db: getDb() });
+  // Repair a missed prior rotation on startup without ever freezing the card
+  // this collector is serving. Incomplete/future cards remain ineligible.
+  await eventArchiver.sweepOnce({ excludeEventId: collector.getBootstrap().state?.event.id, immediate: true });
   eventArchiver.start();
 
   let activeEventId = collector.getBootstrap().state?.event.id;
@@ -125,6 +128,9 @@ export async function startApp(): Promise<{
               ...collectorOptions,
               stateLoader: async () => nextState,
             });
+            // The outgoing card is now superseded by a verified new ESPN
+            // event. Archive it immediately if every bout is complete.
+            await eventArchiver.sweepOnce({ excludeEventId: eventId, immediate: true });
             await collector.close();
             try {
               const nextPort = await nextCollector.start();

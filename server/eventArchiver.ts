@@ -17,6 +17,13 @@ export interface EventArchiverOptions {
   onLog?: (message: string) => void;
 }
 
+export interface ArchiveSweepOptions {
+  /** Current live card is never frozen by a rotation/backfill sweep. */
+  excludeEventId?: string;
+  /** Rotation has superseded the card, so the normal review delay is unnecessary. */
+  immediate?: boolean;
+}
+
 export class EventArchiver {
   private readonly db: AppDatabase;
   private readonly now: () => Date;
@@ -29,7 +36,7 @@ export class EventArchiver {
     this.log = options.onLog ?? ((message) => console.log(`[archiver] ${message}`));
   }
 
-  async sweepOnce(): Promise<{ archived: string[] }> {
+  async sweepOnce(options: ArchiveSweepOptions = {}): Promise<{ archived: string[] }> {
     const archived: string[] = [];
     const candidates = this.db
       .select({ id: events.id })
@@ -38,6 +45,7 @@ export class EventArchiver {
       .all();
 
     for (const candidate of candidates) {
+      if (candidate.id === options.excludeEventId) continue;
       const eventBouts = this.db
         .select({ status: bouts.status, updatedAt: bouts.updatedAt })
         .from(bouts)
@@ -48,7 +56,7 @@ export class EventArchiver {
       if (!eventBouts.every((bout) => FINAL_STATUSES.has(bout.status))) continue;
 
       const lastUpdatedAt = Math.max(...eventBouts.map((bout) => Date.parse(bout.updatedAt)));
-      if (this.now().getTime() - lastUpdatedAt < ARCHIVE_DELAY_MS) continue;
+      if (!options.immediate && this.now().getTime() - lastUpdatedAt < ARCHIVE_DELAY_MS) continue;
 
       this.db
         .update(events)

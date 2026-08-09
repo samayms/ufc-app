@@ -47,6 +47,20 @@ describe("EventArchiver", () => {
     expect(db.select().from(schema.events).get()?.archivedAt).toBeNull();
   });
 
+  it("immediately archives a completed superseded card but never the current card", async () => {
+    const db = freshDb();
+    const now = new Date("2026-02-01T00:00:00.000Z");
+    seed(db, ["final"], new Date(now.getTime() - 1000).toISOString());
+    db.insert(schema.events).values({ id: "current", name: "Current" }).run();
+    db.insert(schema.bouts).values({ id: "current-bout", eventId: "current", status: "final", updatedAt: now.toISOString() }).run();
+
+    const result = await new EventArchiver({ db, now: () => now })
+      .sweepOnce({ immediate: true, excludeEventId: "current" });
+
+    expect(result.archived).toEqual(["e1"]);
+    expect(db.select().from(schema.events).all().find((event) => event.id === "current")?.archivedAt).toBeNull();
+  });
+
   it("does not archive an event with any non-final bout", async () => {
     const db = freshDb();
     const now = new Date("2026-02-01T00:00:00.000Z");
