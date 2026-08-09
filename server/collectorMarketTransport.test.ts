@@ -93,7 +93,7 @@ describe("collector market transport wiring", () => {
     ).resolves.toHaveLength(4);
   });
 
-  it("pins rebuilt Kalshi ticks that arrive after the sportsbook refresh, not the stale pre-rebuild book", async () => {
+  it("pins rebuilt Kalshi ticks even when the readiness deadline expires", async () => {
     let collector: Collector | undefined;
     const transport: MarketTransport = {
       source: "kalshi",
@@ -116,7 +116,7 @@ describe("collector market transport wiring", () => {
           source: "kalshi", boutId: "bout-4", marketType: "fight-winner", outcome: "blue",
           bid: 19, ask: 21, receivedAt: "2099-01-01T00:00:02.000Z", stale: false,
         });
-        return true;
+        return false;
       },
     };
     collector = await createCollector({

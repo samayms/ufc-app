@@ -1572,20 +1572,22 @@ export async function createCollector(
       const relevantStreams = marketTransports.filter((transport) =>
         transport.subscriptions.some((subscription) => subscription.boutId === boutId),
       );
-      const readySources = (
-        await Promise.all(
-          relevantStreams.map(async (transport) =>
-            (await transport.waitUntilReady(2_500)) ? transport.source : undefined,
-          ),
-        )
-      ).filter((source): source is "kalshi" | "polymarket" => source !== undefined);
+      await Promise.all(
+        // Readiness is useful to let a just-narrowed socket finish its full
+        // book rebuild, but it is never a reason to exclude the last valid
+        // book for this bout. A timeout used to turn the source allowlist
+        // into sportsbook-only and silently erased every exchange opening.
+        relevantStreams.map(async (transport) => {
+          await transport.waitUntilReady(2_500);
+        }),
+      );
       // Exchange rebuild snapshots can land after the sportsbook response.
       // Advance the boundary to their newest received timestamp so an
       // allowlisted fresh Kalshi/Polymarket book is actually in the history
       // slice used to create the pre-fight snapshot.
       const exchangeReceivedAt = initializedTickStore
         .getLatest(boutId)
-        .filter((tick) => readySources.includes(tick.source as "kalshi" | "polymarket"))
+        .filter((tick) => tick.source === "kalshi" || tick.source === "polymarket")
         .map((tick) => Date.parse(tick.receivedAt))
         .filter(Number.isFinite);
       const snapshotAt = new Date(
@@ -1598,9 +1600,10 @@ export async function createCollector(
       await initializedTickStore.snapshotPreFight(
         boutId,
         snapshotAt,
-        relevantStreams.length === 0
-          ? undefined
-          : ["odds-api-io", "the-odds-api", ...readySources],
+        // Do not source-filter this boundary. The tick store is already
+        // bout-scoped; retaining the most recent real book is safer than
+        // dropping it because a transport rebuild exceeded its timeout.
+        undefined,
       );
     })().catch(() => undefined);
   };
