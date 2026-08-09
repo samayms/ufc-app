@@ -222,6 +222,10 @@ export default function App() {
       ? scheduleSelection
       : null;
   const archivedEvent = useArchivedEvent(archivedSelectionId);
+  const archivedEspnEventId = archivedEvent.data?.event.externalRefs.find(
+    (ref) => ref.source === "espn",
+  )?.id ?? null;
+  const archivedEspnCard = useEspnCard(archivedEspnEventId);
 
   // Tracks which bout the round selector was last synced to a default for,
   // so a live-data poll landing on the *same* bout (state getting a new
@@ -414,8 +418,13 @@ export default function App() {
   // Which bout of the live event a nav entry resolves to: the one it names,
   // or — for an entry that never picked one — whatever's running now, or the
   // top of the card.
-  const boutIdFor = (entry: NavEntry) =>
-    entry.selected ?? live?.id ?? event.bouts[0]?.id;
+  const boutIdFor = (entry: NavEntry) => {
+    const archivedDefault =
+      entry.scheduleSelection === archivedSelectionId
+        ? archivedEvent.data?.event.bouts[0]?.id
+        : undefined;
+    return entry.selected ?? archivedDefault ?? live?.id ?? event.bouts[0]?.id;
+  };
   const selectedId = boutIdFor(currentNav);
   // "total" means the scorecard feed should show through the last round the
   // collector has actually recorded for that bout.
@@ -805,7 +814,10 @@ export default function App() {
     // pipeline that feeds it has no such field) — this fills that gap with
     // the same fightcenter fetch a browsed-to future event already uses,
     // matched back to this bout by its ESPN-rooted id.
-    const matchedEspnFight = findEspnFight(currentEspnCard.card, entryView.bout.id);
+    const matchedEspnFight = findEspnFight(
+      archivedSelectionId ? archivedEspnCard.card : currentEspnCard.card,
+      entryView.bout.id,
+    );
     if (entryView.bout.status === "upcoming") {
       const canonicalFight = boutToScheduledFight(entryView.bout);
       return (
@@ -882,11 +894,11 @@ export default function App() {
                 view={entryView}
                 eventStartsAt={event.startsAt}
                 selection={entryRound}
-                collectorRounds={dashboard.collector?.unifiedRounds}
+                collectorRounds={archivedSelectionId ? [] : dashboard.collector?.unifiedRounds}
               />
               <ScorecardFeed
                 view={entryView}
-                records={dashboard.collector?.unifiedRounds ?? []}
+                records={archivedSelectionId ? [] : dashboard.collector?.unifiedRounds ?? []}
                 round={resolveRound(entryView, entryRound)}
                 allRounds={entryRound === "total"}
               />
