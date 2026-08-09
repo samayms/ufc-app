@@ -7,7 +7,7 @@
 import { desc, eq, isNotNull } from "drizzle-orm";
 
 import type { AppDatabase } from "./db/client.ts";
-import { bouts, events, fighters, roundStats } from "./db/schema.ts";
+import { bouts, events, fighters, people, roundStats } from "./db/schema.ts";
 import type {
   BoutStatus,
   BoutView,
@@ -81,6 +81,10 @@ export async function loadArchivedEvent(
     const redRow = fighterRows.find((row) => row.corner === "red");
     const blueRow = fighterRows.find((row) => row.corner === "blue");
     if (!redRow || !blueRow) continue;
+    const redPerson = db.select({ name: people.name }).from(people)
+      .where(eq(people.id, redRow.personId)).get();
+    const bluePerson = db.select({ name: people.name }).from(people)
+      .where(eq(people.id, blueRow.personId)).get();
 
     const bout = {
       id: boutRow.id,
@@ -92,8 +96,8 @@ export async function loadArchivedEvent(
       scheduledRounds: (boutRow.scheduledRounds ?? 3) as 3 | 5,
       titleFight: false,
       fighters: {
-        red: toFighter(redRow, redRow.personId),
-        blue: toFighter(blueRow, blueRow.personId),
+        red: toFighter(redRow, redPerson?.name ?? redRow.personId),
+        blue: toFighter(blueRow, bluePerson?.name ?? blueRow.personId),
       },
       status: (boutRow.status as BoutStatus) ?? "final",
       ...(boutRow.resultWinnerCorner

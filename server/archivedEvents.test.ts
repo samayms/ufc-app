@@ -57,6 +57,8 @@ describe("listArchivedEvents / loadArchivedEvent", () => {
     const state = await loadArchivedEvent(db, "e1");
     expect(state?.event.name).toBe("UFC 300");
     const bout = state?.event.bouts[0];
+    expect(bout?.fighters.red.name).toBe("Red Fighter");
+    expect(bout?.fighters.blue.name).toBe("Blue Fighter");
     expect(bout?.fighters.red.record.wins).toBe(20);
     expect(bout?.result?.winner).toBe("red");
     expect(state?.boutViews.b1?.rounds.espn?.[0]?.stats?.red?.significantStrikesLanded).toBe(12);
