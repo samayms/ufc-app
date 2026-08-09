@@ -1,5 +1,6 @@
 /** Live binary distance subscriptions imported from upcoming-odds snapshots. */
 import type { UfcEvent } from "../src/schema.ts";
+import type { UpcomingOddsDocument } from "../src/lib/upcomingOdds.ts";
 import type { MarketSubscription } from "./marketTransport.ts";
 import {
   UPCOMING_DECISION_MAPPING_STREAM,
@@ -26,11 +27,42 @@ function valid(value: unknown): value is PersistedUpcomingDecisionMapping {
 export async function currentEventDecisionSubscriptions(options: {
   event: UfcEvent;
   storage: Storage;
+  /**
+   * Lets a rolling deploy recover Kalshi's streamable binary ticker from the
+   * already-persisted upcoming document before the new mapping stream has
+   * ever been written. Polymarket still requires its explicit token pair.
+   */
+  document?: UpcomingOddsDocument | null;
 }): Promise<MarketSubscription[]> {
   const eventId = options.event.externalRefs.find((ref) => ref.source === "espn")?.id;
   if (eventId === undefined) return [];
   const boutIds = new Set(options.event.bouts.map((bout) => bout.id));
   const latest = new Map<string, PersistedUpcomingDecisionMapping>();
+  const matchingDocumentEvent = options.document?.events.find(
+    (candidate) => candidate.espnEventId === eventId,
+  );
+  for (const bout of matchingDocumentEvent?.bouts ?? []) {
+    if (!boutIds.has(bout.boutId) || bout.decision.state !== "loaded") continue;
+    const decision = bout.decision;
+    if (
+      (decision.source !== "kalshi" && decision.source !== "polymarket") ||
+      decision.externalId === undefined
+    ) continue;
+    const streamIds = decision.streamIds ??
+      (decision.source === "kalshi"
+        ? [decision.externalId, decision.externalId] as const
+        : undefined);
+    if (streamIds === undefined) continue;
+    latest.set(`${decision.source}\u0000${bout.boutId}`, {
+      version: 1,
+      recordedAt: options.document?.generatedAt ?? decision.fetchedAt,
+      boutId: bout.boutId,
+      espnEventId: eventId,
+      provider: decision.source,
+      externalId: decision.externalId,
+      streamIds,
+    });
+  }
   for (const value of await options.storage.read<unknown>(UPCOMING_DECISION_MAPPING_STREAM)) {
     if (!valid(value) || value.espnEventId !== eventId || !boutIds.has(value.boutId)) continue;
     latest.set(`${value.provider}\u0000${value.boutId}`, value);

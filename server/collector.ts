@@ -901,7 +901,11 @@ export async function createCollector(
     });
   }
   let decisionSubscriptions = config.dataMode === "live"
-    ? await currentEventDecisionSubscriptions({ event: loaded.event, storage })
+    ? await currentEventDecisionSubscriptions({
+        event: loaded.event,
+        storage,
+        document: await readUpcomingOddsDocument(config.persistencePath),
+      })
     : [];
   boutMappings = initializedBoutMappings;
   const sourceConfig: SourceConfig = {
