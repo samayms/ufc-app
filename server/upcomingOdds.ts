@@ -297,6 +297,7 @@ function evaluateDecisionProvider(
           ? {}
           : { updatedAt: decision.marketUpdatedAt }),
         externalId: decision.externalId,
+        ...(decision.streamIds === undefined ? {} : { streamIds: decision.streamIds }),
       },
       volume: attachment.market.metadata?.volume ?? 0,
     },

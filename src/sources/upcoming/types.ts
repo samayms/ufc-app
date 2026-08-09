@@ -62,6 +62,11 @@ export interface UpcomingMarketMetadata {
 /** A normalized binary fight-distance market: YES means decision. */
 export interface UpcomingDecisionMarket {
   externalId: string;
+  /**
+   * Source-native live ids ordered Decision/Finish. Kalshi's binary book uses
+   * its ticker for both sides; Polymarket exposes one token per outcome.
+   */
+  streamIds?: readonly [string, string];
   decisionProbability: number;
   finishProbability: number;
   marketUpdatedAt?: string;

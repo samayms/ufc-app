@@ -152,6 +152,7 @@ export function parseKalshiDistanceMarkets(
     if (key === undefined || probability === null) continue;
     result.set(key, {
       externalId: ticker as string,
+      streamIds: [ticker as string, ticker as string],
       decisionProbability: probability,
       finishProbability: 1 - probability,
     });

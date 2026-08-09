@@ -143,6 +143,7 @@ import {
 } from "./storage.ts";
 import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
 import { importCurrentEventUpcomingMappings } from "./upcomingMappingBridge.ts";
+import { currentEventDecisionSubscriptions } from "./upcomingDecisionMappingBridge.ts";
 import { loadLiveEventState } from "./liveEventState.ts";
 import { TheOddsApiActivePoller } from "./theOddsApiActivePoller.ts";
 import {
@@ -899,6 +900,9 @@ export async function createCollector(
       storage,
     });
   }
+  let decisionSubscriptions = config.dataMode === "live"
+    ? await currentEventDecisionSubscriptions({ event: loaded.event, storage })
+    : [];
   boutMappings = initializedBoutMappings;
   const sourceConfig: SourceConfig = {
     mode: config.dataMode,
@@ -1083,14 +1087,12 @@ export async function createCollector(
     }
   }
 
-  const kalshiSubscriptions = resolveMarketSubscriptions(
-    initializedBoutMappings.getAll(),
-    "kalshi",
-  );
-  const polymarketSubscriptions = resolveMarketSubscriptions(
-    initializedBoutMappings.getAll(),
-    "polymarket",
-  );
+  const subscriptionsFor = (source: "kalshi" | "polymarket") => [
+    ...resolveMarketSubscriptions(initializedBoutMappings.getAll(), source),
+    ...decisionSubscriptions.filter((subscription) => subscription.source === source),
+  ];
+  const kalshiSubscriptions = subscriptionsFor("kalshi");
+  const polymarketSubscriptions = subscriptionsFor("polymarket");
   marketTransports = options.market?.transports
     ? [...options.market.transports]
     : config.dataMode === "fixture"
@@ -1431,10 +1433,7 @@ export async function createCollector(
   const refreshDiscoveredSubscriptions = (): void => {
     relevantMarketBouts.clear();
     for (const transport of marketTransports) {
-      const all = resolveMarketSubscriptions(
-        initializedBoutMappings.getAll(),
-        transport.source,
-      );
+      const all = subscriptionsFor(transport.source);
       allMarketSubscriptions.set(transport, all);
       for (const subscription of all) {
         relevantMarketBouts.add(subscription.boutId);
@@ -1447,6 +1446,10 @@ export async function createCollector(
     await importCurrentEventUpcomingMappings({
       event: loaded.event,
       registry: initializedBoutMappings,
+      storage,
+    });
+    decisionSubscriptions = await currentEventDecisionSubscriptions({
+      event: loaded.event,
       storage,
     });
     refreshDiscoveredSubscriptions();

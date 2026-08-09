@@ -20,6 +20,7 @@ import type {
 
 export const UPCOMING_ODDS_FILENAME = "upcoming-odds.json";
 export const UPCOMING_MAPPING_STREAM = "upcoming-bout-mappings";
+export const UPCOMING_DECISION_MAPPING_STREAM = "upcoming-decision-mappings";
 
 export function upcomingOddsPath(dataDirectory: string): string {
   return join(dataDirectory, UPCOMING_ODDS_FILENAME);
@@ -81,6 +82,17 @@ export interface PersistedUpcomingMapping {
   cornersReversed: boolean;
 }
 
+/** A distinct stream prevents binary distance markets becoming fighter refs. */
+export interface PersistedUpcomingDecisionMapping {
+  version: 1;
+  recordedAt: string;
+  boutId: string;
+  espnEventId: string;
+  provider: "kalshi" | "polymarket";
+  externalId: string;
+  streamIds: readonly [string, string];
+}
+
 /**
  * Appends every attachment this run made, so the mapping history is auditable
  * independently of the current document (which only ever shows the latest
@@ -115,6 +127,24 @@ export async function persistUpcomingMappings(
           confidence: entry.confidence ?? 0,
           cornersReversed: entry.cornersReversed ?? false,
         } satisfies PersistedUpcomingMapping);
+        written += 1;
+      }
+      const decision = bout.decision;
+      if (
+        decision.state === "loaded" &&
+        (decision.source === "kalshi" || decision.source === "polymarket") &&
+        decision.externalId !== undefined &&
+        decision.streamIds !== undefined
+      ) {
+        await storage.append(UPCOMING_DECISION_MAPPING_STREAM, {
+          version: 1,
+          recordedAt: document.generatedAt,
+          boutId: bout.boutId,
+          espnEventId: bout.espnEventId,
+          provider: decision.source,
+          externalId: decision.externalId,
+          streamIds: decision.streamIds,
+        } satisfies PersistedUpcomingDecisionMapping);
         written += 1;
       }
     }

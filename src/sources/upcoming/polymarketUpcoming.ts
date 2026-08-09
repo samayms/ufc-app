@@ -167,6 +167,7 @@ export function parsePolymarketDistanceMarket(
   }
 
   const externalId = readString(market.conditionId);
+  const streamIds = readStringArray(market.clobTokenIds);
   const decisionProbability = priceFor(
     market,
     0,
@@ -178,6 +179,7 @@ export function parsePolymarketDistanceMarket(
 
   return {
     externalId,
+    ...(streamIds.length === 2 ? { streamIds: [streamIds[0] as string, streamIds[1] as string] as const } : {}),
     decisionProbability,
     finishProbability: 1 - decisionProbability,
     ...(readString(market.updatedAt) === undefined

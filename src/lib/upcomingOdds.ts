@@ -87,6 +87,8 @@ export interface UpcomingDecisionOdds {
   synthetic: boolean;
   updatedAt?: string;
   externalId?: string;
+  /** Live ids ordered Decision/Finish, retained for the live collector. */
+  streamIds?: readonly [string, string];
   preserved?: boolean;
   message?: string;
 }
