@@ -65,6 +65,17 @@ describe("unannounced matchups are listings, not links", () => {
     expect(buttons[1]).toContain("disabled");
   });
 
+  it("promotes the current live bout and its segment without changing the default card order", () => {
+    const main = bout("main", "Main Red", "Main Blue");
+    const prelim = { ...bout("prelim", "Live Red", "Live Blue"), segment: "prelims" as const };
+    const markup = renderToStaticMarkup(
+      <CardRail bouts={[main, prelim]} selectedId="prelim" activeBoutId="prelim" onSelect={() => {}} />,
+    );
+
+    expect(markup.indexOf("Prelims")).toBeLessThan(markup.indexOf("Main card"));
+    expect(markup).toContain('aria-current="true"');
+  });
+
   it("disables TBA fights on an upcoming ESPN card", () => {
     const espnCard = {
       name: "UFC 331",

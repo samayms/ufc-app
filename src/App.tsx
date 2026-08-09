@@ -964,6 +964,7 @@ export default function App() {
               onSelect={selectBout}
               photosByBoutId={photosByBoutId}
               segmentStartTimes={event.segmentStartTimes}
+              activeBoutId={live?.id}
             />
           </aside>
         )}

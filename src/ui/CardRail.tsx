@@ -32,6 +32,7 @@ export function CardRail({
   onSelect,
   photosByBoutId,
   segmentStartTimes,
+  activeBoutId,
 }: {
   bouts: Bout[];
   selectedId: string;
@@ -40,12 +41,24 @@ export function CardRail({
   photosByBoutId?: Record<string, { red?: string; blue?: string }>;
   /** When each segment goes live, ISO 8601. Absent entries render no time — never a guessed one. */
   segmentStartTimes?: Partial<Record<BoutSegment, string>>;
+  /** Current live bout, promoted above the card's static segment ordering. */
+  activeBoutId?: string;
 }) {
   const segments = ["main-card", "prelims", "early-prelims"] as const;
+  const activeBout = activeBoutId === undefined
+    ? undefined
+    : bouts.find((bout) => bout.id === activeBoutId);
+  const orderedSegments = activeBout === undefined
+    ? segments
+    : [activeBout.segment, ...segments.filter((segment) => segment !== activeBout.segment)];
   return (
     <nav className="rail" aria-label="Fight card">
-      {segments.map((seg) => {
-        const segBouts = bouts.filter((b) => b.segment === seg);
+      {orderedSegments.map((seg) => {
+        const segBouts = bouts
+          .filter((b) => b.segment === seg)
+          .sort((left, right) =>
+            left.id === activeBoutId ? -1 : right.id === activeBoutId ? 1 : 0,
+          );
         if (segBouts.length === 0) return null;
         const startsAt = segmentStartTimes?.[seg];
         return (
