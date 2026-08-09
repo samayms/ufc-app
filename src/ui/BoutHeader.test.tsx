@@ -82,6 +82,39 @@ describe("BoutHeader live clock", () => {
     expect(roundEnd).toContain("Round 3 next");
   });
 
+  it("labels ESPN's explicit pre-fight lifecycle phase without relabeling scheduled bouts", () => {
+    const bout = loadFixtureEvent().bouts[0]!;
+    const preFight = renderToStaticMarkup(
+      <BoutHeader weightClassLabel="Welterweight" titleFight={false} scheduledRounds={3}
+        fighters={bout.fighters} status="upcoming"
+        clockSync={{
+          boutId: bout.id, source: "espn", state: "pre", period: 0,
+          completed: false, preFight: true,
+          sourceReceivedAt: "2999-01-01T00:00:00Z", receivedAt: "2999-01-01T00:00:00Z",
+        }} />,
+    );
+    const scheduled = renderToStaticMarkup(
+      <BoutHeader weightClassLabel="Welterweight" titleFight={false} scheduledRounds={3}
+        fighters={bout.fighters} status="upcoming" />,
+    );
+
+    expect(preFight).toContain("Pre-Fight");
+    expect(scheduled).toContain("Upcoming");
+    expect(scheduled).not.toContain("Pre-Fight");
+  });
+
+  it("keeps both nickname quote marks in their dedicated presentation spans", () => {
+    const bout = loadFixtureEvent().bouts[0]!;
+    const markup = renderToStaticMarkup(
+      <BoutHeader weightClassLabel="Welterweight" titleFight={false} scheduledRounds={3}
+        fighters={bout.fighters} status="upcoming" />,
+    );
+
+    // The fixture has nicknames for both corners: opening + closing quote
+    // spans per nickname, so all four glyphs keep the quote-specific style.
+    expect([...markup.matchAll(/tot-nickname-quote/g)]).toHaveLength(4);
+  });
+
   it("makes the final method and round explicit", () => {
     const bout = loadFixtureEvent().bouts[0]!;
     const markup = renderToStaticMarkup(

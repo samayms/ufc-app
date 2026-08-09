@@ -49,6 +49,7 @@ export interface LifecycleScoreboardEntry {
   state: "pre" | "in" | "post";
   period: number;
   completed: boolean;
+  preFight?: true;
   clockSeconds?: number;
   cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
   result?: BoutResult;
@@ -101,6 +102,7 @@ function createScoreboardObservationProvider(options: {
           state: entry.state,
           period: entry.period,
           completed: entry.completed,
+          ...(entry.preFight === true ? { preFight: true as const } : {}),
           ...(entry.clockSeconds === undefined
             ? {}
             : { clockSeconds: entry.clockSeconds }),

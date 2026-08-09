@@ -186,6 +186,15 @@ function CenterStatus({
       </>
     );
   }
+  if (status === "upcoming" && clockSync?.preFight === true) {
+    return (
+      <>
+        <span className="tot-live-label tot-upcoming">Pre-Fight</span>
+        <span className="tot-round-label num">{scheduledRounds} ROUNDS</span>
+        <span className="tot-substate">bout imminent</span>
+      </>
+    );
+  }
   if (status === "between-rounds" || status === "in-round") {
     const isWalkouts = status === "in-round" && (currentRound ?? 0) < 1;
     if (isWalkouts) {

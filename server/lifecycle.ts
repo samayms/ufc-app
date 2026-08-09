@@ -11,6 +11,8 @@ export interface FightLifecycleState {
   state: "pre" | "in" | "post";
   period: number;
   completed: boolean;
+  /** ESPN has explicitly moved this bout into its pre-fight phase. */
+  preFight?: true;
   clockSeconds?: number;
   /** ESPN's cumulative fight totals, forwarded for live round subtraction. */
   cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
@@ -131,6 +133,7 @@ function copyState(state: FightLifecycleState): FightLifecycleState {
     state: state.state,
     period: state.period,
     completed: state.completed,
+    ...(state.preFight === true ? { preFight: true as const } : {}),
     ...(state.clockSeconds === undefined
       ? {}
       : { clockSeconds: state.clockSeconds }),

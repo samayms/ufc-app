@@ -542,6 +542,8 @@ export interface EspnLifecycleEntry {
   state: "pre" | "in" | "post";
   period: number;
   completed: boolean;
+  /** ESPN's named STATUS_PRE_FIGHT, distinct from merely scheduled bouts. */
+  preFight?: true;
   clockSeconds?: number;
   cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
   /**
@@ -748,6 +750,7 @@ export function parseEspnScoreboardLifecycle(
         state: parseLifecycleState(status),
         period: status?.period ?? 0,
         completed: status?.type?.completed === true || isNamedFightOver,
+        ...(statusName === "STATUS_PRE_FIGHT" ? { preFight: true as const } : {}),
         ...(clockSeconds === undefined ? {} : { clockSeconds }),
         ...(fighterA === undefined || fighterB === undefined ? {} : { cumulativeStats: { fighterA, fighterB } }),
         ...(result === undefined ? {} : { result }),

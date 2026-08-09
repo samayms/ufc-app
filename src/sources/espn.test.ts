@@ -320,7 +320,10 @@ describe("parseEspnScoreboardLifecycle", () => {
     };
 
     expect(parseEspnScoreboardLifecycle(payload)).toEqual([
-      { externalId: "401902681", state: "pre", period: 0, completed: false },
+      {
+        externalId: "401902681", state: "pre", period: 0,
+        completed: false, preFight: true,
+      },
     ]);
   });
 

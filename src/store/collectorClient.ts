@@ -132,6 +132,7 @@ export interface CollectorClockSync {
   state: "pre" | "in" | "post";
   period: number;
   completed: boolean;
+  preFight?: true;
   clockSeconds?: number;
   /** When the collector received the source response. */
   sourceReceivedAt: string;
@@ -182,6 +183,7 @@ interface ParsedLifecycleObservation {
   state: "pre" | "in" | "post";
   period: number;
   completed: boolean;
+  preFight?: true;
   clockSeconds?: number;
   result?: BoutResult;
   receivedAt: string;
@@ -813,6 +815,7 @@ function parseLifecycleObservation(
     !Number.isSafeInteger(value.period) ||
     (value.period as number) < 0 ||
     typeof value.completed !== "boolean" ||
+    (value.preFight !== undefined && value.preFight !== true) ||
     (value.clockSeconds !== undefined &&
       (typeof value.clockSeconds !== "number" ||
         !Number.isFinite(value.clockSeconds) ||
@@ -829,6 +832,7 @@ function parseLifecycleObservation(
     state: value.state,
     period: value.period as number,
     completed: value.completed,
+    ...(value.preFight === true ? { preFight: true as const } : {}),
     ...(value.clockSeconds === undefined
       ? {}
       : { clockSeconds: value.clockSeconds }),
@@ -883,6 +887,7 @@ export function shouldAdoptClockSync(
   ) {
     return true;
   }
+  if (candidate.preFight !== existing.preFight) return true;
   if (candidate.clockSeconds === undefined) return false;
   if (existing.clockSeconds === undefined) return true;
 
@@ -905,6 +910,7 @@ function clockSyncs(
       state: observation.state,
       period: observation.period,
       completed: observation.completed,
+      ...(observation.preFight === true ? { preFight: true as const } : {}),
       ...(observation.clockSeconds === undefined
         ? {}
         : { clockSeconds: observation.clockSeconds }),
