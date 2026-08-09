@@ -154,6 +154,21 @@ describe("market transport subscription seam", () => {
       SUBSCRIPTIONS,
     );
   });
+
+  it("maps Kalshi ticker suffixes to fighters instead of stale ref order", () => {
+    const mapping: BoutMapping = {
+      internalBoutId: "bout-goff-miller", redFighter: "Billy Ray Goff", blueFighter: "Ty Miller",
+      weightClass: "welterweight", scheduledRounds: 3, mappingConfidence: 1, manuallyVerified: false,
+      externalRefs: [
+        { source: "kalshi", id: "KXUFCFIGHT-26AUG08MILGOF-MIL" },
+        { source: "kalshi", id: "KXUFCFIGHT-26AUG08MILGOF-GOF" },
+      ],
+    };
+    expect(resolveMarketSubscriptions([mapping], "kalshi")).toEqual([
+      expect.objectContaining({ externalId: "KXUFCFIGHT-26AUG08MILGOF-MIL", outcome: "Ty Miller" }),
+      expect.objectContaining({ externalId: "KXUFCFIGHT-26AUG08MILGOF-GOF", outcome: "Billy Ray Goff" }),
+    ]);
+  });
 });
 
 describe("SupervisedMarketTransport", () => {

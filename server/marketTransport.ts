@@ -198,7 +198,18 @@ export function resolveMarketSubscriptions(
     const outcomes = [mapping.redFighter, mapping.blueFighter] as const;
 
     return refs.flatMap((ref, index) => {
-      const outcome = outcomes[index];
+      // Kalshi's fighter ticker ends in the fighter's surname abbreviation
+      // (for example `...-MIL` / `...-GOF`). Persisted mapping snapshots can
+      // retain an old ESPN corner ordering, so never infer a Kalshi outcome
+      // solely from ref array position.
+      const suffix = source === "kalshi"
+        ? ref.id.split("-").at(-1)?.toLowerCase()
+        : undefined;
+      const outcome = suffix === undefined
+        ? outcomes[index]
+        : outcomes.find((fighter) =>
+            fighter.split(/\s+/).at(-1)?.toLowerCase().startsWith(suffix),
+          ) ?? outcomes[index];
       return outcome === undefined
         ? []
         : [
