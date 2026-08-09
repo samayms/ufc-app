@@ -305,7 +305,11 @@ function parseStatus(competition: EspnCompetition): BoutStatus {
   // During a live card the event itself is in progress while later bouts are
   // still scheduled; treating those fights as walkouts made the UI contradict
   // ESPN's own pre-fight label.
-  if (typeName === "STATUS_SCHEDULED" || typeName === "STATUS_PRE") {
+  if (
+    typeName === "STATUS_SCHEDULED" ||
+    typeName === "STATUS_PRE" ||
+    typeName === "STATUS_PRE_FIGHT"
+  ) {
     return "upcoming";
   }
   if (
@@ -631,7 +635,8 @@ function parseLifecycleState(
   ) return "post";
   if (
     status?.type?.name === "STATUS_SCHEDULED" ||
-    status?.type?.name === "STATUS_PRE"
+    status?.type?.name === "STATUS_PRE" ||
+    status?.type?.name === "STATUS_PRE_FIGHT"
   ) {
     return "pre";
   }

@@ -584,7 +584,8 @@ function parseFightStatus(competition: RawEspnFightcenterCompetition): BoutStatu
   ) return "final";
   if (
     status?.type?.name === "STATUS_SCHEDULED" ||
-    status?.type?.name === "STATUS_PRE"
+    status?.type?.name === "STATUS_PRE" ||
+    status?.type?.name === "STATUS_PRE_FIGHT"
   ) {
     return "upcoming";
   }

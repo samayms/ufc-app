@@ -301,6 +301,29 @@ describe("parseEspnScoreboardLifecycle", () => {
     ]);
   });
 
+  it("keeps ESPN's named pre-fight status out of walkouts despite state in", () => {
+    // Captured live for Goff vs. Miller (401902681) on 2026-08-08. ESPN
+    // marks the event broadcast in-progress while this specific bout is
+    // still explicitly pre-fight.
+    const payload = {
+      event: { header: { competitions: [{
+        id: "401902681",
+        status: {
+          period: 0,
+          displayClock: "-",
+          type: {
+            name: "STATUS_PRE_FIGHT", state: "in", completed: false,
+            description: "Pre-fight", detail: "Pre-fight",
+          },
+        },
+      }] } },
+    };
+
+    expect(parseEspnScoreboardLifecycle(payload)).toEqual([
+      { externalId: "401902681", state: "pre", period: 0, completed: false },
+    ]);
+  });
+
   it("does not fabricate a draw while ESPN has only marked the bout final", () => {
     const payload = {
       event: {
