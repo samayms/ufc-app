@@ -13,6 +13,8 @@ import {
   UNIFIED_ROUNDS_STORAGE_STREAM,
   type UnifiedRoundRecord,
 } from "./roundStats.ts";
+import { MARKET_SNAPSHOTS_STORAGE_STREAM } from "./tickStore.ts";
+import type { MarketSnapshot } from "../src/sources/contract.ts";
 import type {
   BoutStatus,
   BoutView,
@@ -36,6 +38,7 @@ export interface ArchivedEventSummary {
 
 export interface ArchivedEventSnapshot extends DashboardState {
   unifiedRounds: UnifiedRoundRecord[];
+  marketSnapshots: MarketSnapshot[];
 }
 
 const COLLECTOR_STATE_STREAM = "collector-state";
@@ -249,9 +252,10 @@ export async function loadArchivedEventSnapshot(
   const databaseState = await loadArchivedEvent(db, eventId);
   if (databaseState === undefined) return undefined;
 
-  const [stateRecords, roundRecords] = await Promise.all([
+  const [stateRecords, roundRecords, marketRecords] = await Promise.all([
     storage.read<unknown>(COLLECTOR_STATE_STREAM),
     storage.read<unknown>(UNIFIED_ROUNDS_STORAGE_STREAM),
+    storage.read<unknown>(MARKET_SNAPSHOTS_STORAGE_STREAM),
   ]);
   const persistedState = stateRecords
     .map(persistedDashboardState)
@@ -302,6 +306,15 @@ export async function loadArchivedEventSnapshot(
     if (record === undefined || !archivedBoutIds.has(record.boutId)) continue;
     latestRounds.set(`${record.boutId}:${record.round}`, record);
   }
+  const latestMarkets = new Map<string, MarketSnapshot>();
+  for (const persisted of marketRecords) {
+    const snapshot = typeof persisted === "object" && persisted !== null &&
+      "snapshot" in persisted
+      ? (persisted as { snapshot?: MarketSnapshot }).snapshot
+      : undefined;
+    if (snapshot === undefined || !archivedBoutIds.has(snapshot.boutId)) continue;
+    latestMarkets.set(`${snapshot.boutId}:${snapshot.round}:${snapshot.source}:${snapshot.boundaryType}`, snapshot);
+  }
 
   return {
     ...sourceState,
@@ -320,5 +333,6 @@ export async function loadArchivedEventSnapshot(
       (left, right) =>
         left.boutId.localeCompare(right.boutId) || left.round - right.round,
     ),
+    marketSnapshots: [...latestMarkets.values()],
   };
 }

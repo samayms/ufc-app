@@ -1309,7 +1309,7 @@ function applyMarketUpdates(
 }
 
 /** Converts durable pre-fight market boundaries into the dashboard's opening-line shape. */
-function applyPreFightMarketSnapshots(
+export function applyPreFightMarketSnapshots(
   dashboard: DashboardState | null,
   snapshots: readonly MarketSnapshot[],
 ): DashboardState | null {

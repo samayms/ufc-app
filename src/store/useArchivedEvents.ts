@@ -13,8 +13,10 @@
 
 import { useEffect, useState } from "react";
 import type { DashboardState } from "../schema.ts";
+import type { MarketSnapshot } from "../sources/contract.ts";
 import {
   applyCollectorRound,
+  applyPreFightMarketSnapshots,
   type CollectorUnifiedRound,
 } from "./collectorClient.ts";
 
@@ -93,6 +95,7 @@ export interface ArchivedEventState {
 
 export interface ArchivedDashboardState extends DashboardState {
   unifiedRounds: CollectorUnifiedRound[];
+  marketSnapshots: MarketSnapshot[];
 }
 
 /**
@@ -111,6 +114,7 @@ export async function fetchArchivedEvent(
   }
   const payload = (await response.json()) as DashboardState & {
     unifiedRounds?: CollectorUnifiedRound[];
+    marketSnapshots?: MarketSnapshot[];
   };
   const unifiedRounds = Array.isArray(payload.unifiedRounds)
     ? payload.unifiedRounds
@@ -119,7 +123,15 @@ export async function fetchArchivedEvent(
     (state, record) => applyCollectorRound(state, record),
     payload as DashboardState,
   );
-  return { ...dashboard, unifiedRounds };
+  const marketSnapshots = Array.isArray(payload.marketSnapshots)
+    ? payload.marketSnapshots
+    : [];
+  const hydrated = applyPreFightMarketSnapshots(dashboard, marketSnapshots) ?? dashboard;
+  return {
+    ...hydrated,
+    unifiedRounds,
+    marketSnapshots,
+  };
 }
 
 export function useArchivedEvent(eventId: string | null): ArchivedEventState {

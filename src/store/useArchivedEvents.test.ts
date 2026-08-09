@@ -45,7 +45,7 @@ describe("fetchArchivedEvent", () => {
     } as unknown as DashboardState;
     await expect(
       fetchArchivedEvent("e1", jsonResponse(payload)),
-    ).resolves.toEqual({ ...payload, unifiedRounds: [] });
+    ).resolves.toEqual({ ...payload, unifiedRounds: [], marketSnapshots: [] });
   });
 
   it("hydrates archived stats and summaries from persisted unified rounds", async () => {
