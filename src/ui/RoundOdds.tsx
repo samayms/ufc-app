@@ -125,12 +125,11 @@ export function RoundOdds({
   if (selection === "total") return null;
 
   const record = latestRoundRecord(records, boutId, selection);
-  // An ESPN named end-of-round state is a real boundary even before the next
-  // period confirms it. TickStore pins the latest available market book at
-  // that instant, so show the provisional snapshot rather than making the
-  // FIGHT menu appear empty for the entire break between rounds.
+  // Generic 0:00 readings can be stale. The lifecycle machine upgrades only
+  // ESPN's explicit named boundary to confirmed, so provisional records stay
+  // hidden here rather than being mislabeled as completed-round odds.
   const choice =
-    record === undefined
+    record === undefined || record.provisional
       ? null
       : chooseMarket(record, redName, blueName);
   const selectionLabel =

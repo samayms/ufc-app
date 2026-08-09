@@ -61,6 +61,24 @@ function eventsOfType<Type extends CollectorEvent["type"]>(
 }
 
 describe("FightLifecycleMachine", () => {
+  it("confirms an ESPN named round boundary immediately, unlike a generic zero clock", async () => {
+    const { bus, machine } = await createMachine();
+
+    await machine.observe(observation(0, { state: "pre", clockSeconds: undefined }));
+    await machine.observe(observation(1, { clockSeconds: 25 }));
+    await machine.observe(observation(2, {
+      clockSeconds: 0,
+      namedRoundBoundary: true,
+    }));
+
+    expect(eventsOfType(bus.getEventLog(), "ROUND_ENDED")).toEqual([
+      {
+        type: "ROUND_ENDED", boutId: BOUT_ID, round: 1,
+        detectedAt: at(2), confirmation: "period_transition",
+      },
+    ]);
+  });
+
   it("runs a normal three-round fight through every round boundary", async () => {
     const { bus, machine } = await createMachine();
 

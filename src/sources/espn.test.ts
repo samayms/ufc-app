@@ -208,6 +208,7 @@ describe("parseEspnScoreboardLifecycle", () => {
         period: 2,
         completed: false,
         clockSeconds: 0,
+        namedRoundBoundary: true,
       },
       {
         externalId: "401770002",
@@ -381,7 +382,7 @@ describe("parseEspnScoreboardLifecycle", () => {
     };
 
     expect(parseEspnScoreboardLifecycle(payload)).toEqual([
-      { externalId: "401770006", state: "in", period: 1, completed: false, clockSeconds: 0 },
+      { externalId: "401770006", state: "in", period: 1, completed: false, clockSeconds: 0, namedRoundBoundary: true },
       { externalId: "401770007", state: "post", period: 2, completed: true },
     ]);
   });

@@ -50,6 +50,7 @@ export interface LifecycleScoreboardEntry {
   period: number;
   completed: boolean;
   preFight?: true;
+  namedRoundBoundary?: true;
   clockSeconds?: number;
   cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
   result?: BoutResult;
@@ -103,6 +104,9 @@ function createScoreboardObservationProvider(options: {
           period: entry.period,
           completed: entry.completed,
           ...(entry.preFight === true ? { preFight: true as const } : {}),
+          ...(entry.namedRoundBoundary === true
+            ? { namedRoundBoundary: true as const }
+            : {}),
           ...(entry.clockSeconds === undefined
             ? {}
             : { clockSeconds: entry.clockSeconds }),

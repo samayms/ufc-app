@@ -17,7 +17,7 @@ describe("RoundOdds", () => {
     expect(html).toBe("");
   });
 
-  it("shows the immediate ESPN end-of-round snapshot while confirmation is pending", () => {
+  it("does not present generic provisional round odds as post-round odds", () => {
     const html = renderToStaticMarkup(
       <RoundOdds
         boutId="bout-main"
@@ -55,9 +55,7 @@ describe("RoundOdds", () => {
         }]}
       />,
     );
-    expect(html).toContain('aria-label="Odds after Round 1"');
-    expect(html).toContain("62%");
-    expect(html).toContain("38%");
+    expect(html).toBe("");
   });
 
   it("renders the selected round's preferred market with source accents", () => {

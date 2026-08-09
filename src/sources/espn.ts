@@ -544,6 +544,8 @@ export interface EspnLifecycleEntry {
   completed: boolean;
   /** ESPN's named STATUS_PRE_FIGHT, distinct from merely scheduled bouts. */
   preFight?: true;
+  /** Explicit ESPN end-of-round status, unlike a potentially stale 0:00. */
+  namedRoundBoundary?: true;
   clockSeconds?: number;
   cumulativeStats?: { fighterA: EspnCumulativeStats; fighterB: EspnCumulativeStats };
   /**
@@ -751,6 +753,7 @@ export function parseEspnScoreboardLifecycle(
         period: status?.period ?? 0,
         completed: status?.type?.completed === true || isNamedFightOver,
         ...(statusName === "STATUS_PRE_FIGHT" ? { preFight: true as const } : {}),
+        ...(isNamedRoundBoundary ? { namedRoundBoundary: true as const } : {}),
         ...(clockSeconds === undefined ? {} : { clockSeconds }),
         ...(fighterA === undefined || fighterB === undefined ? {} : { cumulativeStats: { fighterA, fighterB } }),
         ...(result === undefined ? {} : { result }),
