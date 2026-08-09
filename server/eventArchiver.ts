@@ -66,7 +66,9 @@ export class EventArchiver {
       // be archived once its results are known, without turning an unknown
       // result into a permanent fake final.
       if (!eventBouts.every((bout) =>
-        FINAL_STATUSES.has(bout.status) || bout.resultWinnerCorner !== null
+        bout.status === "canceled" ||
+        bout.status === "postponed" ||
+        bout.resultWinnerCorner !== null
       )) continue;
       const superseded = options.supersededBefore !== undefined &&
         candidate.startTime !== null &&

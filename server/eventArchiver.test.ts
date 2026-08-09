@@ -106,6 +106,31 @@ describe("EventArchiver", () => {
     expect(db.select().from(schema.events).all().find((event) => event.id === "future")?.archivedAt).toBeNull();
   });
 
+  it("keeps a superseded final card writable when ESPN has not supplied every result", async () => {
+    const db = freshDb();
+    const now = new Date("2026-02-01T00:00:00.000Z");
+    db.insert(schema.events).values({
+      id: "old", name: "Old", startTime: "2026-01-25T00:00:00.000Z",
+    }).run();
+    db.insert(schema.bouts).values([
+      {
+        id: "settled", eventId: "old", status: "final",
+        resultWinnerCorner: "red", updatedAt: now.toISOString(),
+      },
+      {
+        id: "missing", eventId: "old", status: "final",
+        updatedAt: now.toISOString(),
+      },
+    ]).run();
+
+    const result = await new EventArchiver({ db, now: () => now }).sweepOnce({
+      supersededBefore: "2026-02-01T12:00:00.000Z", immediate: true,
+    });
+
+    expect(result.archived).toEqual([]);
+    expect(db.select().from(schema.events).get()?.archivedAt).toBeNull();
+  });
+
   it("archives a superseded stale-status card once every bout has a durable result", async () => {
     const db = freshDb();
     const now = new Date("2026-02-01T00:00:00.000Z");
