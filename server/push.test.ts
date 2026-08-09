@@ -263,4 +263,64 @@ describe("SsePush", () => {
 
     await push.close();
   });
+
+  it("coalesces a multi-megabyte market replay burst to each outcome's latest tick", async () => {
+    vi.useFakeTimers();
+    const storage = new MemoryStorage();
+    const push = new SsePush({
+      storage,
+      getBootstrap: () => ({ state: "fixture" }),
+      heartbeatMs: 60_000,
+      flushIntervalMs: 500,
+    });
+    const client = request();
+    await push.handle(
+      client.request as unknown as IncomingMessage,
+      client.response as unknown as ServerResponse,
+    );
+
+    // 1,000 x 4KB is deliberately representative of the production replay
+    // storm: persistence retains every record, while the live socket gets
+    // only the latest tick for this same outcome.
+    const padding = "x".repeat(4_096);
+    for (let sequence = 0; sequence < 1_000; sequence += 1) {
+      await push.publish("update", {
+        kind: "market-tick",
+        tick: {
+          source: "polymarket",
+          boutId: "bout-main",
+          marketType: "fight-winner",
+          outcome: "Red Fighter",
+          bid: sequence / 1_000,
+          ...(sequence === 0 ? { volume: 12_500, depth: { bids: [0.4], asks: [0.42] } } : {}),
+          receivedAt: `2026-07-28T01:00:${String(sequence % 60).padStart(2, "0")}Z`,
+          stale: false,
+          padding,
+        },
+      });
+    }
+    await push.publish("health", { source: "polymarket", fresh: true });
+
+    // A newly connected browser gets the current bootstrap, never a delayed
+    // lower-ID batch that was queued before it joined.
+    const newcomer = request();
+    await push.handle(
+      newcomer.request as unknown as IncomingMessage,
+      newcomer.response as unknown as ServerResponse,
+    );
+    expect(contents(newcomer.response)).toContain("id: 1001");
+    expect(contents(newcomer.response)).not.toContain("event: update");
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    const delivered = contents(client.response);
+    expect((delivered.match(/event: update/g) ?? [])).toHaveLength(1);
+    expect((delivered.match(/event: health/g) ?? [])).toHaveLength(1);
+    expect(delivered).toContain('"bid":0.999');
+    expect(delivered).not.toContain('"bid":0.001');
+    expect(delivered).toContain('"volume":12500');
+    expect(delivered).toContain('"depth":{"bids":[0.4],"asks":[0.42]}');
+    expect(await storage.read("sse-events")).toHaveLength(1_001);
+    await push.close();
+  });
 });

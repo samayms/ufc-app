@@ -131,6 +131,60 @@ function parseLastEventId(request: IncomingMessage): number | undefined {
   return Number.isSafeInteger(id) && id >= 0 ? id : undefined;
 }
 
+/**
+ * The live markets can emit many identical outcome updates during a socket
+ * rebuild.  They are independently persisted for audit/replay, but a browser
+ * only needs the newest value for each outcome in one outbound flush window.
+ */
+function marketTickKey(data: unknown): string | undefined {
+  if (!isRecord(data) || data.kind !== "market-tick" || !isRecord(data.tick)) {
+    return undefined;
+  }
+  const tick = data.tick;
+  if (
+    typeof tick.source !== "string" ||
+    typeof tick.boutId !== "string" ||
+    typeof tick.marketType !== "string" ||
+    typeof tick.outcome !== "string" ||
+    (tick.bookmaker !== undefined && typeof tick.bookmaker !== "string")
+  ) {
+    return undefined;
+  }
+  return JSON.stringify([
+    tick.source,
+    tick.boutId,
+    tick.bookmaker ?? null,
+    tick.marketType,
+    tick.outcome,
+  ]);
+}
+
+/**
+ * A quote-only delta must not erase volume/depth/status supplied by an
+ * earlier tick in the same flush. This mirrors the client/store's
+ * last-defined-field behavior while retaining the newest timestamp and price.
+ */
+function mergePendingMarketTick(
+  previous: PersistedSseEvent,
+  next: PersistedSseEvent,
+): PersistedSseEvent {
+  if (!isRecord(previous.data) || !isRecord(previous.data.tick) ||
+    !isRecord(next.data) || !isRecord(next.data.tick)) {
+    return next;
+  }
+  const definedNextTick = Object.fromEntries(
+    Object.entries(next.data.tick).filter(([, value]) => value !== undefined),
+  );
+  return {
+    ...next,
+    data: {
+      ...previous.data,
+      ...next.data,
+      tick: { ...previous.data.tick, ...definedNextTick },
+    },
+  };
+}
+
 export class SsePush {
   private readonly storage: Storage;
 
@@ -162,7 +216,11 @@ export class SsePush {
 
   private readonly heartbeat: ReturnType<typeof setInterval>;
 
-  private pendingOutbound: string[] = [];
+  /** Non-market events retain their complete sequence within the flush. */
+  private pendingOutbound: PersistedSseEvent[] = [];
+
+  /** Latest pending tick per stable source/bout/book/outcome slot. */
+  private readonly pendingMarketTicks = new Map<string, PersistedSseEvent>();
 
   private flushHandle: unknown;
 
@@ -217,6 +275,10 @@ export class SsePush {
     }
 
     await this.restore();
+    // Pending broadcasts can have lower IDs than the current bootstrap after
+    // a busy interval. Flush them to already-connected clients first so a new
+    // browser never receives bootstrap ID N followed by delayed IDs below N.
+    this.flushOutbound();
     response.writeHead(200, {
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": "no-cache, no-transform",
@@ -287,7 +349,7 @@ export class SsePush {
       this.buffer.push(published);
       this.trimBuffer();
 
-      this.enqueueOutbound(formatEvent(this.forClient(published)));
+      this.enqueueOutbound(this.forClient(published));
     });
 
     this.publishQueue = operation.then(
@@ -332,12 +394,22 @@ export class SsePush {
    * so replay/resume behavior is unaffected — only the live write is
    * coalesced. `flushIntervalMs: 0` opts out and writes immediately.
    */
-  private enqueueOutbound(formatted: string): void {
+  private enqueueOutbound(event: PersistedSseEvent): void {
     if (this.flushIntervalMs === 0) {
+      const formatted = formatEvent(event);
       for (const client of this.clients) client.write(formatted);
       return;
     }
-    this.pendingOutbound.push(formatted);
+    const key = marketTickKey(event.data);
+    if (key === undefined) {
+      this.pendingOutbound.push(event);
+    } else {
+      const previous = this.pendingMarketTicks.get(key);
+      this.pendingMarketTicks.set(
+        key,
+        previous === undefined ? event : mergePendingMarketTick(previous, event),
+      );
+    }
     if (this.flushHandle !== undefined) return;
     this.flushHandle = this.timer.setTimeout(() => {
       this.flushHandle = undefined;
@@ -346,9 +418,18 @@ export class SsePush {
   }
 
   private flushOutbound(): void {
-    if (this.pendingOutbound.length === 0) return;
-    const outbound = this.pendingOutbound.join("");
+    if (
+      this.pendingOutbound.length === 0 &&
+      this.pendingMarketTicks.size === 0
+    ) {
+      return;
+    }
+    const outbound = [...this.pendingOutbound, ...this.pendingMarketTicks.values()]
+      .sort((left, right) => left.id - right.id)
+      .map((event) => formatEvent(event))
+      .join("");
     this.pendingOutbound = [];
+    this.pendingMarketTicks.clear();
     for (const client of this.clients) {
       client.write(outbound);
     }
