@@ -92,7 +92,11 @@ export async function startApp(): Promise<{
   const eventArchiver = new EventArchiver({ db: getDb() });
   // Repair a missed prior rotation on startup without ever freezing the card
   // this collector is serving. Incomplete/future cards remain ineligible.
-  await eventArchiver.sweepOnce({ excludeEventId: collector.getBootstrap().state?.event.id, immediate: true });
+  await eventArchiver.sweepOnce({
+    excludeEventId: collector.getBootstrap().state?.event.id,
+    supersededBefore: collector.getBootstrap().state?.event.startsAt,
+    immediate: true,
+  });
   eventArchiver.start();
 
   let activeEventId = collector.getBootstrap().state?.event.id;
@@ -130,7 +134,11 @@ export async function startApp(): Promise<{
             });
             // The outgoing card is now superseded by a verified new ESPN
             // event. Archive it immediately if every bout is complete.
-            await eventArchiver.sweepOnce({ excludeEventId: eventId, immediate: true });
+            await eventArchiver.sweepOnce({
+              excludeEventId: eventId,
+              supersededBefore: nextState.event.startsAt,
+              immediate: true,
+            });
             await collector.close();
             try {
               const nextPort = await nextCollector.start();

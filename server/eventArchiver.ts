@@ -22,6 +22,9 @@ export interface ArchiveSweepOptions {
   excludeEventId?: string;
   /** Rotation has superseded the card, so the normal review delay is unnecessary. */
   immediate?: boolean;
+  /** Archive older cards superseded by the current event even if their final
+   * ESPN bout statuses were never refreshed after rotation. */
+  supersededBefore?: string;
 }
 
 export class EventArchiver {
@@ -39,13 +42,23 @@ export class EventArchiver {
   async sweepOnce(options: ArchiveSweepOptions = {}): Promise<{ archived: string[] }> {
     const archived: string[] = [];
     const candidates = this.db
-      .select({ id: events.id })
+      .select({ id: events.id, startTime: events.startTime })
       .from(events)
       .where(isNull(events.archivedAt))
       .all();
 
     for (const candidate of candidates) {
       if (candidate.id === options.excludeEventId) continue;
+      const superseded = options.supersededBefore !== undefined &&
+        candidate.startTime !== null &&
+        Date.parse(candidate.startTime) < Date.parse(options.supersededBefore);
+      if (superseded) {
+        this.db.update(events).set({ archivedAt: this.now().toISOString() })
+          .where(eq(events.id, candidate.id)).run();
+        archived.push(candidate.id);
+        this.log(`archived superseded event ${candidate.id}`);
+        continue;
+      }
       const eventBouts = this.db
         .select({ status: bouts.status, updatedAt: bouts.updatedAt })
         .from(bouts)

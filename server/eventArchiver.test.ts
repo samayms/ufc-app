@@ -72,6 +72,24 @@ describe("EventArchiver", () => {
     expect(result.archived).toEqual([]);
   });
 
+  it("archives a stale-status card only when a later current event supersedes it", async () => {
+    const db = freshDb();
+    const now = new Date("2026-02-01T00:00:00.000Z");
+    db.insert(schema.events).values([
+      { id: "old", name: "Old", startTime: "2026-01-25T00:00:00.000Z" },
+      { id: "future", name: "Future", startTime: "2026-02-08T00:00:00.000Z" },
+    ]).run();
+    db.insert(schema.bouts).values([
+      { id: "old-stale", eventId: "old", status: "upcoming", updatedAt: now.toISOString() },
+      { id: "future-bout", eventId: "future", status: "upcoming", updatedAt: now.toISOString() },
+    ]).run();
+    const result = await new EventArchiver({ db, now: () => now }).sweepOnce({
+      excludeEventId: "current", supersededBefore: "2026-02-01T12:00:00.000Z", immediate: true,
+    });
+    expect(result.archived).toEqual(["old"]);
+    expect(db.select().from(schema.events).all().find((event) => event.id === "future")?.archivedAt).toBeNull();
+  });
+
   it("is idempotent — a second sweep does nothing to an already-archived event", async () => {
     const db = freshDb();
     const now = new Date("2026-02-01T00:00:00.000Z");
