@@ -127,6 +127,35 @@ export async function importCurrentEventUpcomingMappings(options: {
       continue;
     }
 
+    // Stream ids are provider-verified and ordered red/blue by
+    // `orderedStreamIds`. Reconcile them even if old persisted refs already
+    // point at this bout: otherwise a prior reversed order lives forever.
+    if (record.streamIds !== undefined) {
+      const currentIds = options.registry
+        .getExternalRefs(record.boutId)
+        .filter((ref) => ref.source === source && !ref.id.startsWith("0x"))
+        .map((ref) => ref.id);
+      if (
+        currentIds.length === refs.length &&
+        currentIds.every((id, index) => id === refs[index])
+      ) {
+        summary.alreadyPresent += 1;
+        continue;
+      }
+      const reconciled = await options.registry.replaceImportedSourceRefs(
+        record.boutId,
+        source,
+        refs.map((id) => ({ source, id })),
+        record.confidence,
+      );
+      if (reconciled === undefined) {
+        summary.rejected += 1;
+      } else {
+        summary.imported += 1;
+      }
+      continue;
+    }
+
     let recordImported = false;
     let recordRejected = false;
     for (const externalId of refs) {

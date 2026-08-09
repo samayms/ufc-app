@@ -418,6 +418,33 @@ export class BoutMappingRegistry {
     return cloneMapping(mapping);
   }
 
+  /** Replaces an automatically imported provider's ordered stream refs. */
+  async replaceImportedSourceRefs(
+    internalBoutId: string,
+    source: SourceId,
+    refs: readonly ExternalRef[],
+    confidence: number,
+  ): Promise<BoutMapping | undefined> {
+    const mapping = this.mappings.get(internalBoutId);
+    if (mapping === undefined || !Number.isFinite(confidence)) return undefined;
+    if (refs.some((ref) => !isExternalRef(ref) || ref.source !== source)) return undefined;
+    for (const ref of refs) {
+      const owner = this.findInternalBoutId(source, ref.id);
+      if (owner !== undefined && owner !== internalBoutId) return undefined;
+    }
+    // Keep Polymarket's condition id: it is metadata, not a stream token.
+    const retained = mapping.externalRefs.filter((ref) =>
+      ref.source !== source || (source === "polymarket" && ref.id.startsWith("0x")),
+    );
+    mapping.externalRefs = [...retained, ...refs.map(cloneExternalRef)];
+    mapping.mappingConfidence = mapping.manuallyVerified
+      ? 1
+      : Math.min(mapping.mappingConfidence, confidence);
+    this.rebuildExternalIndex();
+    await this.persistMappingIfChanged(mapping);
+    return cloneMapping(mapping);
+  }
+
   async setManualOverride(
     override: ManualBoutMappingOverride,
   ): Promise<BoutMapping> {

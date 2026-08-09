@@ -52,7 +52,7 @@ describe("importCurrentEventUpcomingMappings", () => {
       manuallyVerified: false,
     });
     await expect(storage.read(BOUT_MAPPING_OVERRIDE_STREAM)).resolves.toEqual([]);
-    await expect(storage.read(BOUT_MAPPING_STREAM)).resolves.toHaveLength(7);
+    await expect(storage.read(BOUT_MAPPING_STREAM)).resolves.toHaveLength(6);
   });
 
   it("rejects malformed, other-event, stale-bout, and conflicting references", async () => {
@@ -92,8 +92,25 @@ describe("importCurrentEventUpcomingMappings", () => {
 
     await expect(
       importCurrentEventUpcomingMappings({ event, registry: restored, storage }),
-    ).resolves.toEqual({ imported: 0, alreadyPresent: 1, rejected: 0 });
-    await expect(storage.read(BOUT_MAPPING_STREAM)).resolves.toHaveLength(7);
+    ).resolves.toEqual({ imported: 1, alreadyPresent: 0, rejected: 0 });
+    await expect(storage.read(BOUT_MAPPING_STREAM)).resolves.toHaveLength(8);
+  });
+
+  it("repairs an existing reversed Polymarket token order", async () => {
+    const storage = new MemoryStorage();
+    const event = loadFixtureEvent();
+    const registry = await createBoutMappingRegistry({ event, storage });
+    await registry.importExternalRef({ internalBoutId: "bout-main", externalRef: { source: "polymarket", id: "token-blue" }, confidence: 1 });
+    await registry.importExternalRef({ internalBoutId: "bout-main", externalRef: { source: "polymarket", id: "token-red" }, confidence: 1 });
+    await storage.append(UPCOMING_MAPPING_STREAM, upcomingRecord({
+      streamIds: ["token-red", "token-blue"],
+      cornersReversed: false,
+    }));
+
+    await importCurrentEventUpcomingMappings({ event, registry, storage });
+    expect(registry.getExternalRefs("bout-main").filter((ref) =>
+      ref.source === "polymarket" && !ref.id.startsWith("0x"),
+    )).toEqual(["token-red", "token-blue"].map((id) => ({ source: "polymarket", id })));
   });
 
   it("imports Kalshi fighter tickers but never its non-streamable event ticker", async () => {
