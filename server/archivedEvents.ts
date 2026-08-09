@@ -4,19 +4,21 @@
  * client's existing bout-view rendering works unmodified against either
  * source. See server/collector.ts's getBootstrap() for the live analog.
  */
-import { desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 
 import type { AppDatabase } from "./db/client.ts";
-import { bouts, events, fighters, people, roundStats } from "./db/schema.ts";
+import { bouts, events, externalRefs, fighters, people, roundStats } from "./db/schema.ts";
 import type {
   BoutStatus,
   BoutView,
   Corner,
   DashboardState,
+  ExternalRef,
   Fighter,
   FinishMethod,
   RoundStats,
   RoundUpdate,
+  SourceId,
   WeightClass,
 } from "../src/schema.ts";
 
@@ -49,10 +51,33 @@ export async function listArchivedEvents(
     }));
 }
 
-function toFighter(row: typeof fighters.$inferSelect, name: string): Fighter {
+const ARCHIVED_REF_SOURCES: ReadonlySet<string> = new Set([
+  "espn", "kalshi", "polymarket", "odds-api-io", "odds-api", "cito", "sherdog",
+]);
+
+function refsFor(
+  db: AppDatabase,
+  entityType: "event" | "bout" | "person",
+  entityId: string,
+): ExternalRef[] {
+  return db.select({ source: externalRefs.source, id: externalRefs.externalId })
+    .from(externalRefs)
+    .where(and(
+      eq(externalRefs.entityType, entityType),
+      eq(externalRefs.entityId, entityId),
+    ))
+    .all()
+    .flatMap((ref) =>
+      ref.id.length > 0 && ARCHIVED_REF_SOURCES.has(ref.source)
+        ? [{ source: ref.source as SourceId, id: ref.id }]
+        : [],
+    );
+}
+
+function toFighter(row: typeof fighters.$inferSelect, name: string, refs: Fighter["externalRefs"]): Fighter {
   return {
     id: row.personId,
-    externalRefs: [],
+    externalRefs: refs,
     name,
     ...(row.nickname ? { nickname: row.nickname } : {}),
     record: { wins: row.wins, losses: row.losses, draws: row.draws, noContests: row.noContests },
@@ -88,7 +113,7 @@ export async function loadArchivedEvent(
 
     const bout = {
       id: boutRow.id,
-      externalRefs: [],
+      externalRefs: refsFor(db, "bout", boutRow.id),
       eventId,
       cardPosition: boutRow.cardPosition ?? 0,
       segment: "main-card" as const,
@@ -96,8 +121,8 @@ export async function loadArchivedEvent(
       scheduledRounds: (boutRow.scheduledRounds ?? 3) as 3 | 5,
       titleFight: false,
       fighters: {
-        red: toFighter(redRow, redPerson?.name ?? redRow.personId),
-        blue: toFighter(blueRow, bluePerson?.name ?? blueRow.personId),
+        red: toFighter(redRow, redPerson?.name ?? redRow.personId, refsFor(db, "person", redRow.personId)),
+        blue: toFighter(blueRow, bluePerson?.name ?? blueRow.personId, refsFor(db, "person", blueRow.personId)),
       },
       // An archived event is immutable review data. ESPN can leave stale
       // `upcoming`/`between-rounds` rows behind when rotation happens, but
@@ -153,7 +178,7 @@ export async function loadArchivedEvent(
   return {
     event: {
       id: eventRow.id,
-      externalRefs: [],
+      externalRefs: refsFor(db, "event", eventRow.id),
       name: eventRow.name,
       startsAt: eventRow.startTime ?? "",
       ...(eventRow.venue ? { venue: eventRow.venue } : {}),

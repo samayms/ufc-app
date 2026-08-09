@@ -26,6 +26,12 @@ function seedArchivedEvent(db: ReturnType<typeof freshDb>) {
     })
     .run();
   db.insert(schema.people).values([{ id: "f-red", name: "Red Fighter" }, { id: "f-blue", name: "Blue Fighter" }]).run();
+  db.insert(schema.externalRefs).values([
+    { entityType: "event", entityId: "e1", source: "espn", externalId: "e1" },
+    { entityType: "bout", entityId: "b1", source: "espn", externalId: "b1" },
+    { entityType: "person", entityId: "f-red", source: "espn", externalId: "100" },
+    { entityType: "person", entityId: "f-blue", source: "espn", externalId: "200" },
+  ]).run();
   db.insert(schema.boutParticipants)
     .values([{ boutId: "b1", personId: "f-red", corner: "red" }, { boutId: "b1", personId: "f-blue", corner: "blue" }])
     .run();
@@ -60,6 +66,9 @@ describe("listArchivedEvents / loadArchivedEvent", () => {
     expect(bout?.fighters.red.name).toBe("Red Fighter");
     expect(bout?.fighters.blue.name).toBe("Blue Fighter");
     expect(bout?.fighters.red.record.wins).toBe(20);
+    expect(bout?.externalRefs).toContainEqual({ source: "espn", id: "b1" });
+    expect(bout?.fighters.red.externalRefs).toContainEqual({ source: "espn", id: "100" });
+    expect(state?.event.externalRefs).toContainEqual({ source: "espn", id: "e1" });
     expect(bout?.result?.winner).toBe("red");
     expect(state?.boutViews.b1?.rounds.espn?.[0]?.stats?.red?.significantStrikesLanded).toBe(12);
   });

@@ -54,6 +54,7 @@ import { useArchivedEvent, useArchivedEvents } from "./store/useArchivedEvents.t
 import { useUpcomingOdds } from "./store/useUpcomingOdds.ts";
 import {
   fighterEspnAthleteId,
+  cardHeadshotsByBoutId,
   useCurrentEventAthletePhotos,
   useUpcomingEventPhotos,
 } from "./store/useEventPhotos.ts";
@@ -615,13 +616,22 @@ export default function App() {
     scheduleEventEntries.unshift(dashboardEventEntry);
   }
 
+  const photoEvent = archivedSelectionId && archivedEvent.data
+    ? archivedEvent.data.event
+    : event;
+  // `espnCard` is already fetched for a browsed event, including an archived
+  // one. Its competition ids provide source-backed photos for old archives
+  // whose immutable SQLite rows predate persisted athlete refs/media.
+  const cardPhotos = cardHeadshotsByBoutId(
+    archivedSelectionId ? espnCard.card : currentEspnCard.card,
+  );
   const photosByBoutId: Record<string, { red?: string; blue?: string }> = {};
-  for (const bout of event.bouts) {
+  for (const bout of photoEvent.bouts) {
     const redId = fighterEspnAthleteId(bout.fighters.red.externalRefs);
     const blueId = fighterEspnAthleteId(bout.fighters.blue.externalRefs);
     photosByBoutId[bout.id] = {
-      red: redId ? currentEventAthletePhotos[redId] : undefined,
-      blue: blueId ? currentEventAthletePhotos[blueId] : undefined,
+      red: cardPhotos[bout.id]?.red ?? (redId ? currentEventAthletePhotos[redId] : undefined),
+      blue: cardPhotos[bout.id]?.blue ?? (blueId ? currentEventAthletePhotos[blueId] : undefined),
     };
   }
 

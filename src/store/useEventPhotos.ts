@@ -118,6 +118,28 @@ export function fighterEspnAthleteId(
   return externalRefs.find((ref) => ref.source === "espn")?.id;
 }
 
+/**
+ * Resolves card headshots by ESPN competition id. This is also the safe
+ * archive fallback: older immutable rows predate persisted athlete refs, but
+ * retain the ESPN competition id and can be matched to ESPN's archived
+ * fightcenter response without inventing a person id or an image URL.
+ */
+export function cardHeadshotsByBoutId(
+  card: EspnScheduledCard | null,
+): Record<string, { red?: string; blue?: string }> {
+  if (card === null) return {};
+  const result: Record<string, { red?: string; blue?: string }> = {};
+  for (const section of card.sections) {
+    for (const fight of section.fights) {
+      result[fight.competitionId] = {
+        ...(fight.red.headshotUrl === undefined ? {} : { red: fight.red.headshotUrl }),
+        ...(fight.blue.headshotUrl === undefined ? {} : { blue: fight.blue.headshotUrl }),
+      };
+    }
+  }
+  return result;
+}
+
 function espnEventIdFor(event: UfcEvent | undefined): string | null {
   if (event === undefined) return null;
   const ref = event.externalRefs.find((entry) => entry.source === "espn");

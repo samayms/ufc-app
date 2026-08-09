@@ -8,7 +8,7 @@
 import { and, eq } from "drizzle-orm";
 
 import type { AppDatabase } from "./db/client.ts";
-import { bouts, boutParticipants, commentary, events, roundStats } from "./db/schema.ts";
+import { bouts, boutParticipants, commentary, events, externalRefs, roundStats } from "./db/schema.ts";
 import { EventArchivedError, assertEventNotArchived } from "./eventArchiveGuard.ts";
 import { ensurePersonExists, recordFighterSnapshot } from "./fighterSnapshots.ts";
 import type { Corner, DashboardState } from "../src/schema.ts";
@@ -28,6 +28,22 @@ function upsertEvent(db: AppDatabase, state: DashboardState, now: () => Date): v
     db.update(events).set(values).where(eq(events.id, event.id)).run();
   } else {
     db.insert(events).values(values).run();
+  }
+}
+
+function persistExternalRefs(
+  db: AppDatabase,
+  entityType: "event" | "bout" | "person",
+  entityId: string,
+  refs: readonly { source: string; id: string }[],
+): void {
+  for (const ref of refs) {
+    db.insert(externalRefs).values({
+      entityType,
+      entityId,
+      source: ref.source,
+      externalId: ref.id,
+    }).onConflictDoNothing().run();
   }
 }
 
@@ -133,9 +149,11 @@ export async function persistDashboardState(
   }
 
   upsertEvent(db, state, now);
+  persistExternalRefs(db, "event", state.event.id, state.event.externalRefs);
 
   for (const bout of state.event.bouts) {
     upsertBout(db, state.event.id, bout, now);
+    persistExternalRefs(db, "bout", bout.id, bout.externalRefs);
     await upsertParticipants(db, bout);
     for (const corner of ["red", "blue"] as Corner[]) {
       await recordFighterSnapshot(db, {
@@ -146,6 +164,12 @@ export async function persistDashboardState(
         boutIsUpcoming: bout.status === "upcoming",
         now,
       });
+      persistExternalRefs(
+        db,
+        "person",
+        bout.fighters[corner].id,
+        bout.fighters[corner].externalRefs,
+      );
     }
     upsertRoundStats(db, bout.id, state, now);
   }
