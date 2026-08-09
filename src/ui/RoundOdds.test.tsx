@@ -58,6 +58,26 @@ describe("RoundOdds", () => {
     expect(html).toBe("");
   });
 
+  it("recovers a historical provisional round once a later round is confirmed", () => {
+    const provisional = {
+      boutId: "bout-main", round: 1, detectedEndedAt: "2026-07-28T01:00:00Z",
+      endingSignal: "clock_zero_provisional" as const, provisional: true,
+      marketAtEnd: { kalshi: {
+        source: "kalshi" as const, boutId: "bout-main", round: 1,
+        boundaryType: "provisional" as const, takenAt: "2026-07-28T01:00:00Z", fresh: true,
+        outcomes: [
+          { outcome: "Danilo Reyes", marketType: "fight-winner", impliedProbability: .6, receivedAt: "2026-07-28T01:00:00Z", stale: false },
+          { outcome: "Artem Volkov", marketType: "fight-winner", impliedProbability: .4, receivedAt: "2026-07-28T01:00:00Z", stale: false },
+        ],
+      } },
+    };
+    const html = renderToStaticMarkup(<RoundOdds boutId="bout-main" redName="Danilo Reyes" blueName="Artem Volkov" selection={1} records={[provisional, {
+      boutId: "bout-main", round: 3, detectedEndedAt: "2026-07-28T01:10:00Z",
+      endingSignal: "period_transition", provisional: false, marketAtEnd: {},
+    }]} />);
+    expect(html).toContain('aria-label="Odds after Round 1"');
+  });
+
   it("renders the selected round's preferred market with source accents", () => {
     const record: CollectorUnifiedRound = {
       boutId: "bout-main",

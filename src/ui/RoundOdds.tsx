@@ -125,11 +125,17 @@ export function RoundOdds({
   if (selection === "total") return null;
 
   const record = latestRoundRecord(records, boutId, selection);
+  const laterConfirmed = records.some(
+    (candidate) =>
+      candidate.boutId === boutId &&
+      candidate.round > selection &&
+      !candidate.provisional,
+  );
   // Generic 0:00 readings can be stale. The lifecycle machine upgrades only
   // ESPN's explicit named boundary to confirmed, so provisional records stay
   // hidden here rather than being mislabeled as completed-round odds.
   const choice =
-    record === undefined || record.provisional
+    record === undefined || (record.provisional && !laterConfirmed)
       ? null
       : chooseMarket(record, redName, blueName);
   const selectionLabel =

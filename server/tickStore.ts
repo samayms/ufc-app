@@ -1270,6 +1270,7 @@ export class MarketTickStore implements TickHistorySource {
         snapshot.round === event.round &&
         snapshot.boundaryType === "provisional",
     );
+    if (event.recovery === true && priorProvisional === undefined) return;
     if (event.recovery !== true && priorProvisional?.takenAt !== event.detectedAt) {
       await this.snapshotBoundary(event.boutId, event.round, "provisional", event.detectedAt);
     }
