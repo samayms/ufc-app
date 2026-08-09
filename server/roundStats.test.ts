@@ -219,6 +219,18 @@ function marketSnapshot(source: MarketSource): MarketSnapshot {
 }
 
 describe("RoundStatsPipeline", () => {
+  it("marks a confirmed round non-provisional before delayed stats settle", async () => {
+    const { bus, pipeline } = await setup(fetcher([]));
+    emitConfirmed(bus);
+    await pipeline.idle();
+
+    expect(pipeline.getUnifiedRound(BOUT_ID, 1)).toMatchObject({
+      provisional: false,
+      endingSignal: "period_transition",
+    });
+    await pipeline.close();
+  });
+
   it("persists finalized ESPN round stats in the unified round", async () => {
     const storage = new MemoryStorage();
     const first = await setup(fetcher([]), { storage });

@@ -1225,12 +1225,12 @@ export class RoundStatsPipeline {
       const stats = this.stats.get(key);
       const espnStats =
         this.liveEspnStats.get(key) ?? previous?.espnStats;
-      const hasSettledStats =
-        espnStats?.finalized === true ||
-        (stats !== undefined && !stats.provisional);
-      const provisional =
-        event.type === "PROVISIONAL_ROUND_ENDED" ||
-        !hasSettledStats;
+      // Lifecycle confirmation and stats completeness are independent. A
+      // confirmed ESPN period transition has a real post-round market
+      // boundary even while Cito/ESPN round stats are still arriving; marking
+      // that unified record provisional hid its already-persisted odds in the
+      // FIGHT menu.
+      const provisional = event.type === "PROVISIONAL_ROUND_ENDED";
       const next: UnifiedRoundRecord = {
         boutId: event.boutId,
         round: event.round,
