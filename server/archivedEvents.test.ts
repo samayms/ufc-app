@@ -4,7 +4,12 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { describe, expect, it } from "vitest";
 
 import * as schema from "./db/schema.ts";
-import { listArchivedEvents, loadArchivedEvent } from "./archivedEvents.ts";
+import {
+  listArchivedEvents,
+  loadArchivedEvent,
+  loadArchivedEventSnapshot,
+} from "./archivedEvents.ts";
+import { MemoryStorage } from "./storage.ts";
 
 const MIGRATIONS_FOLDER = new URL("./db/migrations", import.meta.url).pathname;
 
@@ -81,6 +86,78 @@ describe("listArchivedEvents / loadArchivedEvent", () => {
     const state = await loadArchivedEvent(db, "e1");
     expect(state?.event.bouts[0]?.status).toBe("final");
     expect(state?.boutViews.b1?.rounds.espn?.[0]?.stats?.red?.significantStrikesLanded).toBe(12);
+  });
+
+  it("restores the archived card's rich collector state and latest round records", async () => {
+    const db = freshDb();
+    seedArchivedEvent(db);
+    const storage = new MemoryStorage();
+    const databaseState = await loadArchivedEvent(db, "e1");
+    expect(databaseState).toBeDefined();
+    if (databaseState === undefined) return;
+    const richState = structuredClone(databaseState);
+    const richBout = richState.event.bouts[0];
+    if (richBout === undefined) return;
+    richBout.status = "between-rounds";
+    delete richBout.result;
+    richBout.fighters.red.age = 37;
+    richBout.fighters.red.recentBouts = [{
+      opponentName: "Previous Opponent",
+      result: "win",
+      method: "decision-unanimous",
+      date: "2025-01-01T00:00:00.000Z",
+      eventName: "Previous Event",
+    }];
+    richState.boutViews.b1 = {
+      ...(richState.boutViews.b1 as NonNullable<typeof richState.boutViews.b1>),
+      bout: richBout,
+    };
+    await storage.append("collector-state", { version: 1, state: richState });
+    const round = {
+      boutId: "b1",
+      round: 1,
+      detectedEndedAt: "2026-01-01T00:10:00.000Z",
+      endingSignal: "period_transition",
+      espnStats: {
+        boutId: "b1",
+        round: 1,
+        fighterA: { significantStrikesLanded: 18 },
+        fighterB: { significantStrikesLanded: 9 },
+        observedAt: "2026-01-01T00:10:00.000Z",
+        finalized: true,
+      },
+      sherdog: {
+        boutId: "b1",
+        round: 1,
+        commentary: "Red controlled the round.",
+        scorerCards: [],
+        sourceUrl: "https://example.com/round",
+        fetchedAt: "2026-01-01T00:11:00.000Z",
+        parserVersion: "test",
+        payloadHash: "hash",
+      },
+      marketAtEnd: {},
+      provisional: false,
+      finalizedAt: "2026-01-01T00:11:00.000Z",
+    };
+    await storage.append("unified-rounds", { version: 1, record: round });
+    await storage.append("unified-rounds", {
+      version: 1,
+      record: { ...round, finalizedAt: "2026-01-01T00:12:00.000Z" },
+    });
+    await storage.append("unified-rounds", {
+      version: 1,
+      record: { ...round, boutId: "other-bout" },
+    });
+
+    const snapshot = await loadArchivedEventSnapshot(db, "e1", storage);
+    expect(snapshot?.event.bouts[0]?.status).toBe("final");
+    expect(snapshot?.event.bouts[0]?.result?.winner).toBe("red");
+    expect(snapshot?.event.bouts[0]?.fighters.red.age).toBe(37);
+    expect(snapshot?.event.bouts[0]?.fighters.red.recentBouts?.[0]?.opponentName)
+      .toBe("Previous Opponent");
+    expect(snapshot?.unifiedRounds).toHaveLength(1);
+    expect(snapshot?.unifiedRounds[0]?.finalizedAt).toBe("2026-01-01T00:12:00.000Z");
   });
 
   it("returns undefined for an event that is not archived", async () => {

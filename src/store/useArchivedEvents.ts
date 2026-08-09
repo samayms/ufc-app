@@ -13,6 +13,10 @@
 
 import { useEffect, useState } from "react";
 import type { DashboardState } from "../schema.ts";
+import {
+  applyCollectorRound,
+  type CollectorUnifiedRound,
+} from "./collectorClient.ts";
 
 // Mirrors the server's ArchivedEventSummary shape (server/collector.ts).
 // Redeclared here rather than imported so client code never depends on
@@ -83,8 +87,12 @@ export function useArchivedEvents(): ArchivedEventsState {
 
 export interface ArchivedEventState {
   status: "idle" | "loading" | "ready" | "error";
-  data: DashboardState | null;
+  data: ArchivedDashboardState | null;
   message?: string;
+}
+
+export interface ArchivedDashboardState extends DashboardState {
+  unifiedRounds: CollectorUnifiedRound[];
 }
 
 /**
@@ -94,14 +102,24 @@ export interface ArchivedEventState {
 export async function fetchArchivedEvent(
   eventId: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<DashboardState> {
+): Promise<ArchivedDashboardState> {
   const response = await fetchImpl(
     `/api/archived-events/${encodeURIComponent(eventId)}`,
   );
   if (!response.ok) {
     throw new Error(`archived event request failed: ${response.status}`);
   }
-  return (await response.json()) as DashboardState;
+  const payload = (await response.json()) as DashboardState & {
+    unifiedRounds?: CollectorUnifiedRound[];
+  };
+  const unifiedRounds = Array.isArray(payload.unifiedRounds)
+    ? payload.unifiedRounds
+    : [];
+  const dashboard = unifiedRounds.reduce(
+    (state, record) => applyCollectorRound(state, record),
+    payload as DashboardState,
+  );
+  return { ...dashboard, unifiedRounds };
 }
 
 export function useArchivedEvent(eventId: string | null): ArchivedEventState {

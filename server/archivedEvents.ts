@@ -8,6 +8,11 @@ import { and, desc, eq, isNotNull } from "drizzle-orm";
 
 import type { AppDatabase } from "./db/client.ts";
 import { bouts, events, externalRefs, fighters, people, roundStats } from "./db/schema.ts";
+import type { Storage } from "./storage.ts";
+import {
+  UNIFIED_ROUNDS_STORAGE_STREAM,
+  type UnifiedRoundRecord,
+} from "./roundStats.ts";
 import type {
   BoutStatus,
   BoutView,
@@ -27,6 +32,45 @@ export interface ArchivedEventSummary {
   name: string;
   startsAt: string;
   archivedAt: string;
+}
+
+export interface ArchivedEventSnapshot extends DashboardState {
+  unifiedRounds: UnifiedRoundRecord[];
+}
+
+const COLLECTOR_STATE_STREAM = "collector-state";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function persistedDashboardState(value: unknown): DashboardState | undefined {
+  if (!isRecord(value) || value.version !== 1 || !isRecord(value.state)) {
+    return undefined;
+  }
+  const state = value.state;
+  return isRecord(state.event) &&
+      typeof state.event.id === "string" &&
+      Array.isArray(state.event.bouts) &&
+      isRecord(state.boutViews)
+    ? state as unknown as DashboardState
+    : undefined;
+}
+
+function persistedUnifiedRound(value: unknown): UnifiedRoundRecord | undefined {
+  if (!isRecord(value) || value.version !== 1 || !isRecord(value.record)) {
+    return undefined;
+  }
+  const record = value.record;
+  return typeof record.boutId === "string" &&
+      Number.isSafeInteger(record.round) &&
+      isRecord(record.marketAtEnd)
+    ? record as unknown as UnifiedRoundRecord
+    : undefined;
+}
+
+function terminalArchiveStatus(status: BoutStatus): BoutStatus {
+  return status === "canceled" || status === "postponed" ? status : "final";
 }
 
 export async function listArchivedEvents(
@@ -127,7 +171,7 @@ export async function loadArchivedEvent(
       // An archived event is immutable review data. ESPN can leave stale
       // `upcoming`/`between-rounds` rows behind when rotation happens, but
       // replaying those statuses hides the Fight/Stats review UI.
-      status: "final" as BoutStatus,
+      status: terminalArchiveStatus(boutRow.status as BoutStatus),
       ...(boutRow.resultWinnerCorner
         ? {
             result: {
@@ -187,5 +231,94 @@ export async function loadArchivedEvent(
       provenance: { source: "espn", fetchedAt: eventRow.updatedAt, synthetic: false },
     },
     boutViews,
+  };
+}
+
+/**
+ * Combines SQLite's immutable archive marker/results with the last rich
+ * collector snapshot and its finalized round records. SQLite remains the
+ * authority for whether an event is archived; the JSONL streams restore the
+ * fields that deliberately do not fit its normalized tables (recent form,
+ * outlook, round summaries, and market-at-end snapshots).
+ */
+export async function loadArchivedEventSnapshot(
+  db: AppDatabase,
+  eventId: string,
+  storage: Storage,
+): Promise<ArchivedEventSnapshot | undefined> {
+  const databaseState = await loadArchivedEvent(db, eventId);
+  if (databaseState === undefined) return undefined;
+
+  const [stateRecords, roundRecords] = await Promise.all([
+    storage.read<unknown>(COLLECTOR_STATE_STREAM),
+    storage.read<unknown>(UNIFIED_ROUNDS_STORAGE_STREAM),
+  ]);
+  const persistedState = stateRecords
+    .map(persistedDashboardState)
+    .filter((state): state is DashboardState => state?.event.id === eventId)
+    .at(-1);
+
+  const databaseBouts = new Map(
+    databaseState.event.bouts.map((bout) => [bout.id, bout]),
+  );
+  const sourceState = persistedState ?? databaseState;
+  const archivedBouts = sourceState.event.bouts.map((bout) => {
+    const databaseBout = databaseBouts.get(bout.id);
+    return {
+      ...bout,
+      status: terminalArchiveStatus(databaseBout?.status ?? bout.status),
+      ...(databaseBout?.result === undefined
+        ? {}
+        : { result: databaseBout.result }),
+    };
+  });
+  const sourceBoutIds = new Set(archivedBouts.map((bout) => bout.id));
+  archivedBouts.push(
+    ...databaseState.event.bouts.filter((bout) => !sourceBoutIds.has(bout.id)),
+  );
+  const archivedBoutIds = new Set(archivedBouts.map((bout) => bout.id));
+  const boutViews: DashboardState["boutViews"] = {};
+  for (const bout of archivedBouts) {
+    const persistedView = sourceState.boutViews[bout.id];
+    const databaseView = databaseState.boutViews[bout.id];
+    const view = persistedView ?? databaseView;
+    if (view === undefined) continue;
+    boutViews[bout.id] = {
+      ...(databaseView ?? view),
+      ...view,
+      bout,
+      rounds: {
+        ...(databaseView?.rounds ?? {}),
+        ...view.rounds,
+      },
+    };
+  }
+
+  // The stream is append-only and can contain revisions. Map assignment
+  // keeps the newest valid record for each bout/round pair.
+  const latestRounds = new Map<string, UnifiedRoundRecord>();
+  for (const persisted of roundRecords) {
+    const record = persistedUnifiedRound(persisted);
+    if (record === undefined || !archivedBoutIds.has(record.boutId)) continue;
+    latestRounds.set(`${record.boutId}:${record.round}`, record);
+  }
+
+  return {
+    ...sourceState,
+    event: {
+      ...sourceState.event,
+      id: databaseState.event.id,
+      name: databaseState.event.name,
+      startsAt: databaseState.event.startsAt,
+      bouts: archivedBouts,
+      externalRefs: sourceState.event.externalRefs.length > 0
+        ? sourceState.event.externalRefs
+        : databaseState.event.externalRefs,
+    },
+    boutViews,
+    unifiedRounds: [...latestRounds.values()].sort(
+      (left, right) =>
+        left.boutId.localeCompare(right.boutId) || left.round - right.round,
+    ),
   };
 }

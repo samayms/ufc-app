@@ -157,7 +157,10 @@ import { isEventCalendarDay } from "./espnPollingSchedule.ts";
 import { serveStaticSpa } from "./staticSpa.ts";
 import { getDb, type AppDatabase } from "./db/client.ts";
 import { persistDashboardState } from "./eventPersistence.ts";
-import { listArchivedEvents, loadArchivedEvent } from "./archivedEvents.ts";
+import {
+  listArchivedEvents,
+  loadArchivedEventSnapshot,
+} from "./archivedEvents.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
 export const COLLECTOR_HEALTH_STREAM = SOURCE_HEALTH_STORAGE_STREAM;
@@ -1667,7 +1670,7 @@ export async function createCollector(
         url.pathname.slice("/api/archived-events/".length),
       );
       const db = persistenceDb ?? getDb();
-      const archived = await loadArchivedEvent(db, eventId);
+      const archived = await loadArchivedEventSnapshot(db, eventId, storage);
       if (!archived) {
         sendJson(response, 404, { error: "not found" }, secrets);
         return;

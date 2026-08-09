@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDashboard } from "./store/useDashboard.ts";
+import type { CollectorUnifiedRound } from "./store/collectorClient.ts";
 import { BackButton } from "./ui/BackButton.tsx";
 import { BottomNav, type AppTab } from "./ui/BottomNav.tsx";
 import { BoutHeader } from "./ui/BoutHeader.tsx";
@@ -223,10 +224,9 @@ export default function App() {
       ? scheduleSelection
       : null;
   const archivedEvent = useArchivedEvent(archivedSelectionId);
-  const archivedEspnEventId = archivedEvent.data?.event.externalRefs.find(
-    (ref) => ref.source === "espn",
-  )?.id ?? null;
-  const archivedEspnCard = useEspnCard(archivedEspnEventId);
+  const archivedEventAthletePhotos = useCurrentEventAthletePhotos(
+    archivedEvent.data?.event,
+  );
 
   // Tracks which bout the round selector was last synced to a default for,
   // so a live-data poll landing on the *same* bout (state getting a new
@@ -432,13 +432,14 @@ export default function App() {
   const resolveRound = (
     boutView: BoutView,
     selection: RoundSelection,
+    records: readonly CollectorUnifiedRound[],
   ): number =>
     selection === "total"
       ? Math.max(
           0,
-          ...(dashboard.collector?.unifiedRounds
+          ...(records
             .filter((record) => record.boutId === boutView.bout.id)
-            .map((record) => record.round) ?? []),
+            .map((record) => record.round)),
         )
       : selection;
   const selectBout = (id: string) => {
@@ -629,9 +630,14 @@ export default function App() {
   for (const bout of photoEvent.bouts) {
     const redId = fighterEspnAthleteId(bout.fighters.red.externalRefs);
     const blueId = fighterEspnAthleteId(bout.fighters.blue.externalRefs);
+    const athletePhotos = archivedSelectionId
+      ? archivedEventAthletePhotos
+      : currentEventAthletePhotos;
     photosByBoutId[bout.id] = {
-      red: cardPhotos[bout.id]?.red ?? (redId ? currentEventAthletePhotos[redId] : undefined),
-      blue: cardPhotos[bout.id]?.blue ?? (blueId ? currentEventAthletePhotos[blueId] : undefined),
+      red: cardPhotos[bout.id]?.red ??
+        (redId ? athletePhotos[redId] : undefined),
+      blue: cardPhotos[bout.id]?.blue ??
+        (blueId ? athletePhotos[blueId] : undefined),
     };
   }
 
@@ -648,7 +654,9 @@ export default function App() {
     tab === "fight"
       ? selectedFutureFight
         ? (selectedScheduleEventName ?? event.name)
-        : event.name
+        : archivedSelectionId && archivedEvent.data
+          ? archivedEvent.data.event.name
+          : event.name
       : event.name;
 
   // The Event tab's screen for a given nav entry — extracted so the swipe-
@@ -825,7 +833,7 @@ export default function App() {
     // the same fightcenter fetch a browsed-to future event already uses,
     // matched back to this bout by its ESPN-rooted id.
     const matchedEspnFight = findEspnFight(
-      archivedSelectionId ? archivedEspnCard.card : currentEspnCard.card,
+      archivedSelectionId ? espnCard.card : currentEspnCard.card,
       entryView.bout.id,
     );
     if (entryView.bout.status === "upcoming") {
@@ -848,6 +856,9 @@ export default function App() {
     // is also what the round-syncing effect above settles on once the
     // navigation actually lands.
     const entryRound = forUnderlay ? defaultRoundSelection(entryView) : round;
+    const entryCollectorRounds = archivedSelectionId
+      ? archivedEvent.data?.unifiedRounds ?? []
+      : dashboard.collector?.unifiedRounds ?? [];
     const activeSections = fightSectionsFor(
       entryView.bout.status,
       entryView.bout.currentRound,
@@ -864,7 +875,9 @@ export default function App() {
           status={entryView.bout.status}
           currentRound={entryView.bout.currentRound}
           result={entryView.bout.result}
-          clockSync={dashboard.collector?.clocks[entryView.bout.id]}
+          {...(archivedSelectionId
+            ? {}
+            : { clockSync: dashboard.collector?.clocks[entryView.bout.id] })}
           // Same headshots the bout list you tapped through was already
           // showing. Without this a live or finished bout dropped to the
           // no-photo placeholder even though the photos were loaded and on
@@ -902,14 +915,18 @@ export default function App() {
               />
               <FightSummary
                 view={entryView}
-                eventStartsAt={event.startsAt}
+                eventStartsAt={
+                  archivedSelectionId && archivedEvent.data
+                    ? archivedEvent.data.event.startsAt
+                    : event.startsAt
+                }
                 selection={entryRound}
-                collectorRounds={archivedSelectionId ? [] : dashboard.collector?.unifiedRounds}
+                collectorRounds={entryCollectorRounds}
               />
               <ScorecardFeed
                 view={entryView}
-                records={archivedSelectionId ? [] : dashboard.collector?.unifiedRounds ?? []}
-                round={resolveRound(entryView, entryRound)}
+                records={entryCollectorRounds}
+                round={resolveRound(entryView, entryRound, entryCollectorRounds)}
                 allRounds={entryRound === "total"}
               />
             </>
@@ -982,12 +999,20 @@ export default function App() {
         {tab === "fight" && !selectedFutureFight && (
           <aside className="desktop-rail">
             <CardRail
-              bouts={event.bouts}
+              bouts={
+                archivedSelectionId && archivedEvent.data
+                  ? archivedEvent.data.event.bouts
+                  : event.bouts
+              }
               selectedId={selectedId ?? ""}
               onSelect={selectBout}
               photosByBoutId={photosByBoutId}
-              segmentStartTimes={event.segmentStartTimes}
-              activeBoutId={live?.id}
+              segmentStartTimes={
+                archivedSelectionId && archivedEvent.data
+                  ? archivedEvent.data.event.segmentStartTimes
+                  : event.segmentStartTimes
+              }
+              activeBoutId={archivedSelectionId ? undefined : live?.id}
             />
           </aside>
         )}

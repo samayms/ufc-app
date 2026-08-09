@@ -1507,7 +1507,7 @@ function applyCollectorObservations(
   }, dashboard);
 }
 
-function applyCollectorRound(
+export function applyCollectorRound(
   dashboard: DashboardState,
   record: CollectorUnifiedRound,
 ): DashboardState {
