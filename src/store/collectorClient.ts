@@ -1766,7 +1766,7 @@ export function createCollectorClient(
     options.createEventSource ??
     ((url: string) => new EventSource(url));
   const now = options.now ?? (() => new Date().toISOString());
-  const timeoutMs = options.bootstrapTimeoutMs ?? 1_500;
+  const timeoutMs = options.bootstrapTimeoutMs ?? 10_000;
   const baseUrl = collectorBaseUrl(options.baseUrl);
   const listeners = new Set<(snapshot: CollectorSnapshot) => void>();
   let eventSource: EventSourceLike | undefined;
@@ -2027,7 +2027,6 @@ export function createCollectorClient(
             void this.start();
           }, 500);
         }
-        return;
       } finally {
         clearTimeout(timeout);
         abortController = undefined;
