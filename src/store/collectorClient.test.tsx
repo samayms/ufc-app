@@ -377,6 +377,33 @@ describe("collector browser client", () => {
     expect(events?.closed).toBe(true);
   });
 
+  it("recovers from a failed REST bootstrap through the SSE bootstrap without a refresh", async () => {
+    const fixture = await assembleDashboard();
+    const client = createCollectorClient({
+      baseUrl: "http://collector.test",
+      fetch: async () => {
+        throw new DOMException("bootstrap timed out", "AbortError");
+      },
+      createEventSource: (url) => new MockEventSource(url),
+    });
+
+    await client.start();
+    expect(client.getSnapshot().dashboard).toBeNull();
+    expect(MockEventSource.latest?.url).toBe("http://collector.test/api/events");
+    MockEventSource.latest?.emit("bootstrap", {
+      state: fixture,
+      boutMappings: [],
+      health: {},
+      unifiedRounds: [],
+    });
+
+    expect(client.getSnapshot()).toMatchObject({
+      connection: "connected",
+      dashboard: expect.objectContaining({ event: fixture.event }),
+    });
+    client.close();
+  });
+
   it("hydrates and refreshes ESPN clock synchronization points", async () => {
     const fixture = await assembleDashboard();
     let nowCall = 0;
