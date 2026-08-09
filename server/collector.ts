@@ -965,6 +965,18 @@ export async function createCollector(
     unsubscribers.push(() => clearInterval(persistTimer));
   }
 
+  // Assigned after the market transports/pollers are constructed below.
+  // Lifecycle observations do not run until collector.start(), so the
+  // callback can safely use this seam to recover an opening boundary when a
+  // process starts during ESPN's explicit pre-fight/walkout phase and the
+  // lifecycle machine correctly suppresses a replayed FIGHT_STARTED event.
+  const preFightCaptureInFlight = new Set<string>();
+  let capturePreFightOdds = (
+    _boutId: string,
+    _takenAt: string,
+    _refresh?: boolean,
+  ): void => undefined;
+
   const initializedBoutMappings = await createBoutMappingRegistry({
     event: loaded.event,
     storage,
@@ -1048,6 +1060,19 @@ export async function createCollector(
         dashboardChanged =
           applyLifecycleObservationToDashboard(loaded, observation) ||
           dashboardChanged;
+        const atOpeningBoundary =
+          observation.preFight === true ||
+          (observation.state === "in" && observation.period === 0);
+        const hasOpeningSnapshot = initializedTickStore
+          .getSnapshots(observation.boutId)
+          .some((snapshot) => snapshot.boundaryType === "pre-fight");
+        if (
+          atOpeningBoundary &&
+          !hasOpeningSnapshot &&
+          !preFightCaptureInFlight.has(observation.boutId)
+        ) {
+          capturePreFightOdds(observation.boutId, observation.receivedAt);
+        }
       }
       if (dashboardChanged) {
         state = loaded;
@@ -1557,11 +1582,13 @@ export async function createCollector(
    * which just ended.  Pin the current book at that handoff so a later live
    * tick cannot overwrite the pre-fight comparison in the browser.
    */
-  const capturePreFightOdds = (
+  capturePreFightOdds = (
     boutId: string,
     takenAt: string,
     refresh = false,
   ): void => {
+    if (preFightCaptureInFlight.has(boutId)) return;
+    preFightCaptureInFlight.add(boutId);
     void (async () => {
       // Refresh the next bout's sportsbook line first.  The handoff must not
       // pin the previous bout's cached market merely because its final signal
@@ -1605,7 +1632,9 @@ export async function createCollector(
         // dropping it because a transport rebuild exceeded its timeout.
         undefined,
       );
-    })().catch(() => undefined);
+    })()
+      .catch(() => undefined)
+      .finally(() => preFightCaptureInFlight.delete(boutId));
   };
 
   const nextUpcomingBoutAfter = (boutId: string): string | undefined => {

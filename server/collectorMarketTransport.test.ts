@@ -143,6 +143,75 @@ describe("collector market transport wiring", () => {
     ]));
   });
 
+  it("captures a durable opening on an initial ESPN pre-fight observation without FIGHT_STARTED", async () => {
+    const storage = new MemoryStorage();
+    const collector = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage,
+      market: { transports: [] },
+      lifecycle: {
+        espnProvider: {
+          async fetchObservations() {
+            return [{
+              boutId: "bout-4",
+              state: "pre" as const,
+              period: 0,
+              completed: false,
+              preFight: true as const,
+              receivedAt: "2026-07-28T01:15:00.000Z",
+            }];
+          },
+        },
+      },
+    });
+    collectors.push(collector);
+    await collector.tickStore.ingest({
+      source: "kalshi",
+      boutId: "bout-4",
+      marketType: "fight-winner",
+      outcome: "red",
+      bid: 64,
+      ask: 66,
+      receivedAt: "2026-07-28T01:14:59.000Z",
+      stale: false,
+    });
+    await collector.tickStore.ingest({
+      source: "kalshi",
+      boutId: "bout-4",
+      marketType: "fight-winner",
+      outcome: "blue",
+      bid: 34,
+      ask: 36,
+      receivedAt: "2026-07-28T01:14:59.000Z",
+      stale: false,
+    });
+
+    await collector.lifecycleDriver.start();
+    await vi.waitFor(() => {
+      expect(collector.tickStore.getSnapshots("bout-4")).toEqual([
+        expect.objectContaining({
+          source: "kalshi",
+          round: 0,
+          boundaryType: "pre-fight",
+          label: "pre-fight-open",
+        }),
+      ]);
+    });
+    expect(
+      collector.eventBus.getEventLog().filter((event) =>
+        event.type === "FIGHT_STARTED" && event.boutId === "bout-4"
+      ),
+    ).toEqual([]);
+    await expect(storage.read("market-snapshots")).resolves.toEqual([
+      expect.objectContaining({
+        snapshot: expect.objectContaining({
+          boutId: "bout-4",
+          boundaryType: "pre-fight",
+        }),
+      }),
+    ]);
+  });
+
   it("does not restart live market streams for an already completed card", async () => {
     const state = await loadFixtureState();
     expect(eventNeedsLiveMarketTransport(state)).toBe(true);
