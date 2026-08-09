@@ -1,7 +1,8 @@
 /**
- * Permanently freezes events 24h after their last bout goes final. Modeled
- * on UpcomingScheduler (server/scheduler.ts) — same injectable clock/db,
- * same "one sweep is idempotent, safe to retry" contract.
+ * Permanently freezes events after their card is complete or a newer event
+ * has superseded them. Modeled on UpcomingScheduler (server/scheduler.ts) —
+ * same injectable clock/db, same "one sweep is idempotent, safe to retry"
+ * contract.
  */
 import { eq, isNull } from "drizzle-orm";
 

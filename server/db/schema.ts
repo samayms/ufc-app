@@ -103,9 +103,9 @@ export const events = sqliteTable("events", {
   city: text("city"),
   country: text("country"),
   status: text("status"),
-  /** Set once, 24h after the event's last bout goes final. Presence means
-   *  every row tied to this event (bouts, fighters, round_stats,
-   *  commentary) is permanently immutable. */
+  /** Set once the event is complete or superseded by a newer live card.
+   *  Presence means every row tied to this event (bouts, fighters,
+   *  round_stats, commentary) is permanently immutable. */
   archivedAt: text("archived_at"),
   updatedAt: text("updated_at")
     .notNull()
