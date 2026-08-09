@@ -15,6 +15,17 @@ import defaultFighterHeadshot from "../assets/default-fighter-headshot.png";
  */
 export const DEFAULT_FIGHTER_PHOTO: string = defaultFighterHeadshot;
 
+export function resolveFighterPhoto(
+  photoUrl: string | undefined,
+  failedUrl: string | undefined,
+): { src: string; isPlaceholder: boolean } {
+  const isPlaceholder = !photoUrl || failedUrl === photoUrl;
+  return {
+    src: isPlaceholder ? DEFAULT_FIGHTER_PHOTO : photoUrl,
+    isPlaceholder,
+  };
+}
+
 /**
  * Resolves which image an avatar should show, falling back to the shared
  * placeholder both when no URL was supplied and when the supplied one fails
@@ -30,11 +41,13 @@ export function useFighterPhoto(photoUrl: string | undefined): {
   isPlaceholder: boolean;
   onError: () => void;
 } {
-  const [failed, setFailed] = useState(false);
-  const isPlaceholder = !photoUrl || failed;
+  // Track the URL that failed rather than a permanent boolean. BoutHeader is
+  // reused while navigating between fights; a failure on the previous
+  // fighter must not poison the next fighter's valid ESPN portrait.
+  const [failedUrl, setFailedUrl] = useState<string | undefined>();
+  const resolved = resolveFighterPhoto(photoUrl, failedUrl);
   return {
-    src: isPlaceholder ? DEFAULT_FIGHTER_PHOTO : photoUrl,
-    isPlaceholder,
-    onError: () => setFailed(true),
+    ...resolved,
+    onError: () => setFailedUrl(photoUrl),
   };
 }

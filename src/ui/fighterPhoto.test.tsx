@@ -2,7 +2,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BoutHeader } from "./BoutHeader.tsx";
 import { MatchupCard } from "./MatchupCard.tsx";
-import { DEFAULT_FIGHTER_PHOTO } from "./fighterPhoto.ts";
+import {
+  DEFAULT_FIGHTER_PHOTO,
+  resolveFighterPhoto,
+} from "./fighterPhoto.ts";
 import type { Fighter } from "../schema.ts";
 
 const fighter = (name: string): Fighter =>
@@ -71,5 +74,13 @@ describe("missing fighter photos", () => {
   it("never falls back to initials anywhere", () => {
     expect(boutHeader()).not.toMatch(/>IM</);
     expect(boutHeader()).not.toMatch(/>T</);
+  });
+
+  it("does not carry a previous fighter's image failure into the next fight", () => {
+    expect(resolveFighterPhoto("https://espn.example/next.png", "https://espn.example/previous.png"))
+      .toEqual({
+        src: "https://espn.example/next.png",
+        isPlaceholder: false,
+      });
   });
 });
