@@ -759,6 +759,8 @@ export default function App() {
               bouts={archivedEvent.data.event.bouts}
               selectedId={boutIdFor(entry) ?? ""}
               onSelect={selectBout}
+              photosByBoutId={photosByBoutId}
+              segmentStartTimes={archivedEvent.data.event.segmentStartTimes}
             />
           ) : archivedEvent.status === "error" ? (
             <div className="state-notice" role="status">
