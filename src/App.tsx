@@ -141,6 +141,22 @@ export function fightSectionsFor(
   return undefined;
 }
 
+/**
+ * Old immutable archives can predate a final ESPN result being persisted.
+ * Use only the matching archived fightcenter result as a display fallback;
+ * never overwrite a stored result or synthesize one from a score.
+ */
+export function archivedResultDisplayView(
+  view: BoutView,
+  espnFight: EspnScheduledFight | undefined,
+  archived: boolean,
+): BoutView {
+  if (!archived || view.bout.result !== undefined || espnFight?.result === undefined) {
+    return view;
+  }
+  return { ...view, bout: { ...view.bout, result: espnFight.result } };
+}
+
 /** Whether the reader has asked the OS to keep motion to a minimum — the
  *  same signal screen-transition.css honours for its slide keyframes. */
 function prefersReducedMotion(): boolean {
@@ -838,6 +854,11 @@ export default function App() {
       archivedSelectionId ? espnCard.card : currentEspnCard.card,
       entryView.bout.id,
     );
+    const displayView = archivedResultDisplayView(
+      entryView,
+      matchedEspnFight,
+      archivedSelectionId !== null,
+    );
     if (entryView.bout.status === "upcoming") {
       const canonicalFight = boutToScheduledFight(entryView.bout);
       return (
@@ -870,13 +891,13 @@ export default function App() {
     return (
       <div className="fight-screen">
         <BoutHeader
-          weightClassLabel={WEIGHT_LABEL[entryView.bout.weightClass] ?? ""}
-          titleFight={entryView.bout.titleFight}
-          scheduledRounds={entryView.bout.scheduledRounds}
-          fighters={entryView.bout.fighters}
-          status={entryView.bout.status}
-          currentRound={entryView.bout.currentRound}
-          result={entryView.bout.result}
+          weightClassLabel={WEIGHT_LABEL[displayView.bout.weightClass] ?? ""}
+          titleFight={displayView.bout.titleFight}
+          scheduledRounds={displayView.bout.scheduledRounds}
+          fighters={displayView.bout.fighters}
+          status={displayView.bout.status}
+          currentRound={displayView.bout.currentRound}
+          result={displayView.bout.result}
           {...(archivedSelectionId
             ? {}
             : { clockSync: dashboard.collector?.clocks[entryView.bout.id] })}
@@ -894,8 +915,8 @@ export default function App() {
             ? {}
             : { onOpen: () => changeSection("odds") })}
           resultWinner={
-            entryView.bout.status === "final"
-              ? entryView.bout.result?.winner
+            displayView.bout.status === "final"
+              ? displayView.bout.result?.winner
               : undefined
           }
         />
@@ -911,7 +932,7 @@ export default function App() {
           {entry.section === "summary" && sectionAllowed("summary") && (
             <>
               <RoundSelector
-                view={entryView}
+                view={displayView}
                 value={entryRound}
                 onChange={forUnderlay ? () => {} : setRound}
               />
@@ -940,7 +961,7 @@ export default function App() {
                 value={entryRound}
                 onChange={forUnderlay ? () => {} : setRound}
               />
-              <LiveStatsPanel view={entryView} selection={entryRound} />
+              <LiveStatsPanel view={displayView} selection={entryRound} />
             </>
           )}
           {entry.section === "odds" && entryView.bout.status !== "final" && (
@@ -952,8 +973,8 @@ export default function App() {
           )}
           {entry.section === "tale" && (
             <UpcomingTaleSection
-              fighters={entryView.bout.fighters}
-              outlook={entryView.bout.outlook}
+              fighters={displayView.bout.fighters}
+              outlook={displayView.bout.outlook}
               {...(matchedEspnFight
                 ? { statValues: taleStatValues(matchedEspnFight) }
                 : {})}

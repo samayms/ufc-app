@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { BoutView } from "../schema.ts";
-import { fightSectionsFor, nextRoundSync } from "../App.tsx";
+import { archivedResultDisplayView, fightSectionsFor, nextRoundSync } from "../App.tsx";
 import {
   assembleDashboard,
   collectorDisabled,
@@ -42,6 +42,14 @@ function toOddsPanelProps(view: BoutView) {
 }
 
 describe("dashboard state surfaces", () => {
+  it("uses an ESPN archived result only when the stored archive has none", async () => {
+    const state = await assembleDashboard();
+    const view = state.boutViews["bout-main"] as BoutView;
+    const fallback = { competitionId: view.bout.id, result: { winner: "blue" as const, method: "submission" as const, round: 2, time: "1:23" } };
+    expect(archivedResultDisplayView(view, fallback as never, true).bout.result).toEqual(fallback.result);
+    const stored = { ...view, bout: { ...view.bout, result: { winner: "red" as const, method: "ko-tko" as const } } };
+    expect(archivedResultDisplayView(stored, fallback as never, true).bout.result).toEqual(stored.bout.result);
+  });
   it("parses only supported visual demo states", () => {
     expect(dashboardDemoState("?demo=stale")).toBe("stale");
     expect(dashboardDemoState("?demo=error")).toBe("error");
