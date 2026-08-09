@@ -1,4 +1,4 @@
-import { americanToImpliedProb } from "../lib/oddsMath.ts";
+import { americanToImpliedProb, devigPair } from "../lib/oddsMath.ts";
 import type {
   Bout,
   BoutResult,
@@ -1138,6 +1138,36 @@ function applyMarketUpdateResult(
   tick: MarketTick,
   historyMode: "seed" | "append",
 ): { dashboard: DashboardState; market: OddsSnapshot["market"] } | null {
+  if (
+    (tick.source === "kalshi" || tick.source === "polymarket") &&
+    tick.marketType === "fight-distance"
+  ) {
+    const raw = tick.impliedProbability ??
+      (tick.bid !== undefined && tick.ask !== undefined
+        ? (tick.bid + tick.ask) / (tick.source === "kalshi" ? 200 : 2)
+        : undefined);
+    const view = dashboard.boutViews[tick.boutId];
+    if (view === undefined || raw === undefined || !Number.isFinite(raw)) return null;
+    const current = view.liveDecisionOdds?.[tick.source];
+    const isDecision = tick.outcome.toLowerCase() === "decision";
+    const isFinish = tick.outcome.toLowerCase() === "finish";
+    if (!isDecision && !isFinish) return null;
+    // Kalshi's one YES/NO book provides both sides; Polymarket sends one token
+    // per side and is published only after the pair is complete.
+    const decisionRaw = isDecision ? raw : undefined;
+    const finishRaw = isFinish ? raw : undefined;
+    const pair = tick.source === "kalshi"
+      ? { decision: decisionRaw, finish: decisionRaw === undefined ? undefined : 1 - decisionRaw }
+      : { decision: decisionRaw ?? (current as { _decisionRaw?: number } | undefined)?._decisionRaw, finish: finishRaw ?? (current as { _finishRaw?: number } | undefined)?._finishRaw };
+    if (pair.decision === undefined || pair.finish === undefined) {
+      // Retain partial Polymarket sides privately until its paired token lands.
+      const partial = { ...(current ?? { decisionProbability: 0, finishProbability: 0, receivedAt: tick.receivedAt }), ...(isDecision ? { _decisionRaw: raw } : { _finishRaw: raw }), receivedAt: tick.receivedAt };
+      return { market: MARKET_TO_ODDS_SNAPSHOT[tick.source], dashboard: { ...dashboard, boutViews: { ...dashboard.boutViews, [tick.boutId]: { ...view, liveDecisionOdds: { ...view.liveDecisionOdds, [tick.source]: partial } } } } };
+    }
+    const deVigged = devigPair(pair.decision, pair.finish);
+    const next = { decisionProbability: deVigged.red, finishProbability: deVigged.blue, receivedAt: tick.receivedAt, ...(tick.sourceUpdatedAt === undefined ? {} : { sourceUpdatedAt: tick.sourceUpdatedAt }), ...(tick.volume === undefined ? {} : { volume: tick.volume }), ...(tick.source === "polymarket" ? { _decisionRaw: pair.decision, _finishRaw: pair.finish } : {}) };
+    return { market: MARKET_TO_ODDS_SNAPSHOT[tick.source], dashboard: { ...dashboard, boutViews: { ...dashboard.boutViews, [tick.boutId]: { ...view, liveDecisionOdds: { ...view.liveDecisionOdds, [tick.source]: next } } } } };
+  }
   const market = MARKET_TO_ODDS_SNAPSHOT[tick.source];
   const view = dashboard.boutViews[tick.boutId];
   if (view === undefined) return null;

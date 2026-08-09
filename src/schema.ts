@@ -407,6 +407,17 @@ export interface BoutView {
    * render absence, never substitute the current price as if it were opening.
    */
   preFightOdds: Partial<Record<OddsSnapshot["market"], OddsSnapshot>>;
+  /** De-vigged live-only binary Fight to Go the Distance quote. */
+  liveDecisionOdds?: Partial<Record<"kalshi" | "polymarket", {
+    decisionProbability: number;
+    finishProbability: number;
+    receivedAt: string;
+    sourceUpdatedAt?: string;
+    volume?: number;
+    /** Retained only while waiting for Polymarket's paired token. */
+    _decisionRaw?: number;
+    _finishRaw?: number;
+  }>>;
 }
 
 export interface DashboardState {

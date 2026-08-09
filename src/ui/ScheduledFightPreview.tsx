@@ -92,16 +92,28 @@ export function liveBoutToUpcomingOdds(view: BoutView): UpcomingBoutOdds {
   const synthetic = Object.values(view.latestOdds).some(
     (snapshot) => snapshot.provenance.synthetic,
   );
+  const liveDecision = (Object.entries(view.liveDecisionOdds ?? {}) as Array<[
+    "kalshi" | "polymarket",
+    NonNullable<NonNullable<BoutView["liveDecisionOdds"]>["kalshi"]>,
+  ]>).filter(([, value]) => value !== undefined)
+    .filter(([, value]) => value._decisionRaw !== undefined && value._finishRaw !== undefined || value._decisionRaw === undefined && value._finishRaw === undefined)
+    .sort(([, left], [, right]) => Date.parse(right.receivedAt) - Date.parse(left.receivedAt))[0];
   return {
     boutId: view.bout.id,
     espnEventId: view.bout.eventId,
     redFighter: view.bout.fighters.red.name,
     blueFighter: view.bout.fighters.blue.name,
     providers,
-    decision: {
-      state: "not_listed",
-      fetchedAt: new Date().toISOString(),
-      synthetic,
+    decision: liveDecision === undefined ? {
+      state: "not_listed", fetchedAt: new Date().toISOString(), synthetic,
+    } : {
+      state: "loaded",
+      decisionProbability: liveDecision[1].decisionProbability,
+      finishProbability: liveDecision[1].finishProbability,
+      source: liveDecision[0],
+      fetchedAt: liveDecision[1].receivedAt,
+      updatedAt: liveDecision[1].sourceUpdatedAt ?? liveDecision[1].receivedAt,
+      synthetic: false,
     },
   };
 }
@@ -194,7 +206,7 @@ export function UpcomingOddsSection({
   const blueName = fight.blue.name.split(" ").at(-1) ?? fight.blue.name;
   const upcomingBout = findUpcomingBout(upcoming.document, fight.competitionId);
   const liveBout = liveView ? liveBoutToUpcomingOdds(liveView) : undefined;
-  const bout = liveBout && Object.keys(liveBout.providers).length > 0
+  const bout = liveBout && (Object.keys(liveBout.providers).length > 0 || liveBout.decision.state === "loaded")
     ? {
         ...liveBout,
         // A live transport can have a price for one market while another is
@@ -206,12 +218,12 @@ export function UpcomingOddsSection({
           ...upcomingBout?.providers,
           ...liveBout.providers,
         },
-        // liveBoutToUpcomingOdds always stamps decision as not_listed — the
-        // live tick pipeline has never carried a "go the distance" market.
-        // The fight starting doesn't make a real distance market the
-        // upcoming-odds sync already had stop existing; keep it instead of
-        // blanking it out the moment any live moneyline odds show up.
-        decision: upcomingBout?.decision ?? liveBout.decision,
+        // During a live bout, only the dedicated Kalshi/Polymarket binary
+        // stream may replace the frozen pre-fight distance price. Sportsbook
+        // distance markets therefore cannot leak into live GTD display.
+        decision: (liveView?.bout.status === "in-round" || liveView?.bout.status === "between-rounds") && liveBout.decision.state === "loaded"
+          ? liveBout.decision
+          : upcomingBout?.decision ?? liveBout.decision,
       }
     : upcomingBout;
 

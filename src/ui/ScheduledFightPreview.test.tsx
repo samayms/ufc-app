@@ -103,6 +103,19 @@ describe("ScheduledFightPreview", () => {
     expect(html).toContain("93%");
   });
 
+  it("prefers a de-vigged live Kalshi distance quote over the frozen pre-fight value", () => {
+    const liveView: BoutView = {
+      bout: { ...bout, status: "in-round", currentRound: 1 }, rounds: {},
+      latestOdds: {}, oddsHistory: {}, marketMoves: {}, preFightOdds: {},
+      liveDecisionOdds: {
+        kalshi: { decisionProbability: 0.7, finishProbability: 0.3, receivedAt: "2026-08-08T01:00:00Z" },
+      },
+    };
+    const html = renderToStaticMarkup(<UpcomingOddsSection fight={boutToScheduledFight(bout)} upcoming={upcoming} liveView={liveView} />);
+    expect(html).toContain("70%");
+    expect(html).toContain("30%");
+  });
+
   it("shows a finished past-event fight as Final, not Upcoming", () => {
     const finishedBout: Bout = {
       ...bout,
