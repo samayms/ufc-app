@@ -27,6 +27,7 @@ describe("EventArchiver", () => {
     const db = freshDb();
     const now = new Date("2026-02-01T00:00:00.000Z");
     seed(db, ["final", "final"], new Date(now.getTime() - ARCHIVE_DELAY_MS - 1000).toISOString());
+    db.update(schema.bouts).set({ resultWinnerCorner: "red" }).run();
 
     const archiver = new EventArchiver({ db, now: () => now });
     const result = await archiver.sweepOnce();
@@ -39,6 +40,7 @@ describe("EventArchiver", () => {
     const db = freshDb();
     const now = new Date("2026-02-01T00:00:00.000Z");
     seed(db, ["final"], new Date(now.getTime() - 1000).toISOString());
+    db.update(schema.bouts).set({ resultWinnerCorner: "red" }).run();
 
     const archiver = new EventArchiver({ db, now: () => now });
     const result = await archiver.sweepOnce();
@@ -51,8 +53,9 @@ describe("EventArchiver", () => {
     const db = freshDb();
     const now = new Date("2026-02-01T00:00:00.000Z");
     seed(db, ["final"], new Date(now.getTime() - 1000).toISOString());
+    db.update(schema.bouts).set({ resultWinnerCorner: "red" }).run();
     db.insert(schema.events).values({ id: "current", name: "Current" }).run();
-    db.insert(schema.bouts).values({ id: "current-bout", eventId: "current", status: "final", updatedAt: now.toISOString() }).run();
+    db.insert(schema.bouts).values({ id: "current-bout", eventId: "current", status: "final", resultWinnerCorner: "red", updatedAt: now.toISOString() }).run();
 
     const result = await new EventArchiver({ db, now: () => now })
       .sweepOnce({ immediate: true, excludeEventId: "current" });
@@ -72,7 +75,19 @@ describe("EventArchiver", () => {
     expect(result.archived).toEqual([]);
   });
 
-  it("archives a stale-status card only when a later current event supersedes it", async () => {
+  it("does not freeze a final bout before ESPN has supplied its result", async () => {
+    const db = freshDb();
+    const now = new Date("2026-02-01T00:00:00.000Z");
+    seed(db, ["final"], new Date(now.getTime() - ARCHIVE_DELAY_MS - 1000).toISOString());
+
+    const result = await new EventArchiver({ db, now: () => now })
+      .sweepOnce({ immediate: true });
+
+    expect(result.archived).toEqual([]);
+    expect(db.select().from(schema.events).get()?.archivedAt).toBeNull();
+  });
+
+  it("keeps a stale-status card writable until ESPN results are persisted", async () => {
     const db = freshDb();
     const now = new Date("2026-02-01T00:00:00.000Z");
     db.insert(schema.events).values([
@@ -86,14 +101,31 @@ describe("EventArchiver", () => {
     const result = await new EventArchiver({ db, now: () => now }).sweepOnce({
       excludeEventId: "current", supersededBefore: "2026-02-01T12:00:00.000Z", immediate: true,
     });
-    expect(result.archived).toEqual(["old"]);
+    expect(result.archived).toEqual([]);
+    expect(db.select().from(schema.events).all().find((event) => event.id === "old")?.archivedAt).toBeNull();
     expect(db.select().from(schema.events).all().find((event) => event.id === "future")?.archivedAt).toBeNull();
+  });
+
+  it("archives a superseded stale-status card once every bout has a durable result", async () => {
+    const db = freshDb();
+    const now = new Date("2026-02-01T00:00:00.000Z");
+    db.insert(schema.events).values({ id: "old", name: "Old", startTime: "2026-01-25T00:00:00.000Z" }).run();
+    db.insert(schema.bouts).values({
+      id: "old-stale", eventId: "old", status: "upcoming", resultWinnerCorner: "blue", updatedAt: now.toISOString(),
+    }).run();
+
+    const result = await new EventArchiver({ db, now: () => now }).sweepOnce({
+      supersededBefore: "2026-02-01T12:00:00.000Z", immediate: true,
+    });
+
+    expect(result.archived).toEqual(["old"]);
   });
 
   it("is idempotent — a second sweep does nothing to an already-archived event", async () => {
     const db = freshDb();
     const now = new Date("2026-02-01T00:00:00.000Z");
     seed(db, ["final"], new Date(now.getTime() - ARCHIVE_DELAY_MS - 1000).toISOString());
+    db.update(schema.bouts).set({ resultWinnerCorner: "red" }).run();
 
     const archiver = new EventArchiver({ db, now: () => now });
     await archiver.sweepOnce();

@@ -225,6 +225,25 @@ export interface LoadLiveEventStateOptions {
 }
 
 /**
+ * Reads one known ESPN card without applying the live-card review window.
+ * Rollover uses this for the outgoing event: ESPN may publish its decisive
+ * results only after the next card has become the schedule's current event.
+ */
+export async function loadEspnEventState(
+  eventId: string,
+  options: Pick<LoadLiveEventStateOptions, "now" | "scheduleSource"> = {},
+): Promise<DashboardState | undefined> {
+  const source = options.scheduleSource ?? createEspnScheduleSource();
+  const card = await source.getCard(eventId);
+  if (card === null) return undefined;
+  const state = espnCardToDashboardState(
+    card,
+    (options.now?.() ?? new Date()).toISOString(),
+  );
+  return state.event.bouts.length > 0 ? state : undefined;
+}
+
+/**
  * Loads the nearest upcoming ESPN UFC card as the live dashboard state.
  *
  * "Nearest upcoming" is what the owner is watching: during an event ESPN keeps

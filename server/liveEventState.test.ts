@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { espnCardToDashboardState, loadLiveEventState } from "./liveEventState.ts";
+import { espnCardToDashboardState, loadEspnEventState, loadLiveEventState } from "./liveEventState.ts";
 import type {
   EspnScheduledCard,
   EspnScheduledEventSummary,
@@ -53,6 +53,22 @@ function fakeScheduleSource(
 }
 
 describe("loadLiveEventState event selection", () => {
+  it("loads a known outgoing event even after its live review window closes", async () => {
+    const completedCard = card();
+    completedCard.eventId = "600000001";
+    completedCard.startsAt = "2025-10-11T20:00:00.000Z";
+    completedCard.sections[0]!.fights[0]!.status = "final";
+    completedCard.sections[0]!.fights[0]!.result = { winner: "red", method: "decision-unanimous" };
+    const source = fakeScheduleSource([], { "600000001": completedCard });
+
+    const state = await loadEspnEventState("600000001", {
+      scheduleSource: source,
+      now: () => new Date("2026-08-03T12:00:00Z"),
+    });
+
+    expect(state?.event.bouts[0]?.result).toEqual({ winner: "red", method: "decision-unanimous" });
+  });
+
   it("skips a completed event even when the schedule query returns it before the upcoming one", async () => {
     const completedCard = card();
     completedCard.eventId = "600000001";

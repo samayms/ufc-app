@@ -20,12 +20,14 @@ import { loadConfig } from "./config.ts";
 import { closeDb, getDb } from "./db/client.ts";
 import { runMigrations } from "./db/migrate.ts";
 import { EventArchiver } from "./eventArchiver.ts";
+import { persistDashboardState } from "./eventPersistence.ts";
+import { reconcileEspnEventResults } from "./eventResultReconciler.ts";
 import {
   EVENT_ROTATION_STORAGE_STREAM,
   EventRotationSupervisor,
 } from "./eventRotationSupervisor.ts";
 import { materializeKalshiPrivateKey } from "./kalshiKeyMaterializer.ts";
-import { loadLiveEventState } from "./liveEventState.ts";
+import { loadEspnEventState, loadLiveEventState } from "./liveEventState.ts";
 import { JsonlStorage } from "./storage.ts";
 import {
   createEspnScheduleSource,
@@ -132,6 +134,34 @@ export async function startApp(): Promise<{
               ...collectorOptions,
               stateLoader: async () => nextState,
             });
+            // ESPN can settle the outgoing card only after it has stopped
+            // being the schedule's current event. Capture that authoritative
+            // fightcenter card before the archival sweep makes the old rows
+            // immutable. A failed refresh is safe: the archiver's result
+            // completeness check leaves the card writable for the next pass.
+            if (activeEventId !== undefined) {
+              try {
+                const outgoingState = await loadEspnEventState(activeEventId, {
+                  scheduleSource,
+                });
+                if (outgoingState !== undefined) {
+                  await persistDashboardState(getDb(), outgoingState);
+                  const repaired = reconcileEspnEventResults(
+                    getDb(),
+                    outgoingState,
+                  );
+                  if (repaired.updatedBoutIds.length > 0) {
+                    console.log(
+                      `Reconciled ESPN results for ${activeEventId}: ${repaired.updatedBoutIds.join(", ")}`,
+                    );
+                  }
+                }
+              } catch (error) {
+                console.warn(
+                  `Unable to refresh outgoing ESPN event ${activeEventId} before archive: ${String(error)}`,
+                );
+              }
+            }
             // The outgoing card is now superseded by a verified new ESPN
             // event. Archive it even if its last persisted bout labels went
             // stale before ESPN moved on.

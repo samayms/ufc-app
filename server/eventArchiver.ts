@@ -50,6 +50,24 @@ export class EventArchiver {
 
     for (const candidate of candidates) {
       if (candidate.id === options.excludeEventId) continue;
+      const eventBouts = this.db
+        .select({
+          status: bouts.status,
+          resultWinnerCorner: bouts.resultWinnerCorner,
+          updatedAt: bouts.updatedAt,
+        })
+        .from(bouts)
+        .where(eq(bouts.eventId, candidate.id))
+        .all();
+
+      if (eventBouts.length === 0) continue;
+      // A winner, draw, or no-contest is the minimum durable evidence needed
+      // for every fought bout. This also permits a stale lifecycle label to
+      // be archived once its results are known, without turning an unknown
+      // result into a permanent fake final.
+      if (!eventBouts.every((bout) =>
+        FINAL_STATUSES.has(bout.status) || bout.resultWinnerCorner !== null
+      )) continue;
       const superseded = options.supersededBefore !== undefined &&
         candidate.startTime !== null &&
         Date.parse(candidate.startTime) < Date.parse(options.supersededBefore);
@@ -60,14 +78,14 @@ export class EventArchiver {
         this.log(`archived superseded event ${candidate.id}`);
         continue;
       }
-      const eventBouts = this.db
-        .select({ status: bouts.status, updatedAt: bouts.updatedAt })
-        .from(bouts)
-        .where(eq(bouts.eventId, candidate.id))
-        .all();
-
-      if (eventBouts.length === 0) continue;
       if (!eventBouts.every((bout) => FINAL_STATUSES.has(bout.status))) continue;
+      // "final" without a winner/draw/no-contest is an ESPN intermediate
+      // payload, not immutable review data. In particular, rotation used to
+      // freeze exactly that incomplete state and the archive guard then made
+      // the real result impossible to persist.
+      if (!eventBouts.every((bout) =>
+        bout.status !== "final" || bout.resultWinnerCorner !== null
+      )) continue;
 
       const lastUpdatedAt = Math.max(...eventBouts.map((bout) => Date.parse(bout.updatedAt)));
       if (!options.immediate && this.now().getTime() - lastUpdatedAt < ARCHIVE_DELAY_MS) continue;

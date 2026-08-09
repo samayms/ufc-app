@@ -17,6 +17,7 @@
     "typecheck": "tsc -b --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env -e \"const {runMigrations}=await import('./server/db/migrate.ts'); runMigrations(); console.log('Migrations applied.');\" --input-type=module",
+    "repair:espn-results": "node --env-file-if-exists=.env server/reconcileEspnResults.ts",
     "sync:upcoming": "node --env-file-if-exists=.env server/syncUpcoming.ts",
     "sync:upcoming:live": "DATA_MODE=live node --env-file-if-exists=.env server/syncUpcoming.ts",
     "sherdog:find": "node --env-file-if-exists=.env scripts/findSherdogLiveBlog.mjs",
