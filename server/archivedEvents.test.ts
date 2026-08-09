@@ -149,6 +149,52 @@ describe("listArchivedEvents / loadArchivedEvent", () => {
       version: 1,
       record: { ...round, boutId: "other-bout" },
     });
+    const openingSnapshot = {
+      source: "kalshi",
+      boutId: "b1",
+      round: 0,
+      boundaryType: "pre-fight",
+      label: "pre-fight-open",
+      takenAt: "2026-01-01T00:00:00.000Z",
+      fresh: true,
+      outcomes: [{
+        marketType: "fight-winner",
+        outcome: "Red Fighter",
+        bid: 59,
+        ask: 61,
+        impliedProbability: 0.6,
+        receivedAt: "2026-01-01T00:00:00.000Z",
+        stale: false,
+      }],
+    } as const;
+    await storage.append("market-snapshots", {
+      version: 1,
+      snapshot: openingSnapshot,
+    });
+    await storage.append("market-snapshots", {
+      version: 1,
+      snapshot: {
+        ...openingSnapshot,
+        takenAt: "2026-01-01T00:00:01.000Z",
+        outcomes: [{ ...openingSnapshot.outcomes[0], bid: 64, ask: 66 }],
+      },
+    });
+    await storage.append("market-snapshots", {
+      version: 1,
+      snapshot: { ...openingSnapshot, boutId: "other-bout" },
+    });
+    await storage.append("market-snapshots", {
+      version: 1,
+      snapshot: {
+        ...openingSnapshot,
+        round: 1,
+        boundaryType: "confirmed",
+      },
+    });
+    await storage.append("market-snapshots", {
+      version: 1,
+      snapshot: { source: "kalshi", boutId: "b1" },
+    });
 
     const snapshot = await loadArchivedEventSnapshot(db, "e1", storage);
     expect(snapshot?.event.bouts[0]?.status).toBe("final");
@@ -158,6 +204,15 @@ describe("listArchivedEvents / loadArchivedEvent", () => {
       .toBe("Previous Opponent");
     expect(snapshot?.unifiedRounds).toHaveLength(1);
     expect(snapshot?.unifiedRounds[0]?.finalizedAt).toBe("2026-01-01T00:12:00.000Z");
+    expect(snapshot?.marketSnapshots).toEqual([
+      expect.objectContaining({
+        source: "kalshi",
+        boutId: "b1",
+        boundaryType: "pre-fight",
+        takenAt: "2026-01-01T00:00:01.000Z",
+        outcomes: [expect.objectContaining({ bid: 64, ask: 66 })],
+      }),
+    ]);
   });
 
   it("returns undefined for an event that is not archived", async () => {

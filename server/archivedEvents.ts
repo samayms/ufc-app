@@ -72,6 +72,38 @@ function persistedUnifiedRound(value: unknown): UnifiedRoundRecord | undefined {
     : undefined;
 }
 
+const MARKET_SOURCES = new Set([
+  "kalshi", "polymarket", "odds-api-io", "the-odds-api",
+]);
+
+function persistedPreFightMarketSnapshot(
+  value: unknown,
+): MarketSnapshot | undefined {
+  if (!isRecord(value) || value.version !== 1 || !isRecord(value.snapshot)) {
+    return undefined;
+  }
+  const snapshot = value.snapshot;
+  if (
+    !MARKET_SOURCES.has(String(snapshot.source)) ||
+    typeof snapshot.boutId !== "string" ||
+    snapshot.round !== 0 ||
+    snapshot.boundaryType !== "pre-fight" ||
+    typeof snapshot.takenAt !== "string" ||
+    typeof snapshot.fresh !== "boolean" ||
+    !Array.isArray(snapshot.outcomes) ||
+    !snapshot.outcomes.every((outcome) =>
+      isRecord(outcome) &&
+      typeof outcome.marketType === "string" &&
+      typeof outcome.outcome === "string" &&
+      typeof outcome.receivedAt === "string" &&
+      typeof outcome.stale === "boolean"
+    )
+  ) {
+    return undefined;
+  }
+  return snapshot as unknown as MarketSnapshot;
+}
+
 function terminalArchiveStatus(status: BoutStatus): BoutStatus {
   return status === "canceled" || status === "postponed" ? status : "final";
 }
@@ -308,10 +340,7 @@ export async function loadArchivedEventSnapshot(
   }
   const latestMarkets = new Map<string, MarketSnapshot>();
   for (const persisted of marketRecords) {
-    const snapshot = typeof persisted === "object" && persisted !== null &&
-      "snapshot" in persisted
-      ? (persisted as { snapshot?: MarketSnapshot }).snapshot
-      : undefined;
+    const snapshot = persistedPreFightMarketSnapshot(persisted);
     if (snapshot === undefined || !archivedBoutIds.has(snapshot.boutId)) continue;
     latestMarkets.set(`${snapshot.boutId}:${snapshot.round}:${snapshot.source}:${snapshot.boundaryType}`, snapshot);
   }

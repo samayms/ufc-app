@@ -99,6 +99,35 @@ describe("fetchArchivedEvent", () => {
         marketAtEnd: {},
         provisional: false,
       }],
+      marketSnapshots: [{
+        source: "kalshi",
+        boutId: "b1",
+        round: 0,
+        boundaryType: "pre-fight",
+        label: "pre-fight-open",
+        takenAt: "2026-01-01T00:00:00.000Z",
+        fresh: true,
+        outcomes: [
+          {
+            marketType: "fight-winner",
+            outcome: "Red Fighter",
+            bid: 59,
+            ask: 61,
+            impliedProbability: 0.6,
+            receivedAt: "2026-01-01T00:00:00.000Z",
+            stale: false,
+          },
+          {
+            marketType: "fight-winner",
+            outcome: "Blue Fighter",
+            bid: 39,
+            ask: 41,
+            impliedProbability: 0.4,
+            receivedAt: "2026-01-01T00:00:00.000Z",
+            stale: false,
+          },
+        ],
+      }],
     } as unknown as DashboardState;
 
     const archived = await fetchArchivedEvent("e1", jsonResponse(payload));
@@ -107,6 +136,11 @@ describe("fetchArchivedEvent", () => {
     expect(archived.boutViews.b1?.rounds.sherdog?.[0]?.summary)
       .toBe("Red controlled the round.");
     expect(archived.unifiedRounds).toHaveLength(1);
+    expect(archived.boutViews.b1?.preFightOdds.kalshi?.quotes).toEqual([
+      expect.objectContaining({ corner: "red", impliedProbability: 0.6 }),
+      expect.objectContaining({ corner: "blue", impliedProbability: 0.4 }),
+    ]);
+    expect(archived.marketSnapshots).toHaveLength(1);
   });
 
   it("throws on a non-200 so the caller can report an error state", async () => {
