@@ -17,7 +17,7 @@ describe("RoundOdds", () => {
     expect(html).toBe("");
   });
 
-  it("does not present provisional round odds as post-round odds", () => {
+  it("shows the immediate ESPN end-of-round snapshot while confirmation is pending", () => {
     const html = renderToStaticMarkup(
       <RoundOdds
         boutId="bout-main"
@@ -30,11 +30,34 @@ describe("RoundOdds", () => {
           detectedEndedAt: "2026-07-28T01:00:00Z",
           endingSignal: "clock_zero_provisional",
           provisional: true,
-          marketAtEnd: {},
+          marketAtEnd: {
+            kalshi: {
+              source: "kalshi",
+              boutId: "bout-main",
+              round: 1,
+              boundaryType: "provisional",
+              takenAt: "2026-07-28T01:00:00Z",
+              fresh: true,
+              outcomes: [
+                {
+                  outcome: "Danilo Reyes", marketType: "fight-winner",
+                  impliedProbability: 0.62, noVigProbability: 0.62,
+                  volume: 1000, receivedAt: "2026-07-28T01:00:00Z", stale: false,
+                },
+                {
+                  outcome: "Artem Volkov", marketType: "fight-winner",
+                  impliedProbability: 0.38, noVigProbability: 0.38,
+                  volume: 1000, receivedAt: "2026-07-28T01:00:00Z", stale: false,
+                },
+              ],
+            },
+          },
         }]}
       />,
     );
-    expect(html).toBe("");
+    expect(html).toContain('aria-label="Odds after Round 1"');
+    expect(html).toContain("62%");
+    expect(html).toContain("38%");
   });
 
   it("renders the selected round's preferred market with source accents", () => {
