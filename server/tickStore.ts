@@ -1271,7 +1271,11 @@ export class MarketTickStore implements TickHistorySource {
         snapshot.boundaryType === "provisional",
     );
     if (event.recovery === true && priorProvisional === undefined) return;
-    if (event.recovery !== true && priorProvisional?.takenAt !== event.detectedAt) {
+    if (
+      event.recovery !== true &&
+      priorProvisional !== undefined &&
+      priorProvisional.takenAt !== event.detectedAt
+    ) {
       await this.snapshotBoundary(event.boutId, event.round, "provisional", event.detectedAt);
     }
     // Promote the actual provisional boundary when recovery confirms it.
