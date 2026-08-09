@@ -1771,6 +1771,7 @@ export function createCollectorClient(
   const listeners = new Set<(snapshot: CollectorSnapshot) => void>();
   let eventSource: EventSourceLike | undefined;
   let abortController: AbortController | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   let snapshot: CollectorSnapshot = {
     connection: "unavailable",
@@ -2018,6 +2019,13 @@ export function createCollectorClient(
       } catch {
         if (!closed) {
           publish({ ...snapshot, connection: "unavailable" });
+          // A navigation/StrictMode teardown can abort the initial same-origin
+          // bootstrap. Retry transient failures so production never remains on
+          // the splash screen waiting for a request that will not resume.
+          retryTimer ??= setTimeout(() => {
+            retryTimer = undefined;
+            void this.start();
+          }, 500);
         }
         return;
       } finally {
@@ -2063,6 +2071,7 @@ export function createCollectorClient(
     close() {
       closed = true;
       abortController?.abort();
+      if (retryTimer !== undefined) clearTimeout(retryTimer);
       eventSource?.close();
       listeners.clear();
     },
