@@ -671,9 +671,12 @@ export class RoundStatsPipeline {
       const key = roundKey(stored.boutId, stored.round);
       const previous = this.unified.get(key);
       if (previous === undefined) return;
+      // Stats completeness cannot downgrade a lifecycle-confirmed boundary.
+      // ESPN's explicit round transition owns the unified record's
+      // provisional state; the nested ESPN stats retain their own finalized
+      // flag while a delayed correction is still arriving.
       const provisional =
-        previous.endingSignal === "clock_zero_provisional" ||
-        !stored.finalized;
+        previous.endingSignal === "clock_zero_provisional";
       await this.persistUnified({
         ...copyUnified(previous),
         espnStats: stored,
@@ -872,7 +875,16 @@ export class RoundStatsPipeline {
     this.marketSnapshots.clear();
     for (const persisted of unifiedRecords) {
       if (!isPersistedUnifiedRound(persisted)) continue;
-      const record = copyUnified(persisted.record);
+      const restored = copyUnified(persisted.record);
+      // Repair legacy contradictory records (confirmed ending signal plus
+      // provisional=true) in memory on every process start. This makes the
+      // invariant universal and immediately repairs already-persisted live
+      // rounds without a bout-specific migration.
+      const record: UnifiedRoundRecord = {
+        ...restored,
+        provisional:
+          restored.endingSignal === "clock_zero_provisional",
+      };
       const key = roundKey(record.boutId, record.round);
       this.unified.set(key, record);
       if (record.espnStats !== undefined) {
@@ -1290,8 +1302,11 @@ export class RoundStatsPipeline {
     const previous = this.unified.get(key);
     if (previous === undefined) return;
 
+    // The unified record describes the round boundary. Individual Cito stats
+    // keep `stats.provisional`; they must never hide odds for a boundary ESPN
+    // has already confirmed.
     const provisional =
-      !this.confirmedRounds.has(key) || stats.provisional;
+      previous.endingSignal === "clock_zero_provisional";
     const next: UnifiedRoundRecord = {
       ...copyUnified(previous),
       citoStats: copyRoundStats(stats),

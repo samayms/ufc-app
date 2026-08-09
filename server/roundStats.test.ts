@@ -17,6 +17,7 @@ import {
   CITO_ROUND_STATS_JOB_TYPE,
   ROUND_STATS_STORAGE_STREAM,
   RoundStatsPipeline,
+  UNIFIED_ROUNDS_STORAGE_STREAM,
 } from "./roundStats.ts";
 import { MemoryStorage } from "./storage.ts";
 
@@ -229,6 +230,47 @@ describe("RoundStatsPipeline", () => {
       endingSignal: "period_transition",
     });
     await pipeline.close();
+  });
+
+  it("does not let delayed live ESPN stats downgrade a confirmed boundary", async () => {
+    const { bus, pipeline } = await setup(fetcher([]));
+    const stats = pipeline.observeEspnCumulative({
+      boutId: BOUT_ID,
+      round: 1,
+      fighterA: espnFighter,
+      fighterB: { ...espnFighter, knockdowns: 0 },
+      observedAt: "2026-07-28T00:05:00Z",
+    }, false);
+    emitConfirmed(bus);
+    await pipeline.idle();
+    await pipeline.persistEspnRoundStats(stats);
+
+    expect(pipeline.getUnifiedRound(BOUT_ID, 1)).toMatchObject({
+      provisional: false,
+      endingSignal: "period_transition",
+      espnStats: { finalized: false },
+    });
+    await pipeline.close();
+  });
+
+  it("repairs a persisted confirmed boundary that has a legacy provisional flag", async () => {
+    const storage = new MemoryStorage();
+    const first = await setup(fetcher([]), { storage });
+    emitConfirmed(first.bus);
+    await first.pipeline.idle();
+    const confirmed = first.pipeline.getUnifiedRound(BOUT_ID, 1)!;
+    await first.pipeline.close();
+    await storage.append(UNIFIED_ROUNDS_STORAGE_STREAM, {
+      version: 1,
+      record: { ...confirmed, provisional: true },
+    });
+
+    const restored = await setup(fetcher([]), { storage });
+    expect(restored.pipeline.getUnifiedRound(BOUT_ID, 1)).toMatchObject({
+      provisional: false,
+      endingSignal: "period_transition",
+    });
+    await restored.pipeline.close();
   });
 
   it("persists finalized ESPN round stats in the unified round", async () => {
