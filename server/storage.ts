@@ -1,12 +1,12 @@
 import {
   appendFile,
   mkdir,
-  readFile,
   readdir,
   rename,
   truncate,
   writeFile,
 } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import { join } from "node:path";
 
 export const DEFAULT_DATA_DIRECTORY = "./data";
@@ -21,7 +21,56 @@ export interface Storage {
 type ParsedJsonl = {
   records: unknown[];
   invalidTrailingLineStart?: number;
+  endsWithNewline: boolean;
 };
+
+async function readJsonlFile(path: string, stream: string): Promise<ParsedJsonl> {
+  const records: unknown[] = [];
+  let line = Buffer.alloc(0);
+  let lineStart = 0;
+  let lineNumber = 0;
+  let invalidTrailingLineStart: number | undefined;
+
+  const consumeLine = (rawLine: Buffer): void => {
+    lineNumber += 1;
+    const text = rawLine.toString("utf8").replace(/\r$/, "");
+    if (text.trim().length === 0) return;
+
+    try {
+      records.push(JSON.parse(text) as unknown);
+      if (invalidTrailingLineStart !== undefined) {
+        throw new SyntaxError(
+          `Corrupt JSONL record in stream "${stream}" at line ${lineNumber - 1}`,
+        );
+      }
+    } catch (error) {
+      if (invalidTrailingLineStart === undefined) {
+        invalidTrailingLineStart = lineStart;
+        return;
+      }
+      throw error;
+    }
+  };
+
+  for await (const chunk of createReadStream(path)) {
+    line = Buffer.concat([line, chunk as Buffer]);
+    let newline = line.indexOf(10);
+    while (newline !== -1) {
+      const completeLine = line.subarray(0, newline);
+      consumeLine(completeLine);
+      lineStart += newline + 1;
+      line = line.subarray(newline + 1);
+      newline = line.indexOf(10);
+    }
+  }
+
+  if (line.length > 0) consumeLine(line);
+  return {
+    records,
+    ...(invalidTrailingLineStart === undefined ? {} : { invalidTrailingLineStart }),
+    endsWithNewline: line.length === 0,
+  };
+}
 
 function assertStreamName(stream: string): void {
   if (
@@ -52,47 +101,6 @@ function isFileNotFound(error: unknown): boolean {
     "code" in error &&
     error.code === "ENOENT"
   );
-}
-
-function parseJsonl(contents: string, stream: string): ParsedJsonl {
-  const lines = contents.split("\n");
-  let lastMeaningfulLine = lines.length - 1;
-
-  while (
-    lastMeaningfulLine >= 0 &&
-    lines[lastMeaningfulLine]?.trim().length === 0
-  ) {
-    lastMeaningfulLine -= 1;
-  }
-
-  const records: unknown[] = [];
-  let lineStart = 0;
-
-  for (let index = 0; index <= lastMeaningfulLine; index += 1) {
-    const line = lines[index] ?? "";
-
-    if (line.trim().length === 0) {
-      lineStart += line.length + 1;
-      continue;
-    }
-
-    try {
-      records.push(JSON.parse(line) as unknown);
-    } catch (error) {
-      if (index === lastMeaningfulLine) {
-        return { records, invalidTrailingLineStart: lineStart };
-      }
-
-      throw new SyntaxError(
-        `Corrupt JSONL record in stream "${stream}" at line ${index + 1}`,
-        { cause: error },
-      );
-    }
-
-    lineStart += line.length + 1;
-  }
-
-  return { records };
 }
 
 export class JsonlStorage implements Storage {
@@ -152,8 +160,7 @@ export class JsonlStorage implements Storage {
     await this.writeQueues.get(stream);
 
     try {
-      const contents = await readFile(this.streamPath(stream), "utf8");
-      return parseJsonl(contents, stream).records as Record[];
+      return (await readJsonlFile(this.streamPath(stream), stream)).records as Record[];
     } catch (error) {
       if (isFileNotFound(error)) {
         return [];
@@ -222,10 +229,13 @@ export class JsonlStorage implements Storage {
     path: string,
     stream: string,
   ): Promise<string> {
-    let contents: string;
-
     try {
-      contents = await readFile(path, "utf8");
+      const parsed = await readJsonlFile(path, stream);
+      if (parsed.invalidTrailingLineStart !== undefined) {
+        await truncate(path, parsed.invalidTrailingLineStart);
+        return "";
+      }
+      return parsed.endsWithNewline ? "" : "\n";
     } catch (error) {
       if (isFileNotFound(error)) {
         return "";
@@ -233,17 +243,6 @@ export class JsonlStorage implements Storage {
 
       throw error;
     }
-
-    const parsed = parseJsonl(contents, stream);
-
-    if (parsed.invalidTrailingLineStart !== undefined) {
-      const validPrefix = contents.slice(0, parsed.invalidTrailingLineStart);
-      const validByteLength = new TextEncoder().encode(validPrefix).byteLength;
-      await truncate(path, validByteLength);
-      return "";
-    }
-
-    return contents.length > 0 && !contents.endsWith("\n") ? "\n" : "";
   }
 }
 
