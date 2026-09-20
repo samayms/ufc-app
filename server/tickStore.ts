@@ -1158,8 +1158,8 @@ export class MarketTickStore implements TickHistorySource {
       // makes everything before it permanently unreachable, so this file —
       // and this restore — should never again scale with an event's total
       // runtime, only with one round's worth of ticks.
-      if (this.history.length >= MAX_RESTORED_TICKS) {
-        this.history.splice(0, this.history.length - MAX_RESTORED_TICKS + 1);
+      if (this.history.length >= MAX_RESTORED_TICKS * 2) {
+        this.history.splice(0, this.history.length - MAX_RESTORED_TICKS);
       }
       this.history.push(persisted.tick);
       applyTick(this.latest, persisted.tick);
