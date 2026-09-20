@@ -1752,9 +1752,8 @@ export async function createCollector(
         response,
         200,
         {
-          health: getBootstrap().health,
+          health: healthRegistry.getHealth(),
           metrics: healthRegistry.getMetrics(),
-          alerts: healthRegistry.getAlerts(),
         },
         secrets,
       );
