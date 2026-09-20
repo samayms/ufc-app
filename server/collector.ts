@@ -877,6 +877,7 @@ export async function createCollector(
   const initializedTickStore = await MarketTickStore.create({
     eventBus,
     storage,
+    restoreTicks: config.dataMode !== "live",
     metrics: healthRegistry,
     publish: async (snapshot) => {
       await push.publish("update", {

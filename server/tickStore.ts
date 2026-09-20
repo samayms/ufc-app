@@ -57,6 +57,8 @@ export interface LocalOrderBookState extends MarketSnapshotOutcome {
 export interface MarketTickStoreOptions {
   eventBus: CollectorEventBus;
   storage: Storage;
+  /** Live mode rebuilds current books from the transports instead of replaying the full tick ledger. */
+  restoreTicks?: boolean;
   staleAfterMs?: number;
   clock?: TickStoreClock;
   /**
@@ -825,6 +827,8 @@ export class MarketTickStore implements TickHistorySource {
 
   private readonly metrics: Metrics;
 
+  private readonly restoreTicks: boolean;
+
   private readonly publish:
     | ((snapshot: MarketSnapshot) => Promise<void>)
     | undefined;
@@ -883,6 +887,7 @@ export class MarketTickStore implements TickHistorySource {
     this.persistIntervalMs = persistIntervalMs;
     this.timer = options.timer ?? DEFAULT_TICK_STORE_TIMER;
     this.metrics = options.metrics ?? NOOP_METRICS;
+    this.restoreTicks = options.restoreTicks ?? true;
     this.publish = options.publish;
     this.onSnapshot = options.onSnapshot;
     this.onSnapshotsRemoved = options.onSnapshotsRemoved;
@@ -1140,30 +1145,21 @@ export class MarketTickStore implements TickHistorySource {
   private async restoreFromStorage(): Promise<void> {
     this.history.splice(0);
     this.latest.clear();
-    await readStorageRecords(this.storage, MARKET_TICKS_STORAGE_STREAM, (record) => {
-      const persisted = record;
-      if (!isPersistedTick(persisted)) return;
-      // No copyTick() here, unlike appendTick(): `persisted.tick` came
-      // straight out of JSON.parse in storage.read() and isn't aliased by
-      // any caller that could later mutate it, so history can hold it
-      // directly.
-      //
-      // market-ticks.jsonl used to retain every accepted tick for the whole
-      // life of an event and routinely ran into the hundreds of thousands
-      // of records — replaying that (even without the extra clone this
-      // comment used to warn against) OOM-crashed the deployed machine on
-      // boot (2026-08-04/05, then again 2026-08-07 once the file crossed
-      // ~1M lines). `snapshotBoundary` now prunes and compacts this stream
-      // down to the active round's ticks the moment a "confirmed" boundary
-      // makes everything before it permanently unreachable, so this file —
-      // and this restore — should never again scale with an event's total
-      // runtime, only with one round's worth of ticks.
-      if (this.history.length >= MAX_RESTORED_TICKS * 2) {
-        this.history.splice(0, this.history.length - MAX_RESTORED_TICKS);
-      }
-      this.history.push(persisted.tick);
-      applyTick(this.latest, persisted.tick);
-    });
+    if (this.restoreTicks) {
+      await readStorageRecords(this.storage, MARKET_TICKS_STORAGE_STREAM, (record) => {
+        const persisted = record;
+        if (!isPersistedTick(persisted)) return;
+        // No copyTick() here, unlike appendTick(): `persisted.tick` came
+        // straight out of JSON.parse in storage.read() and isn't aliased by
+        // any caller that could later mutate it, so history can hold it
+        // directly.
+        if (this.history.length >= MAX_RESTORED_TICKS * 2) {
+          this.history.splice(0, this.history.length - MAX_RESTORED_TICKS);
+        }
+        this.history.push(persisted.tick);
+        applyTick(this.latest, persisted.tick);
+      });
+    }
 
     this.snapshots.clear();
     await readStorageRecords(this.storage, MARKET_SNAPSHOTS_STORAGE_STREAM, (record) => {
