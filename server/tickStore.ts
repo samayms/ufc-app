@@ -929,7 +929,13 @@ export class MarketTickStore implements TickHistorySource {
       // In-memory state is always applied immediately, for UI freshness and
       // for accurate round-boundary reconstruction; only the durable write
       // below is sampled.
-      this.history.push(accepted);
+    this.history.push(accepted);
+    // Keep the live process bounded even between confirmed round boundaries.
+    // A busy exchange can emit enough ticks in a single round to exhaust the
+    // VM before the lifecycle driver gets a chance to compact the durable log.
+    if (this.history.length >= MAX_RESTORED_TICKS * 2) {
+      this.history.splice(0, this.history.length - MAX_RESTORED_TICKS);
+    }
       const state = applyTick(this.latest, accepted);
       result = this.toLocalState(state, this.clock.now());
       await this.persistSampled(accepted);
