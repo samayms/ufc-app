@@ -31,6 +31,8 @@ export const MARKET_FRESHNESS_STORAGE_STREAM = "market-freshness";
 export const DEFAULT_MARKET_STALE_AFTER_MS = 30_000;
 /** Persist sampled state: durable writes are throttled to roughly once per key. */
 export const DEFAULT_PERSIST_INTERVAL_MS = 1_000;
+/** Keep bootstrap payloads bounded when restoring legacy unpruned tick logs. */
+export const MAX_RESTORED_TICKS = 100_000;
 
 export interface TickStoreClock {
   now(): number;
@@ -1156,6 +1158,9 @@ export class MarketTickStore implements TickHistorySource {
       // makes everything before it permanently unreachable, so this file —
       // and this restore — should never again scale with an event's total
       // runtime, only with one round's worth of ticks.
+      if (this.history.length >= MAX_RESTORED_TICKS) {
+        this.history.splice(0, this.history.length - MAX_RESTORED_TICKS + 1);
+      }
       this.history.push(persisted.tick);
       applyTick(this.latest, persisted.tick);
     });
