@@ -2,7 +2,7 @@ import type {
   IncomingMessage,
   ServerResponse,
 } from "node:http";
-import type { Storage } from "./storage.ts";
+import { readStorageRecords, type Storage } from "./storage.ts";
 
 export const DEFAULT_SSE_PATH = "/api/events";
 export const DEFAULT_SSE_STORAGE_STREAM = "sse-events";
@@ -436,18 +436,17 @@ export class SsePush {
   }
 
   private async restoreFromStorage(): Promise<void> {
-    const records = await this.storage.read<unknown>(this.storageStream);
-    const restored = records
-      .filter(isPersistedSseEvent)
-      .sort((left, right) => left.id - right.id);
     const unique = new Map<number, PersistedSseEvent>();
-
-    for (const event of restored) {
-      unique.set(event.id, event);
-    }
-
-    this.buffer = [...unique.values()].slice(-this.bufferSize);
-    this.lastEventId = restored.at(-1)?.id ?? 0;
+    await readStorageRecords(this.storage, this.storageStream, (record) => {
+      if (!isPersistedSseEvent(record)) return;
+      unique.set(record.id, record);
+      if (unique.size > this.bufferSize) {
+        const oldest = [...unique.keys()].sort((left, right) => left - right)[0];
+        if (oldest !== undefined) unique.delete(oldest);
+      }
+      this.lastEventId = Math.max(this.lastEventId, record.id);
+    });
+    this.buffer = [...unique.values()].sort((left, right) => left.id - right.id);
   }
 
   private trimBuffer(): void {

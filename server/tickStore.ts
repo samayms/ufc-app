@@ -14,7 +14,7 @@ import type {
 } from "./eventBus.ts";
 import type { ProvisionalRoundSupersession } from "./lifecycle.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
-import type { Storage } from "./storage.ts";
+import { readStorageRecords, type Storage } from "./storage.ts";
 
 export type {
   MarketBoundaryType,
@@ -1136,16 +1136,11 @@ export class MarketTickStore implements TickHistorySource {
   }
 
   private async restoreFromStorage(): Promise<void> {
-    const [ticks, snapshots, freshness] = await Promise.all([
-      this.storage.read<unknown>(MARKET_TICKS_STORAGE_STREAM),
-      this.storage.read<unknown>(MARKET_SNAPSHOTS_STORAGE_STREAM),
-      this.storage.read<unknown>(MARKET_FRESHNESS_STORAGE_STREAM),
-    ]);
-
     this.history.splice(0);
     this.latest.clear();
-    for (const persisted of ticks) {
-      if (!isPersistedTick(persisted)) continue;
+    await readStorageRecords(this.storage, MARKET_TICKS_STORAGE_STREAM, (record) => {
+      const persisted = record;
+      if (!isPersistedTick(persisted)) return;
       // No copyTick() here, unlike appendTick(): `persisted.tick` came
       // straight out of JSON.parse in storage.read() and isn't aliased by
       // any caller that could later mutate it, so history can hold it
@@ -1163,21 +1158,22 @@ export class MarketTickStore implements TickHistorySource {
       // runtime, only with one round's worth of ticks.
       this.history.push(persisted.tick);
       applyTick(this.latest, persisted.tick);
-    }
+    });
 
     this.snapshots.clear();
-    for (const persisted of snapshots) {
-      if (!isPersistedSnapshot(persisted)) continue;
+    await readStorageRecords(this.storage, MARKET_SNAPSHOTS_STORAGE_STREAM, (record) => {
+      const persisted = record;
+      if (!isPersistedSnapshot(persisted)) return;
       const snapshot = copySnapshot(persisted.snapshot);
       this.snapshots.set(snapshotKey(snapshot), snapshot);
-    }
+    });
 
     this.freshnessHistory.splice(0);
-    for (const record of freshness) {
+    await readStorageRecords(this.storage, MARKET_FRESHNESS_STORAGE_STREAM, (record) => {
       if (isFreshnessRecord(record)) {
         this.freshnessHistory.push({ ...record });
       }
-    }
+    });
   }
 
   private recordFreshness(

@@ -24,25 +24,35 @@ type ParsedJsonl = {
   endsWithNewline: boolean;
 };
 
-async function readJsonlFile(path: string, stream: string): Promise<ParsedJsonl> {
-  const records: unknown[] = [];
+type JsonlReadState = {
+  invalidTrailingLineStart?: number;
+  endsWithNewline: boolean;
+};
+
+async function* iterateJsonlFile(
+  path: string,
+  stream: string,
+  state: JsonlReadState = { endsWithNewline: true },
+): AsyncGenerator<unknown, void> {
   let line = Buffer.alloc(0);
   let lineStart = 0;
   let lineNumber = 0;
   let invalidTrailingLineStart: number | undefined;
+  let endedWithNewline = true;
 
-  const consumeLine = (rawLine: Buffer): void => {
+  const consumeLine = (rawLine: Buffer): unknown | undefined => {
     lineNumber += 1;
     const text = rawLine.toString("utf8").replace(/\r$/, "");
     if (text.trim().length === 0) return;
 
     try {
-      records.push(JSON.parse(text) as unknown);
+      const record = JSON.parse(text) as unknown;
       if (invalidTrailingLineStart !== undefined) {
         throw new SyntaxError(
           `Corrupt JSONL record in stream "${stream}" at line ${lineNumber - 1}`,
         );
       }
+      return record;
     } catch (error) {
       if (invalidTrailingLineStart === undefined) {
         invalidTrailingLineStart = lineStart;
@@ -54,22 +64,54 @@ async function readJsonlFile(path: string, stream: string): Promise<ParsedJsonl>
 
   for await (const chunk of createReadStream(path)) {
     line = Buffer.concat([line, chunk as Buffer]);
+    endedWithNewline = line.length === 0;
     let newline = line.indexOf(10);
     while (newline !== -1) {
       const completeLine = line.subarray(0, newline);
-      consumeLine(completeLine);
+      const record = consumeLine(completeLine);
+      if (record !== undefined) yield record;
       lineStart += newline + 1;
       line = line.subarray(newline + 1);
+      endedWithNewline = line.length === 0;
       newline = line.indexOf(10);
     }
   }
 
-  if (line.length > 0) consumeLine(line);
+  if (line.length > 0) {
+    endedWithNewline = false;
+    const record = consumeLine(line);
+    if (record !== undefined) yield record;
+  }
+  state.invalidTrailingLineStart = invalidTrailingLineStart;
+  state.endsWithNewline = endedWithNewline;
+}
+
+async function readJsonlFile(path: string, stream: string): Promise<ParsedJsonl> {
+  const records: unknown[] = [];
+  const state: JsonlReadState = { endsWithNewline: true };
+  for await (const record of iterateJsonlFile(path, stream, state)) records.push(record);
   return {
     records,
-    ...(invalidTrailingLineStart === undefined ? {} : { invalidTrailingLineStart }),
-    endsWithNewline: line.length === 0,
+    ...(state.invalidTrailingLineStart === undefined
+      ? {}
+      : { invalidTrailingLineStart: state.invalidTrailingLineStart }),
+    endsWithNewline: state.endsWithNewline,
   };
+}
+
+export async function readStorageRecords(
+  storage: Storage,
+  stream: string,
+  visitor: (record: unknown) => void,
+): Promise<void> {
+  const streaming = storage as Storage & {
+    readEach?: (stream: string, visitor: (record: unknown) => void) => Promise<void>;
+  };
+  if (streaming.readEach !== undefined) {
+    await streaming.readEach(stream, visitor);
+    return;
+  }
+  for (const record of await storage.read(stream)) visitor(record);
 }
 
 function assertStreamName(stream: string): void {
@@ -167,6 +209,21 @@ export class JsonlStorage implements Storage {
       }
 
       throw error;
+    }
+  }
+
+  async readEach(
+    stream: string,
+    visitor: (record: unknown) => void,
+  ): Promise<void> {
+    assertStreamName(stream);
+    await this.writeQueues.get(stream);
+    try {
+      for await (const record of iterateJsonlFile(this.streamPath(stream), stream)) {
+        visitor(record);
+      }
+    } catch (error) {
+      if (!isFileNotFound(error)) throw error;
     }
   }
 
@@ -280,5 +337,12 @@ export class MemoryStorage implements Storage {
 
   async listStreams(): Promise<string[]> {
     return [...this.streams.keys()].sort();
+  }
+
+  async readEach(
+    stream: string,
+    visitor: (record: unknown) => void,
+  ): Promise<void> {
+    for (const record of this.streams.get(stream) ?? []) visitor(record);
   }
 }

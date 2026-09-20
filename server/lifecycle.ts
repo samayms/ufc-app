@@ -2,7 +2,7 @@ import type { CollectorEvent, CollectorEventBus } from "./eventBus.ts";
 import type { EspnCumulativeStats } from "../src/sources/espn.ts";
 import type { BoutResult } from "../src/schema.ts";
 import { NOOP_METRICS, type Metrics } from "./health.ts";
-import type { Storage } from "./storage.ts";
+import { readStorageRecords, type Storage } from "./storage.ts";
 
 export type LifecycleSource = "espn" | "cito";
 
@@ -586,14 +586,12 @@ export class FightLifecycleMachine {
   }
 
   private async restoreFromStorage(): Promise<void> {
-    const records = await this.storage.read<unknown>(this.storageStream);
-
     this.bouts.clear();
-    for (const record of records) {
+    await readStorageRecords(this.storage, this.storageStream, (record) => {
       if (isPersistedLifecycle(record)) {
         this.bouts.set(record.state.boutId, copyPersisted(record));
       }
-    }
+    });
   }
 
   private async processObservation(
