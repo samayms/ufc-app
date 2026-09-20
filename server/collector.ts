@@ -832,15 +832,14 @@ export async function createCollector(
     alerts: healthRegistry.getAlerts(),
   });
   const getClientBootstrap = (): ClientBootstrap => {
-    const bootstrap = getBootstrap();
     return {
-      state: bootstrap.state,
-      boutMappings: bootstrap.boutMappings,
-      health: bootstrap.health,
-      lifecycleObservations: bootstrap.lifecycleObservations,
-      unifiedRounds: bootstrap.unifiedRounds,
-      marketSnapshots: bootstrap.marketSnapshots,
-      latestMarkets: bootstrap.latestMarkets,
+      state,
+      boutMappings: boutMappings?.getAll() ?? [],
+      health: healthRegistry.getHealth(),
+      lifecycleObservations: [...latestLifecycleObservations.values()],
+      unifiedRounds: roundStats?.getUnifiedRounds() ?? [],
+      marketSnapshots: tickStore?.getSnapshots() ?? [],
+      latestMarkets: tickStore?.getLatest() ?? [],
     };
   };
   const push = new SsePush({
