@@ -184,6 +184,14 @@ export interface CollectorBootstrap {
   alerts: readonly HealthAlert[];
 }
 
+/**
+ * The browser only needs the current dashboard snapshot and live data feeds
+ * to become interactive. Metrics and the accumulated health-alert ledger are
+ * operator data, not render data; sending the latter on every mobile bootstrap
+ * made a single stale-alert history grow into a multi-megabyte blocking fetch.
+ */
+type ClientBootstrap = Omit<CollectorBootstrap, "metrics" | "alerts">;
+
 export interface CollectorRoundStatsOptions {
   fetcher?: CitoRoundStatsFetcher;
   clock?: RoundJobClock;
@@ -823,9 +831,21 @@ export async function createCollector(
     metrics: healthRegistry.getMetrics(),
     alerts: healthRegistry.getAlerts(),
   });
+  const getClientBootstrap = (): ClientBootstrap => {
+    const bootstrap = getBootstrap();
+    return {
+      state: bootstrap.state,
+      boutMappings: bootstrap.boutMappings,
+      health: bootstrap.health,
+      lifecycleObservations: bootstrap.lifecycleObservations,
+      unifiedRounds: bootstrap.unifiedRounds,
+      marketSnapshots: bootstrap.marketSnapshots,
+      latestMarkets: bootstrap.latestMarkets,
+    };
+  };
   const push = new SsePush({
     storage,
-    getBootstrap,
+    getBootstrap: getClientBootstrap,
     secrets: credentialValues(config),
     ...options.sse,
   });
@@ -1725,7 +1745,7 @@ export async function createCollector(
       return;
     }
     if (request.method === "GET" && url.pathname === "/api/bootstrap") {
-      sendJson(response, 200, getBootstrap(), secrets);
+      sendJson(response, 200, getClientBootstrap(), secrets);
       return;
     }
     if (request.method === "GET" && url.pathname === "/api/health") {
