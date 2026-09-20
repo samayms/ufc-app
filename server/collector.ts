@@ -845,6 +845,7 @@ export async function createCollector(
   const push = new SsePush({
     storage,
     getBootstrap: getClientBootstrap,
+    restoreHistory: config.dataMode !== "live",
     secrets: credentialValues(config),
     ...options.sse,
   });

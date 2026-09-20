@@ -27,6 +27,8 @@ export interface PersistedSseEvent {
 export interface SsePushOptions {
   storage: Storage;
   getBootstrap: () => unknown;
+  /** Live mode can skip replaying an unbounded historical event log. */
+  restoreHistory?: boolean;
   secrets?: readonly string[];
   path?: string;
   storageStream?: string;
@@ -204,6 +206,8 @@ export class SsePush {
 
   private readonly timer: SsePushTimer;
 
+  private readonly restoreHistory: boolean;
+
   private readonly clients = new Set<ServerResponse>();
 
   private buffer: PersistedSseEvent[] = [];
@@ -249,6 +253,7 @@ export class SsePush {
     this.now = options.now ?? (() => new Date().toISOString());
     this.flushIntervalMs = flushIntervalMs;
     this.timer = options.timer ?? DEFAULT_TIMER;
+    this.restoreHistory = options.restoreHistory ?? true;
     this.heartbeat = setInterval(() => {
       const comment = `: heartbeat ${this.now()}\n\n`;
       for (const client of this.clients) {
@@ -261,6 +266,7 @@ export class SsePush {
   }
 
   async restore(): Promise<void> {
+    if (!this.restoreHistory) return;
     this.restorePromise ??= this.restoreFromStorage();
     await this.restorePromise;
   }
