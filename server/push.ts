@@ -10,6 +10,8 @@ export const DEFAULT_SSE_BUFFER_SIZE = 256;
 export const DEFAULT_HEARTBEAT_MS = 15_000;
 /** UI flush cadence: client writes are coalesced to fire at most this often. */
 export const DEFAULT_FLUSH_MS = 500;
+/** Bound replay history without rewriting the stream on every event. */
+const SSE_EVENT_COMPACTION_INTERVAL = 100;
 
 export interface SsePushTimer {
   setTimeout(callback: () => void, delayMs: number): unknown;
@@ -102,6 +104,49 @@ function isPersistedSseEvent(value: unknown): value is PersistedSseEvent {
     typeof value.createdAt === "string" &&
     "data" in value
   );
+}
+
+interface RestoredSseEvents {
+  records: PersistedSseEvent[];
+  lastEventId: number;
+}
+
+async function readLatestSseEvents(
+  storage: Storage,
+  storageStream: string,
+  bufferSize: number,
+): Promise<RestoredSseEvents> {
+  const unique = new Map<number, PersistedSseEvent>();
+  let lastEventId = 0;
+  await readStorageRecords(storage, storageStream, (record) => {
+    if (!isPersistedSseEvent(record)) return;
+    unique.set(record.id, record);
+    if (unique.size > bufferSize) {
+      // IDs increase monotonically, so Map insertion order makes eviction
+      // O(1) instead of sorting every retained ID for every historical row.
+      const oldest = unique.keys().next().value as number | undefined;
+      if (oldest !== undefined) unique.delete(oldest);
+    }
+    lastEventId = Math.max(lastEventId, record.id);
+  });
+  return {
+    records: [...unique.values()].sort((left, right) => left.id - right.id),
+    lastEventId,
+  };
+}
+
+export async function compactSseEventStream(
+  storage: Storage,
+  bufferSize: number,
+  storageStream = DEFAULT_SSE_STORAGE_STREAM,
+): Promise<RestoredSseEvents> {
+  const restored = await readLatestSseEvents(
+    storage,
+    storageStream,
+    bufferSize,
+  );
+  await storage.replace(storageStream, restored.records);
+  return restored;
 }
 
 function formatEvent(event: {
@@ -217,6 +262,8 @@ export class SsePush {
   private restorePromise: Promise<void> | undefined;
 
   private publishQueue: Promise<void> = Promise.resolve();
+
+  private appendsSinceCompaction = 0;
 
   private readonly heartbeat: ReturnType<typeof setInterval>;
 
@@ -354,10 +401,23 @@ export class SsePush {
       this.lastEventId = published.id;
       this.buffer.push(published);
       this.trimBuffer();
+      this.appendsSinceCompaction += 1;
+      if (
+        this.appendsSinceCompaction >= SSE_EVENT_COMPACTION_INTERVAL
+      ) {
+        await compactSseEventStream(
+          this.storage,
+          this.bufferSize,
+          this.storageStream,
+        );
+        this.appendsSinceCompaction = 0;
+      }
 
       this.enqueueOutbound(this.forClient(published));
     });
 
+    // Appends and rewrites run inside one queue so compaction cannot race a
+    // newer publish and accidentally discard its durable event.
     this.publishQueue = operation.then(
       () => undefined,
       () => undefined,
@@ -442,17 +502,13 @@ export class SsePush {
   }
 
   private async restoreFromStorage(): Promise<void> {
-    const unique = new Map<number, PersistedSseEvent>();
-    await readStorageRecords(this.storage, this.storageStream, (record) => {
-      if (!isPersistedSseEvent(record)) return;
-      unique.set(record.id, record);
-      if (unique.size > this.bufferSize) {
-        const oldest = [...unique.keys()].sort((left, right) => left - right)[0];
-        if (oldest !== undefined) unique.delete(oldest);
-      }
-      this.lastEventId = Math.max(this.lastEventId, record.id);
-    });
-    this.buffer = [...unique.values()].sort((left, right) => left.id - right.id);
+    const restored = await compactSseEventStream(
+      this.storage,
+      this.bufferSize,
+      this.storageStream,
+    );
+    this.lastEventId = Math.max(this.lastEventId, restored.lastEventId);
+    this.buffer = restored.records;
   }
 
   private trimBuffer(): void {

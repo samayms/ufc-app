@@ -180,6 +180,10 @@ describe("SsePush", () => {
     });
     await second.restore();
     expect(second.getLastEventId()).toBe(3);
+    await expect(storage.read("sse-events")).resolves.toEqual([
+      expect.objectContaining({ id: 2 }),
+      expect.objectContaining({ id: 3 }),
+    ]);
 
     const resumable = request(2);
     await second.handle(
@@ -198,6 +202,52 @@ describe("SsePush", () => {
     expect(contents(tooOld.response)).toContain("event: bootstrap");
     expect(contents(tooOld.response)).toContain('"revision":2');
     await second.close();
+  });
+
+  it("bounds persisted events to bufferSize after a compaction interval", async () => {
+    const storage = new MemoryStorage();
+    const push = new SsePush({
+      storage,
+      getBootstrap: () => ({ state: "fixture" }),
+      bufferSize: 3,
+      heartbeatMs: 60_000,
+      flushIntervalMs: 0,
+    });
+
+    for (let sequence = 1; sequence <= 100; sequence += 1) {
+      await push.publish("update", { sequence });
+    }
+
+    const records = await storage.read<{ id: number }>("sse-events");
+    expect(records.map(({ id }) => id)).toEqual([98, 99, 100]);
+    await push.close();
+  });
+
+  it("resumes after Last-Event-ID across an event-stream compaction", async () => {
+    const storage = new MemoryStorage();
+    const push = new SsePush({
+      storage,
+      getBootstrap: () => ({ state: "fixture" }),
+      bufferSize: 3,
+      heartbeatMs: 60_000,
+      flushIntervalMs: 0,
+    });
+    for (let sequence = 1; sequence <= 100; sequence += 1) {
+      await push.publish("update", { sequence });
+    }
+    const resumed = request(98);
+
+    await push.handle(
+      resumed.request as unknown as IncomingMessage,
+      resumed.response as unknown as ServerResponse,
+    );
+
+    const replay = contents(resumed.response);
+    expect(replay).not.toContain("event: bootstrap");
+    expect(replay).not.toContain('"sequence":98');
+    expect(replay).toContain('"sequence":99');
+    expect(replay).toContain('"sequence":100');
+    await push.close();
   });
 
   it("emits heartbeat comments without consuming event IDs", async () => {
@@ -280,8 +330,8 @@ describe("SsePush", () => {
     );
 
     // 1,000 x 4KB is deliberately representative of the production replay
-    // storm: persistence retains every record, while the live socket gets
-    // only the latest tick for this same outcome.
+    // storm: every publish is durable before periodic compaction, while the
+    // live socket gets only the latest tick for this same outcome.
     const padding = "x".repeat(4_096);
     for (let sequence = 0; sequence < 1_000; sequence += 1) {
       await push.publish("update", {
@@ -320,7 +370,9 @@ describe("SsePush", () => {
     expect(delivered).not.toContain('"bid":0.001');
     expect(delivered).toContain('"volume":12500');
     expect(delivered).toContain('"depth":{"bids":[0.4],"asks":[0.42]}');
-    expect(await storage.read("sse-events")).toHaveLength(1_001);
+    // Event 1,000 triggers compaction to the default 256-record buffer; the
+    // following health event remains as the first append in the next window.
+    expect(await storage.read("sse-events")).toHaveLength(257);
     await push.close();
   });
 });

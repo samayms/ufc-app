@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CollectorEventBus, type CollectorEvent } from "./eventBus.ts";
 import {
+  compactFightLifecycleStream,
   FightLifecycleMachine,
   type FightLifecycleObservation,
   type FightLifecycleMachineOptions,
@@ -468,6 +469,72 @@ describe("FightLifecycleMachine", () => {
         confirmation: "period_transition",
       },
     ]);
+  });
+
+  it("compacts repeated lifecycle records to the newest state per bout", async () => {
+    const { storage, machine } = await createMachine();
+    for (let revision = 0; revision < 12; revision += 1) {
+      await machine.observe(observation(revision, {
+        clockSeconds: 120 - revision,
+      }));
+    }
+
+    await compactFightLifecycleStream(storage);
+
+    await expect(storage.read("fight-lifecycle")).resolves.toEqual([
+      expect.objectContaining({
+        state: expect.objectContaining({
+          boutId: BOUT_ID,
+          clockSeconds: 109,
+          receivedAt: at(11),
+        }),
+      }),
+    ]);
+  });
+
+  it("keeps distinct bout ids in their latest-update order during compaction", async () => {
+    const { storage, machine } = await createMachine();
+    await machine.observe(observation(0, { boutId: "bout-a" }));
+    await machine.observe(observation(1, { boutId: "bout-b" }));
+    await machine.observe(observation(2, {
+      boutId: "bout-a",
+      clockSeconds: 119,
+    }));
+
+    await compactFightLifecycleStream(storage);
+    const records = await storage.read<{
+      state: { boutId: string; receivedAt: string };
+    }>("fight-lifecycle");
+
+    expect(records.map(({ state }) => [state.boutId, state.receivedAt])).toEqual([
+      ["bout-b", at(1)],
+      ["bout-a", at(2)],
+    ]);
+  });
+
+  it("restores identical lifecycle state while compacting at boot", async () => {
+    const storage = new MemoryStorage();
+    const first = await createMachine({ storage });
+    await first.machine.observe(
+      observation(0, { state: "pre", clockSeconds: undefined }),
+    );
+    await first.machine.observe(observation(1));
+    await first.machine.observe(observation(2, { clockSeconds: 0 }));
+    await first.machine.observe(
+      observation(3, { period: 2, clockSeconds: 300 }),
+    );
+    const expectedState = first.machine.getState(BOUT_ID);
+    const expectedSource = first.machine.getActiveSource(BOUT_ID);
+    const expectedSupersessions = first.machine.getSupersessionLog(BOUT_ID);
+
+    const restored = await createMachine({ storage });
+
+    await expect(storage.read("fight-lifecycle")).resolves.toHaveLength(1);
+    expect(restored.machine.getState(BOUT_ID)).toEqual(expectedState);
+    expect(restored.machine.getActiveSource(BOUT_ID)).toBe(expectedSource);
+    expect(restored.machine.getSupersessionLog(BOUT_ID)).toEqual(
+      expectedSupersessions,
+    );
   });
 
   it("does nothing while the countdown remains above zero", async () => {

@@ -41,6 +41,8 @@ export interface ProvisionalRoundSupersession {
 
 export const DEFAULT_ESPN_FRESHNESS_MS = 30_000;
 export const DEFAULT_LIFECYCLE_STORAGE_STREAM = "fight-lifecycle";
+/** Bound superseded bout states without rewriting the stream on every poll. */
+const FIGHT_LIFECYCLE_COMPACTION_INTERVAL = 100;
 
 /**
  * ESPN supplies a five-minute countdown: 300 starts a round and 0:00 marks
@@ -495,6 +497,33 @@ function isPersistedLifecycle(
   );
 }
 
+async function readLatestFightLifecycleStates(
+  storage: Storage,
+  storageStream: string,
+): Promise<Map<string, PersistedFightLifecycle>> {
+  const latestByBout = new Map<string, PersistedFightLifecycle>();
+  await readStorageRecords(storage, storageStream, (record) => {
+    if (!isPersistedLifecycle(record)) return;
+    const boutId = record.state.boutId;
+    // Delete before set so Map iteration reflects each bout's last write and
+    // replaying the compacted stream retains the original restore semantics.
+    latestByBout.delete(boutId);
+    latestByBout.set(boutId, record);
+  });
+  return latestByBout;
+}
+
+export async function compactFightLifecycleStream(
+  storage: Storage,
+  storageStream = DEFAULT_LIFECYCLE_STORAGE_STREAM,
+): Promise<void> {
+  const latestByBout = await readLatestFightLifecycleStates(
+    storage,
+    storageStream,
+  );
+  await storage.replace(storageStream, [...latestByBout.values()]);
+}
+
 export class FightLifecycleMachine {
   private readonly eventBus: Pick<CollectorEventBus, "emit">;
 
@@ -515,6 +544,10 @@ export class FightLifecycleMachine {
   private restorePromise: Promise<void> | undefined;
 
   private operationQueue: Promise<void> = Promise.resolve();
+
+  private appendsSinceCompaction = 0;
+
+  private persistenceQueue: Promise<void> = Promise.resolve();
 
   constructor(options: FightLifecycleMachineOptions) {
     if (
@@ -586,12 +619,46 @@ export class FightLifecycleMachine {
   }
 
   private async restoreFromStorage(): Promise<void> {
-    this.bouts.clear();
-    await readStorageRecords(this.storage, this.storageStream, (record) => {
-      if (isPersistedLifecycle(record)) {
-        this.bouts.set(record.state.boutId, copyPersisted(record));
+    const operation = this.persistenceQueue.then(async () => {
+      const latestByBout = await readLatestFightLifecycleStates(
+        this.storage,
+        this.storageStream,
+      );
+      this.bouts.clear();
+      for (const [boutId, record] of latestByBout) {
+        this.bouts.set(boutId, copyPersisted(record));
+      }
+      await this.storage.replace(
+        this.storageStream,
+        [...latestByBout.values()],
+      );
+    });
+    // Boot rewrites and later appends/rewrites share one queue so replace
+    // cannot race a newer append and accidentally discard it.
+    this.persistenceQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    await operation;
+  }
+
+  private persist(record: PersistedFightLifecycle): Promise<void> {
+    const operation = this.persistenceQueue.then(async () => {
+      await this.storage.append(this.storageStream, record);
+      this.appendsSinceCompaction += 1;
+      if (
+        this.appendsSinceCompaction >=
+          FIGHT_LIFECYCLE_COMPACTION_INTERVAL
+      ) {
+        await compactFightLifecycleStream(this.storage, this.storageStream);
+        this.appendsSinceCompaction = 0;
       }
     });
+    this.persistenceQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
   }
 
   private async processObservation(
@@ -607,7 +674,7 @@ export class FightLifecycleMachine {
     const current = this.bouts.get(observation.boutId);
     if (current === undefined) {
       const initial = initialPersisted(observation);
-      await this.storage.append(this.storageStream, initial);
+      await this.persist(initial);
       this.bouts.set(observation.boutId, initial);
       return [];
     }
@@ -633,14 +700,14 @@ export class FightLifecycleMachine {
       isLifecycleRegression(current, observation)
     ) {
       const cursorOnly = updateSourceCursor(current, observation);
-      await this.storage.append(this.storageStream, cursorOnly);
+      await this.persist(cursorOnly);
       this.bouts.set(observation.boutId, cursorOnly);
       return [];
     }
 
     const result = transition(current, observation);
 
-    await this.storage.append(this.storageStream, result.persisted);
+    await this.persist(result.persisted);
     this.bouts.set(observation.boutId, result.persisted);
 
     if (result.supersession !== undefined) {
