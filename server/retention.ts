@@ -21,6 +21,7 @@ import {
   DEFAULT_INTERVAL_QUOTA_STORAGE_STREAM,
   DEFAULT_QUOTA_STORAGE_STREAM,
   DEFAULT_SPEND_STORAGE_STREAM,
+  WINDOW_MS,
 } from "./quota.ts";
 import { PARSER_ERROR_STORAGE_STREAM } from "./review.ts";
 import {
@@ -52,6 +53,11 @@ import {
 export type RetentionPolicy =
   | { kind: "last-per-key"; key: (record: unknown) => string | undefined }
   | { kind: "newest"; limit: number }
+  | {
+      kind: "newer-than";
+      windowMs: number;
+      at: (record: unknown) => number | undefined;
+    }
   | { kind: "unbounded"; reason: string };
 
 type UnknownRecord = Record<string, unknown>;
@@ -89,6 +95,10 @@ function joinedKey(
     ? undefined
     : JSON.stringify(parts);
 }
+
+// QuotaLedger only reads one day, but compaction can overlap a restore. Three
+// days keeps a wide safety margin while still making the logs self-bounding.
+const QUOTA_RETENTION_WINDOW_MS = WINDOW_MS.day * 3;
 
 /**
  * One reviewable retention decision for every JSONL stream. Key extractors
@@ -148,12 +158,16 @@ export const STREAM_RETENTION: Record<string, RetentionPolicy> = {
     key: (value) => stringAt(value, "snapshot", "source"),
   },
   [HEALTH_ALERT_STORAGE_STREAM]: {
-    kind: "unbounded",
-    reason: "The bootstrap API exposes the complete alert transition history.",
+    // Ten thousand transitions preserve ample operational context without
+    // allowing a noisy source to grow the dashboard bootstrap forever.
+    kind: "newest",
+    limit: 10_000,
   },
   [MARKET_FRESHNESS_STORAGE_STREAM]: {
-    kind: "unbounded",
-    reason: "Historical transitions determine freshness at past market boundaries.",
+    // Freshness transitions are compact display history; 25k spans many
+    // events while bounding the higher-volume queue.
+    kind: "newest",
+    limit: 25_000,
   },
   [BOUT_MAPPING_STREAM]: {
     kind: "last-per-key",
@@ -167,8 +181,10 @@ export const STREAM_RETENTION: Record<string, RetentionPolicy> = {
     ),
   },
   [AMBIGUOUS_MAPPING_STREAM]: {
-    kind: "unbounded",
-    reason: "The review API exposes every ambiguous mapping for manual triage.",
+    // Manual triage cannot use an unlimited backlog; 5k leaves a generous
+    // review window without turning stale ambiguities into permanent data.
+    kind: "newest",
+    limit: 5_000,
   },
   [UPCOMING_MAPPING_STREAM]: {
     kind: "last-per-key",
@@ -191,16 +207,20 @@ export const STREAM_RETENTION: Record<string, RetentionPolicy> = {
     ),
   },
   [PARSER_ERROR_STORAGE_STREAM]: {
-    kind: "unbounded",
-    reason: "The review API exposes every parser failure for diagnosis.",
+    // Parser failures are diagnostic samples, not an audit log. Keep enough
+    // for pattern diagnosis while bounding repeated upstream breakage.
+    kind: "newest",
+    limit: 5_000,
   },
   [DEFAULT_ROUND_JOBS_STORAGE_STREAM]: {
     kind: "last-per-key",
     key: (value) => stringAt(value, "key"),
   },
   [DEFAULT_ROUND_JOB_DEAD_LETTER_STREAM]: {
-    kind: "unbounded",
-    reason: "The review API exposes every dead letter for manual recovery.",
+    // Two thousand failed jobs is already far beyond a practical manual
+    // recovery queue and still leaves substantial incident history.
+    kind: "newest",
+    limit: 2_000,
   },
   [PRE_EVENT_POLL_STORAGE_STREAM]: {
     kind: "last-per-key",
@@ -212,18 +232,19 @@ export const STREAM_RETENTION: Record<string, RetentionPolicy> = {
     },
   },
   [DEFAULT_QUOTA_STORAGE_STREAM]: {
-    kind: "unbounded",
-    reason:
-      "Rolling quota readers need every acquisition in a configurable time window.",
+    kind: "newer-than",
+    windowMs: QUOTA_RETENTION_WINDOW_MS,
+    at: (value) => numberAt(value, "acquiredAt"),
   },
   [DEFAULT_INTERVAL_QUOTA_STORAGE_STREAM]: {
-    kind: "last-per-key",
-    key: (value) => stringAt(value, "source"),
+    kind: "newer-than",
+    windowMs: QUOTA_RETENTION_WINDOW_MS,
+    at: (value) => numberAt(value, "acquiredAt"),
   },
   [DEFAULT_SPEND_STORAGE_STREAM]: {
     kind: "unbounded",
     reason:
-      "Spending caps reconstruct cumulative all-time cents from every acquisition.",
+      "SpendLedger reconstructs all-time spending caps by summing every paid acquisition; dropping a record could under-count spend and overspend real money. It grows by one small record per paid acquisition.",
   },
   [EVENT_ROTATION_STORAGE_STREAM]: { kind: "newest", limit: 1 },
   [SHERDOG_BASELINES_STORAGE_STREAM]: {
@@ -253,13 +274,16 @@ export const STREAM_RETENTION: Record<string, RetentionPolicy> = {
     key: (value) => stringAt(value, "value", "normalizedName"),
   },
   [LAB_TIMELINE_STREAM]: {
-    kind: "unbounded",
-    reason:
-      "The lab JSONL is the complete fight-night latency investigation record.",
+    // The lab UI retains 5k entries in memory; twice that is a generous local
+    // investigation window without preserving fight-night captures forever.
+    kind: "newest",
+    limit: 10_000,
   },
 };
 
 export const DEFAULT_STREAM_JANITOR_INTERVAL_MS = 15 * 60 * 1_000;
+export const DEFAULT_STREAM_SIZE_WARNING_BYTES = 64 * 1024 * 1024;
+export const STREAM_SIZE_WARNING_BYTES_ENV = "STREAM_SIZE_WARNING_BYTES";
 
 export interface StreamJanitorTimer {
   setInterval(callback: () => void, intervalMs: number): unknown;
@@ -268,7 +292,7 @@ export interface StreamJanitorTimer {
 
 export interface StreamJanitorLogger {
   log(message: string): void;
-  warn(message: string, error: unknown): void;
+  warn(message: string, error?: unknown): void;
 }
 
 export interface StreamJanitorOptions {
@@ -276,6 +300,7 @@ export interface StreamJanitorOptions {
   intervalMs?: number;
   timer?: StreamJanitorTimer;
   logger?: StreamJanitorLogger;
+  sizeWarningBytes?: number;
 }
 
 const DEFAULT_JANITOR_TIMER: StreamJanitorTimer = {
@@ -295,6 +320,8 @@ export class StreamJanitor {
 
   private readonly logger: StreamJanitorLogger;
 
+  private readonly sizeWarningBytes: number;
+
   private intervalHandle: unknown;
 
   private sweepQueue: Promise<void> = Promise.resolve();
@@ -311,6 +338,16 @@ export class StreamJanitor {
     this.intervalMs = intervalMs;
     this.timer = options.timer ?? DEFAULT_JANITOR_TIMER;
     this.logger = options.logger ?? console;
+    const sizeWarningBytes = options.sizeWarningBytes ?? Number(
+      process.env[STREAM_SIZE_WARNING_BYTES_ENV] ??
+        DEFAULT_STREAM_SIZE_WARNING_BYTES,
+    );
+    if (!Number.isSafeInteger(sizeWarningBytes) || sizeWarningBytes <= 0) {
+      throw new TypeError(
+        "stream janitor sizeWarningBytes must be a positive safe integer",
+      );
+    }
+    this.sizeWarningBytes = sizeWarningBytes;
   }
 
   async start(): Promise<void> {
@@ -338,6 +375,7 @@ export class StreamJanitor {
   }
 
   private async sweepOnce(): Promise<void> {
+    await this.warnOversizedStreams();
     for (const [stream, policy] of Object.entries(STREAM_RETENTION)) {
       if (policy.kind === "unbounded") continue;
       try {
@@ -351,6 +389,33 @@ export class StreamJanitor {
         // One corrupt or unwritable stream must not disable retention for all
         // the independent streams that follow it in the registry.
         this.logger.warn(`Unable to compact ${stream}`, error);
+      }
+    }
+  }
+
+  private async warnOversizedStreams(): Promise<void> {
+    if (this.storage.streamSize === undefined) return;
+
+    let streams: string[];
+    try {
+      streams = await this.storage.listStreams();
+    } catch (error) {
+      this.logger.warn("Unable to list streams for size inspection", error);
+      return;
+    }
+
+    for (const stream of streams) {
+      try {
+        const size = await this.storage.streamSize(stream);
+        if (size !== undefined && size > this.sizeWarningBytes) {
+          this.logger.warn(
+            `Stream ${stream} is ${size} bytes, exceeding the ${this.sizeWarningBytes} bytes warning budget`,
+          );
+        }
+      } catch (error) {
+        // Sizing is only an early warning. A race with rotation or an
+        // unreadable file must never prevent compaction of independent logs.
+        this.logger.warn(`Unable to inspect size of ${stream}`, error);
       }
     }
   }

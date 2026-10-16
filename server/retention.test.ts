@@ -65,6 +65,17 @@ describe("stream retention registry", () => {
       [...discovered].filter((stream) => !(stream in STREAM_RETENTION)),
     ).toEqual([]);
   });
+
+  it("leaves only the all-time paid spend ledger unbounded", () => {
+    expect(
+      Object.entries(STREAM_RETENTION)
+        .filter(([, policy]) => policy.kind === "unbounded")
+        .map(([stream]) => stream),
+    ).toEqual(["spend-acquisitions"]);
+    expect(STREAM_RETENTION["spend-acquisitions"]).toMatchObject({
+      reason: expect.stringMatching(/all-time.*under-count.*overspend/u),
+    });
+  });
 });
 
 describe("Storage.compact", () => {
@@ -137,6 +148,33 @@ describe("Storage.compact", () => {
     ]);
   });
 
+  it("keeps timestamp-less and in-window records relative to the newest timestamp", async () => {
+    const storage = new MemoryStorage();
+    const records = [
+      { id: "old", acquiredAt: 1_000 },
+      { id: "unknown" },
+      { id: "newest", acquiredAt: 10_000 },
+      { id: "recent", acquiredAt: 7_001 },
+      { id: "too-old", acquiredAt: 7_000 },
+    ];
+    for (const record of records) await storage.append("windowed", record);
+
+    await expect(storage.compact("windowed", {
+      kind: "newer-than",
+      windowMs: 3_000,
+      at: (record) =>
+        typeof record === "object" && record !== null &&
+          typeof (record as { acquiredAt?: unknown }).acquiredAt === "number"
+          ? (record as { acquiredAt: number }).acquiredAt
+          : undefined,
+    })).resolves.toEqual({ before: 5, after: 3 });
+    await expect(storage.read("windowed")).resolves.toEqual([
+      { id: "unknown" },
+      { id: "newest", acquiredAt: 10_000 },
+      { id: "recent", acquiredAt: 7_001 },
+    ]);
+  });
+
   it("counts but does not rewrite an unbounded stream", async () => {
     class ReplaceDetectingStorage extends MemoryStorage {
       readonly replace = vi.fn(super.replace.bind(this));
@@ -168,6 +206,50 @@ describe("Storage.compact", () => {
 });
 
 describe("StreamJanitor", () => {
+  it("warns at startup and on each sweep when a stream exceeds its byte budget", async () => {
+    const storage = new JsonlStorage(await createTemporaryDirectory());
+    await storage.append("spend-acquisitions", { payload: "x".repeat(200) });
+    const logger = { log: vi.fn(), warn: vi.fn() };
+    const timer = {
+      setInterval: vi.fn(() => 7),
+      clearInterval: vi.fn(),
+    };
+    const janitor = new StreamJanitor({
+      storage,
+      logger,
+      timer,
+      sizeWarningBytes: 64,
+    });
+
+    await janitor.start();
+    await janitor.sweep();
+    await janitor.stop();
+
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/spend-acquisitions.*\d+ bytes.*64 bytes/u),
+    );
+  });
+
+  it("tolerates a stream disappearing before its size can be inspected", async () => {
+    class DisappearingStorage extends JsonlStorage {
+      override async listStreams(): Promise<string[]> {
+        return ["already-gone"];
+      }
+    }
+    const storage = new DisappearingStorage(await createTemporaryDirectory());
+    const logger = { log: vi.fn(), warn: vi.fn() };
+    const janitor = new StreamJanitor({
+      storage,
+      logger,
+      sizeWarningBytes: 1,
+    });
+
+    await expect(janitor.sweep()).resolves.toBeUndefined();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it("sweeps at startup and on its timer, then stops the timer", async () => {
     const storage = new MemoryStorage();
     await storage.append("collector-state", {

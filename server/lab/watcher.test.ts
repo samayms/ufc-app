@@ -490,7 +490,7 @@ describe("LabWatcher continuous ESPN fight polling", () => {
     watcher.stop();
   });
 
-  it("samples both fighters' cumulative core stats every five seconds", async () => {
+  it("keeps changed ESPN stats payloads but omits them from unchanged samples", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(BASE_TIME);
     let redCalls = 0;
@@ -528,11 +528,12 @@ describe("LabWatcher continuous ESPN fight polling", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(5_000);
 
     const samples = timeline
       .since(0)
       .filter((entry) => entry.source === "espn-stats");
-    expect(samples).toHaveLength(2);
+    expect(samples).toHaveLength(3);
     expect(samples[0]).toMatchObject({
       boutId: "12879",
       detail: {
@@ -566,16 +567,34 @@ describe("LabWatcher continuous ESPN fight polling", () => {
             delta: 3,
           }),
         ]),
+        red: { athleteId: "4685870" },
+        blue: { athleteId: "4426312" },
       },
     });
+    expect(samples[2]).toMatchObject({
+      detail: {
+        sampleNumber: 3,
+        firstNonzero: false,
+        hasValues: true,
+        changedCount: 0,
+        changedFields: [],
+        responseChanged: false,
+        responseSha256s: {
+          red: expect.stringMatching(/^[a-f0-9]{64}$/u),
+          blue: expect.stringMatching(/^[a-f0-9]{64}$/u),
+        },
+      },
+    });
+    expect(samples[2]?.detail).not.toHaveProperty("red");
+    expect(samples[2]?.detail).not.toHaveProperty("blue");
     expect(watcher.status()).toMatchObject({
       running: true,
       pollers: expect.arrayContaining([
-        expect.objectContaining({ name: "espn", active: true, polls: 2 }),
+        expect.objectContaining({ name: "espn", active: true, polls: 3 }),
         expect.objectContaining({
           name: "espn-stats",
           active: true,
-          polls: 2,
+          polls: 3,
         }),
       ]),
     });

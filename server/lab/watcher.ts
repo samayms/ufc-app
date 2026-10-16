@@ -541,6 +541,7 @@ export class LabWatcher {
    * ESPN's core endpoint exposes one fight-cumulative split per fighter. Every
    * sample is kept, including identical ones, because the lab is measuring
    * publication timing and cache behavior rather than manufacturing rounds.
+   * Identical samples keep their timing and hashes but omit duplicate bodies.
    */
   private async pollEspnStats(): Promise<void> {
     const eventId = this.target?.espnEventId?.trim() ?? "";
@@ -591,6 +592,15 @@ export class LabWatcher {
       ...redChanges.map((change) => ({ corner: "red", ...change })),
       ...blueChanges.map((change) => ({ corner: "blue", ...change })),
     ];
+    const responseChanged =
+      previous === undefined ||
+      previous.red.response.sha256 !== red.response.sha256 ||
+      previous.blue.response.sha256 !== blue.response.sha256;
+    const keepPayloads =
+      previous === undefined ||
+      changedFields.length > 0 ||
+      responseChanged ||
+      firstNonzero;
     const sampleNumber = ++this.espnStatsSampleNumber;
     this.espnStatsLast = { boutId, red, blue };
 
@@ -614,12 +624,15 @@ export class LabWatcher {
         hasValues,
         changedCount: changedFields.length,
         changedFields,
-        responseChanged:
-          previous === undefined ||
-          previous.red.response.sha256 !== red.response.sha256 ||
-          previous.blue.response.sha256 !== blue.response.sha256,
-        red,
-        blue,
+        responseChanged,
+        ...(keepPayloads
+          ? { red, blue }
+          : {
+              responseSha256s: {
+                red: red.response.sha256,
+                blue: blue.response.sha256,
+              },
+            }),
       },
     });
   }

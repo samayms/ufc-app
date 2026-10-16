@@ -3,6 +3,7 @@ import {
   mkdir,
   readdir,
   rename,
+  stat,
   truncate,
   writeFile,
 } from "node:fs/promises";
@@ -21,6 +22,7 @@ export interface Storage {
   ): Promise<{ before: number; after: number }>;
   read<Record = unknown>(stream: string): Promise<Record[]>;
   listStreams(): Promise<string[]>;
+  streamSize?(stream: string): Promise<number | undefined>;
 }
 
 type ParsedJsonl = {
@@ -206,6 +208,37 @@ function retentionAccumulator(policy: RetentionPolicy): RetentionAccumulator {
         },
       };
     }
+    case "newer-than": {
+      if (!Number.isFinite(policy.windowMs) || policy.windowMs < 0) {
+        throw new TypeError(
+          "newer-than retention windowMs must be a non-negative finite number",
+        );
+      }
+      const retained: Array<{ record: unknown; at: number | undefined }> = [];
+      let newestAt: number | undefined;
+      return {
+        add(record) {
+          before += 1;
+          const at = policy.at(record);
+          retained.push({ record, at });
+          if (at !== undefined && (newestAt === undefined || at > newestAt)) {
+            newestAt = at;
+          }
+        },
+        finish() {
+          if (newestAt === undefined) {
+            return { before, records: retained.map(({ record }) => record) };
+          }
+          const cutoff = newestAt - policy.windowMs;
+          return {
+            before,
+            records: retained
+              .filter(({ at }) => at === undefined || at > cutoff)
+              .map(({ record }) => record),
+          };
+        },
+      };
+    }
     case "unbounded":
       return {
         add() {
@@ -329,6 +362,17 @@ export class JsonlStorage implements Storage {
         return [];
       }
 
+      throw error;
+    }
+  }
+
+  async streamSize(stream: string): Promise<number | undefined> {
+    assertStreamName(stream);
+    await this.writeQueues.get(stream);
+    try {
+      return (await stat(this.streamPath(stream))).size;
+    } catch (error) {
+      if (isFileNotFound(error)) return undefined;
       throw error;
     }
   }
