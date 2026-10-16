@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import {
   applyLifecycleObservationToDashboard,
+  compactCollectorStateStream,
   createCollector,
   loadFixtureState,
   type Collector,
@@ -784,6 +785,95 @@ describe.skipIf(!localhostAvailable)(
 );
 
 describe("fixture collector loading", () => {
+  it("compacts repeated collector snapshots to the newest state per event", async () => {
+    const storage = new MemoryStorage();
+    const state = await loadFixtureState();
+    for (let revision = 1; revision <= 12; revision += 1) {
+      await storage.append("collector-state", {
+        version: 1,
+        state: {
+          ...state,
+          event: { ...state.event, name: `Fixture revision ${revision}` },
+        },
+      });
+    }
+
+    const latest = await compactCollectorStateStream(storage);
+
+    await expect(storage.read("collector-state")).resolves.toEqual([
+      expect.objectContaining({
+        state: expect.objectContaining({
+          event: expect.objectContaining({ name: "Fixture revision 12" }),
+        }),
+      }),
+    ]);
+    expect(latest?.event.name).toBe("Fixture revision 12");
+  });
+
+  it("keeps distinct event ids in their latest-update order during compaction", async () => {
+    const storage = new MemoryStorage();
+    const state = await loadFixtureState();
+    const stateFor = (eventId: string, name: string) => ({
+      ...state,
+      event: { ...state.event, id: eventId, name },
+    });
+    await storage.append("collector-state", {
+      version: 1,
+      state: stateFor("event-a", "Event A old"),
+    });
+    await storage.append("collector-state", {
+      version: 1,
+      state: stateFor("event-b", "Event B"),
+    });
+    await storage.append("collector-state", {
+      version: 1,
+      state: stateFor("event-a", "Event A newest"),
+    });
+
+    const latest = await compactCollectorStateStream(storage);
+    const records = await storage.read<{
+      state: { event: { id: string; name: string } };
+    }>("collector-state");
+
+    expect(records.map(({ state: recordState }) => [
+      recordState.event.id,
+      recordState.event.name,
+    ])).toEqual([
+      ["event-b", "Event B"],
+      ["event-a", "Event A newest"],
+    ]);
+    expect(latest?.event.id).toBe("event-a");
+  });
+
+  it("streams collector-state at boot and restores its newest snapshot", async () => {
+    class StreamingCollectorStateStorage extends MemoryStorage {
+      override async read<Record = unknown>(stream: string): Promise<Record[]> {
+        if (stream === "collector-state") {
+          throw new Error("collector-state must be streamed");
+        }
+        return super.read<Record>(stream);
+      }
+    }
+
+    const storage = new StreamingCollectorStateStorage();
+    const oldState = await loadFixtureState();
+    const newestState = structuredClone(oldState);
+    newestState.event.name = "Newest durable fixture";
+    await storage.append("collector-state", { version: 1, state: oldState });
+    await storage.append("collector-state", { version: 1, state: newestState });
+
+    const collector = await createCollector({
+      env: { DATA_MODE: "fixture", COLLECTOR_PORT: "0" },
+      storage,
+      stateLoader: async () => structuredClone(newestState),
+    });
+    collectors.push(collector);
+
+    expect(collector.getBootstrap().state?.event.name).toBe(
+      "Newest durable fixture",
+    );
+  });
+
   it("is deterministic and performs no network calls", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")

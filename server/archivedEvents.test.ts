@@ -215,6 +215,42 @@ describe("listArchivedEvents / loadArchivedEvent", () => {
     ]);
   });
 
+  it("streams compacted state, rounds, and markets for the requested event", async () => {
+    class StreamingArchiveStorage extends MemoryStorage {
+      override async read<Record = unknown>(stream: string): Promise<Record[]> {
+        if (
+          stream === "collector-state" ||
+          stream === "unified-rounds" ||
+          stream === "market-snapshots"
+        ) {
+          throw new Error(`${stream} must be streamed`);
+        }
+        return super.read<Record>(stream);
+      }
+    }
+
+    const db = freshDb();
+    seedArchivedEvent(db);
+    const storage = new StreamingArchiveStorage();
+    const databaseState = await loadArchivedEvent(db, "e1");
+    expect(databaseState).toBeDefined();
+    if (databaseState === undefined) return;
+    const newestState = structuredClone(databaseState);
+    newestState.event.name = "Newest collector name";
+    newestState.event.bouts[0]!.fighters.red.age = 37;
+    const otherState = structuredClone(databaseState);
+    otherState.event.id = "other-event";
+    await storage.replace("collector-state", [
+      { version: 1, state: otherState },
+      { version: 1, state: newestState },
+    ]);
+
+    const snapshot = await loadArchivedEventSnapshot(db, "e1", storage);
+
+    expect(snapshot?.event.name).toBe("UFC 300");
+    expect(snapshot?.event.bouts[0]?.fighters.red.age).toBe(37);
+  });
+
   it("returns undefined for an event that is not archived", async () => {
     const db = freshDb();
     db.insert(schema.events).values({ id: "e2", name: "Live Event" }).run();

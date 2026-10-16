@@ -141,6 +141,7 @@ import {
 } from "./sherdogScorerProfiles.ts";
 import {
   JsonlStorage,
+  readStorageRecords,
   type Storage,
 } from "./storage.ts";
 import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
@@ -165,6 +166,8 @@ import {
 } from "./archivedEvents.ts";
 
 export const COLLECTOR_STATE_STREAM = "collector-state";
+/** Bound duplicate snapshots without rewriting the stream on every update. */
+const COLLECTOR_STATE_COMPACTION_INTERVAL = 100;
 export const COLLECTOR_HEALTH_STREAM = SOURCE_HEALTH_STORAGE_STREAM;
 export type {
   SourceHealth,
@@ -461,6 +464,31 @@ function isPersistedCollectorState(
     value.version === 1 &&
     isDashboardState(value.state)
   );
+}
+
+async function readLatestCollectorStates(
+  storage: Storage,
+): Promise<Map<string, PersistedCollectorState>> {
+  const latestByEvent = new Map<string, PersistedCollectorState>();
+  await readStorageRecords(storage, COLLECTOR_STATE_STREAM, (record) => {
+    if (!isPersistedCollectorState(record)) return;
+    const eventId = record.state.event.id;
+    // Delete before set so Map iteration reflects each event's last write.
+    // The final entry therefore remains the global latest snapshot, matching
+    // the old `.at(-1)` boot behavior after the stream is rewritten.
+    latestByEvent.delete(eventId);
+    latestByEvent.set(eventId, record);
+  });
+  return latestByEvent;
+}
+
+export async function compactCollectorStateStream(
+  storage: Storage,
+): Promise<DashboardState | undefined> {
+  const latestByEvent = await readLatestCollectorStates(storage);
+  const records = [...latestByEvent.values()];
+  await storage.replace(COLLECTOR_STATE_STREAM, records);
+  return records.at(-1)?.state;
 }
 
 function latestSourceTimestamp(
@@ -774,11 +802,39 @@ export async function createCollector(
   const config = loadConfig(options.env);
   const storage =
     options.storage ?? new JsonlStorage(config.persistencePath);
-  const stateRecords =
-    await storage.read<unknown>(COLLECTOR_STATE_STREAM);
-  const restoredState = stateRecords
-    .filter(isPersistedCollectorState)
-    .at(-1)?.state;
+  await compactCollectorStateStream(storage);
+  let restoredState: DashboardState | undefined;
+  await readStorageRecords(storage, COLLECTOR_STATE_STREAM, (record) => {
+    if (isPersistedCollectorState(record)) restoredState = record.state;
+  });
+  let collectorStateAppendsSinceCompaction = 0;
+  let collectorStatePersistenceQueue = Promise.resolve();
+  const persistCollectorState = (nextState: DashboardState): Promise<void> => {
+    // The live dashboard is mutated in place, so take the queued write's
+    // snapshot now rather than after an earlier persistence operation ends.
+    const record = structuredClone({
+      version: 1,
+      state: nextState,
+    } satisfies PersistedCollectorState);
+    const operation = collectorStatePersistenceQueue.then(async () => {
+      await storage.append(COLLECTOR_STATE_STREAM, record);
+      collectorStateAppendsSinceCompaction += 1;
+      if (
+        collectorStateAppendsSinceCompaction >=
+          COLLECTOR_STATE_COMPACTION_INTERVAL
+      ) {
+        await compactCollectorStateStream(storage);
+        collectorStateAppendsSinceCompaction = 0;
+      }
+    });
+    // All collector-state appends and rewrites share one queue so a replace
+    // cannot race a newer append and accidentally discard it.
+    collectorStatePersistenceQueue = operation.then(
+      () => undefined,
+      () => undefined,
+    );
+    return operation;
+  };
   let state: DashboardState | null = restoredState ?? null;
   let boutMappings: BoutMappingRegistry | undefined;
   let roundStats: RoundStatsPipeline | undefined;
@@ -962,10 +1018,7 @@ export async function createCollector(
     JSON.stringify(state) !== JSON.stringify(loaded)
   ) {
     state = loaded;
-    await storage.append(COLLECTOR_STATE_STREAM, {
-      version: 1,
-      state,
-    } satisfies PersistedCollectorState);
+    await persistCollectorState(state);
   } else {
     state = loaded;
   }
@@ -1097,10 +1150,7 @@ export async function createCollector(
       }
       if (dashboardChanged) {
         state = loaded;
-        await storage.append(COLLECTOR_STATE_STREAM, {
-          version: 1,
-          state: loaded,
-        } satisfies PersistedCollectorState);
+        await persistCollectorState(loaded);
         await persistState();
       }
 
@@ -1325,10 +1375,7 @@ export async function createCollector(
           onChanged: async (discovered) => {
             applyDiscoveredOutlooks(discovered.outlooks);
             state = loaded;
-            await storage.append(COLLECTOR_STATE_STREAM, {
-              version: 1,
-              state: loaded,
-            } satisfies PersistedCollectorState);
+            await persistCollectorState(loaded);
             await push.publish("bootstrap", getBootstrap());
           },
           onError: (stage, error) => {
@@ -2018,6 +2065,7 @@ export async function createCollector(
       await initializedRoundStats.close();
       await healthRegistry.close();
       await push.close();
+      await collectorStatePersistenceQueue;
       await closeServer(server);
     },
     async replayMarkets() {

@@ -8,7 +8,7 @@ import { and, desc, eq, isNotNull } from "drizzle-orm";
 
 import type { AppDatabase } from "./db/client.ts";
 import { bouts, events, externalRefs, fighters, people, roundStats } from "./db/schema.ts";
-import type { Storage } from "./storage.ts";
+import { readStorageRecords, type Storage } from "./storage.ts";
 import {
   UNIFIED_ROUNDS_STORAGE_STREAM,
   type UnifiedRoundRecord,
@@ -284,15 +284,11 @@ export async function loadArchivedEventSnapshot(
   const databaseState = await loadArchivedEvent(db, eventId);
   if (databaseState === undefined) return undefined;
 
-  const [stateRecords, roundRecords, marketRecords] = await Promise.all([
-    storage.read<unknown>(COLLECTOR_STATE_STREAM),
-    storage.read<unknown>(UNIFIED_ROUNDS_STORAGE_STREAM),
-    storage.read<unknown>(MARKET_SNAPSHOTS_STORAGE_STREAM),
-  ]);
-  const persistedState = stateRecords
-    .map(persistedDashboardState)
-    .filter((state): state is DashboardState => state?.event.id === eventId)
-    .at(-1);
+  let persistedState: DashboardState | undefined;
+  await readStorageRecords(storage, COLLECTOR_STATE_STREAM, (persisted) => {
+    const candidate = persistedDashboardState(persisted);
+    if (candidate?.event.id === eventId) persistedState = candidate;
+  });
 
   const databaseBouts = new Map(
     databaseState.event.bouts.map((bout) => [bout.id, bout]),
@@ -333,17 +329,19 @@ export async function loadArchivedEventSnapshot(
   // The stream is append-only and can contain revisions. Map assignment
   // keeps the newest valid record for each bout/round pair.
   const latestRounds = new Map<string, UnifiedRoundRecord>();
-  for (const persisted of roundRecords) {
-    const record = persistedUnifiedRound(persisted);
-    if (record === undefined || !archivedBoutIds.has(record.boutId)) continue;
-    latestRounds.set(`${record.boutId}:${record.round}`, record);
-  }
   const latestMarkets = new Map<string, MarketSnapshot>();
-  for (const persisted of marketRecords) {
-    const snapshot = persistedPreFightMarketSnapshot(persisted);
-    if (snapshot === undefined || !archivedBoutIds.has(snapshot.boutId)) continue;
-    latestMarkets.set(`${snapshot.boutId}:${snapshot.round}:${snapshot.source}:${snapshot.boundaryType}`, snapshot);
-  }
+  await Promise.all([
+    readStorageRecords(storage, UNIFIED_ROUNDS_STORAGE_STREAM, (persisted) => {
+      const record = persistedUnifiedRound(persisted);
+      if (record === undefined || !archivedBoutIds.has(record.boutId)) return;
+      latestRounds.set(`${record.boutId}:${record.round}`, record);
+    }),
+    readStorageRecords(storage, MARKET_SNAPSHOTS_STORAGE_STREAM, (persisted) => {
+      const snapshot = persistedPreFightMarketSnapshot(persisted);
+      if (snapshot === undefined || !archivedBoutIds.has(snapshot.boutId)) return;
+      latestMarkets.set(`${snapshot.boutId}:${snapshot.round}:${snapshot.source}:${snapshot.boundaryType}`, snapshot);
+    }),
+  ]);
 
   return {
     ...sourceState,
