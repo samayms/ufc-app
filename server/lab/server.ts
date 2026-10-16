@@ -28,7 +28,7 @@ import espnWeekendScoreboard from "../../src/fixtures/espnScoreboardWeekend.json
   type: "json",
 };
 import { matchFighterPair } from "../../src/lib/boutMatch.ts";
-import { LabTimeline } from "./timeline.ts";
+import { LAB_TIMELINE_STREAM, LabTimeline } from "./timeline.ts";
 import { LabWatcher } from "./watcher.ts";
 import {
   findProbe,
@@ -311,7 +311,7 @@ export function createLabServer(options: LabServerOptions = {}) {
   const env = options.env ?? process.env;
   const timelineFile =
     options.timelineFile === undefined
-      ? join(process.cwd(), "data", "lab-timeline.jsonl")
+      ? join(process.cwd(), "data", `${LAB_TIMELINE_STREAM}.jsonl`)
       : options.timelineFile;
 
   if (timelineFile !== null) {

@@ -8,12 +8,17 @@ import {
 } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
+import type { RetentionPolicy } from "./retention.ts";
 
 export const DEFAULT_DATA_DIRECTORY = "./data";
 
 export interface Storage {
   append(stream: string, record: unknown): Promise<void>;
   replace(stream: string, records: readonly unknown[]): Promise<void>;
+  compact(
+    stream: string,
+    policy: RetentionPolicy,
+  ): Promise<{ before: number; after: number }>;
   read<Record = unknown>(stream: string): Promise<Record[]>;
   listStreams(): Promise<string[]>;
 }
@@ -145,12 +150,78 @@ function isFileNotFound(error: unknown): boolean {
   );
 }
 
+interface RetentionAccumulator {
+  add(record: unknown): void;
+  finish(): { before: number; records?: unknown[] };
+}
+
+function retentionAccumulator(policy: RetentionPolicy): RetentionAccumulator {
+  let before = 0;
+
+  switch (policy.kind) {
+    case "last-per-key": {
+      const retained = new Map<string | symbol, unknown>();
+      return {
+        add(record) {
+          before += 1;
+          const key = policy.key(record);
+          if (key === undefined) {
+            // An unrecognized record may still be meaningful to a newer
+            // reader. Give it a unique key so compaction preserves it in its
+            // original relative position instead of treating it as garbage.
+            retained.set(Symbol(), record);
+            return;
+          }
+          // Reinsertion makes Map order reflect the record's final write, so
+          // the compacted stream's last entry is still the global newest.
+          retained.delete(key);
+          retained.set(key, record);
+        },
+        finish: () => ({ before, records: [...retained.values()] }),
+      };
+    }
+    case "newest": {
+      if (!Number.isSafeInteger(policy.limit) || policy.limit < 0) {
+        throw new TypeError(
+          "newest retention limit must be a non-negative safe integer",
+        );
+      }
+      const retained: unknown[] = [];
+      return {
+        add(record) {
+          before += 1;
+          if (policy.limit === 0) return;
+          if (retained.length < policy.limit) retained.push(record);
+          else retained[(before - 1) % policy.limit] = record;
+        },
+        finish() {
+          if (policy.limit === 0 || before <= policy.limit) {
+            return { before, records: retained };
+          }
+          const start = before % policy.limit;
+          return {
+            before,
+            records: retained.slice(start).concat(retained.slice(0, start)),
+          };
+        },
+      };
+    }
+    case "unbounded":
+      return {
+        add() {
+          before += 1;
+        },
+        finish: () => ({ before }),
+      };
+  }
+}
+
 export class JsonlStorage implements Storage {
   private readonly directory: string;
 
   private readonly recoveredStreams = new Set<string>();
 
-  private readonly writeQueues = new Map<string, Promise<void>>();
+  private readonly writeQueues = new Map<string, Promise<unknown>>();
 
   constructor(directory = DEFAULT_DATA_DIRECTORY) {
     this.directory = directory;
@@ -159,20 +230,9 @@ export class JsonlStorage implements Storage {
   async append(stream: string, record: unknown): Promise<void> {
     assertStreamName(stream);
     const serialized = serializeRecord(record);
-    const previousWrite = this.writeQueues.get(stream) ?? Promise.resolve();
-    const write = previousWrite
-      .catch(() => undefined)
-      .then(() => this.appendSerialized(stream, serialized));
-
-    this.writeQueues.set(stream, write);
-
-    try {
-      await write;
-    } finally {
-      if (this.writeQueues.get(stream) === write) {
-        this.writeQueues.delete(stream);
-      }
-    }
+    await this.enqueueWrite(stream, () =>
+      this.appendSerialized(stream, serialized)
+    );
   }
 
   async replace(
@@ -181,20 +241,46 @@ export class JsonlStorage implements Storage {
   ): Promise<void> {
     assertStreamName(stream);
     const serialized = records.map(serializeRecord);
-    const previousWrite = this.writeQueues.get(stream) ?? Promise.resolve();
-    const write = previousWrite
-      .catch(() => undefined)
-      .then(() => this.replaceSerialized(stream, serialized));
+    await this.enqueueWrite(stream, () =>
+      this.replaceSerialized(stream, serialized)
+    );
+  }
 
-    this.writeQueues.set(stream, write);
-
-    try {
-      await write;
-    } finally {
-      if (this.writeQueues.get(stream) === write) {
-        this.writeQueues.delete(stream);
+  async compact(
+    stream: string,
+    policy: RetentionPolicy,
+  ): Promise<{ before: number; after: number }> {
+    assertStreamName(stream);
+    return this.enqueueWrite(stream, async () => {
+      const accumulator = retentionAccumulator(policy);
+      try {
+        for await (const record of iterateJsonlFile(
+          this.streamPath(stream),
+          stream,
+        )) {
+          accumulator.add(record);
+        }
+      } catch (error) {
+        if (!isFileNotFound(error)) throw error;
       }
-    }
+
+      const result = accumulator.finish();
+      if (result.records === undefined) {
+        return { before: result.before, after: result.before };
+      }
+      if (result.records.length === result.before) {
+        return { before: result.before, after: result.before };
+      }
+      // This private rewrite is intentionally inside the same queued
+      // operation as the streaming read. Calling public replace() here would
+      // deadlock behind this operation; doing read()+replace() outside it
+      // would allow an intervening append to be silently discarded.
+      await this.replaceSerialized(
+        stream,
+        result.records.map(serializeRecord),
+      );
+      return { before: result.before, after: result.records.length };
+    });
   }
 
   async read<Record = unknown>(stream: string): Promise<Record[]> {
@@ -249,6 +335,25 @@ export class JsonlStorage implements Storage {
 
   private streamPath(stream: string): string {
     return join(this.directory, `${stream}.jsonl`);
+  }
+
+  private async enqueueWrite<Result>(
+    stream: string,
+    operation: () => Promise<Result>,
+  ): Promise<Result> {
+    const previousWrite = this.writeQueues.get(stream) ?? Promise.resolve();
+    const write = previousWrite
+      .catch(() => undefined)
+      .then(operation);
+    this.writeQueues.set(stream, write);
+
+    try {
+      return await write;
+    } finally {
+      if (this.writeQueues.get(stream) === write) {
+        this.writeQueues.delete(stream);
+      }
+    }
   }
 
   private async appendSerialized(
@@ -306,12 +411,16 @@ export class JsonlStorage implements Storage {
 export class MemoryStorage implements Storage {
   private readonly streams = new Map<string, unknown[]>();
 
+  private readonly writeQueues = new Map<string, Promise<unknown>>();
+
   async append(stream: string, record: unknown): Promise<void> {
     assertStreamName(stream);
     const storedRecord = JSON.parse(serializeRecord(record)) as unknown;
-    const records = this.streams.get(stream) ?? [];
-    records.push(storedRecord);
-    this.streams.set(stream, records);
+    await this.enqueueWrite(stream, async () => {
+      const records = this.streams.get(stream) ?? [];
+      records.push(storedRecord);
+      this.streams.set(stream, records);
+    });
   }
 
   async replace(
@@ -319,16 +428,44 @@ export class MemoryStorage implements Storage {
     records: readonly unknown[],
   ): Promise<void> {
     assertStreamName(stream);
-    this.streams.set(
-      stream,
-      records.map(
-        (record) => JSON.parse(serializeRecord(record)) as unknown,
-      ),
+    const storedRecords = records.map(
+      (record) => JSON.parse(serializeRecord(record)) as unknown,
     );
+    await this.enqueueWrite(stream, async () => {
+      this.streams.set(stream, storedRecords);
+    });
+  }
+
+  async compact(
+    stream: string,
+    policy: RetentionPolicy,
+  ): Promise<{ before: number; after: number }> {
+    assertStreamName(stream);
+    return this.enqueueWrite(stream, async () => {
+      const accumulator = retentionAccumulator(policy);
+      for (const record of this.streams.get(stream) ?? []) {
+        accumulator.add(record);
+      }
+      const result = accumulator.finish();
+      if (result.records === undefined) {
+        return { before: result.before, after: result.before };
+      }
+      if (result.records.length === result.before) {
+        return { before: result.before, after: result.before };
+      }
+      this.streams.set(
+        stream,
+        result.records.map(
+          (record) => JSON.parse(serializeRecord(record)) as unknown,
+        ),
+      );
+      return { before: result.before, after: result.records.length };
+    });
   }
 
   async read<Record = unknown>(stream: string): Promise<Record[]> {
     assertStreamName(stream);
+    await this.writeQueues.get(stream);
     const records = this.streams.get(stream) ?? [];
     return records.map(
       (record) => JSON.parse(serializeRecord(record)) as Record,
@@ -336,6 +473,7 @@ export class MemoryStorage implements Storage {
   }
 
   async listStreams(): Promise<string[]> {
+    await Promise.all(this.writeQueues.values());
     return [...this.streams.keys()].sort();
   }
 
@@ -343,6 +481,26 @@ export class MemoryStorage implements Storage {
     stream: string,
     visitor: (record: unknown) => void,
   ): Promise<void> {
+    await this.writeQueues.get(stream);
     for (const record of this.streams.get(stream) ?? []) visitor(record);
+  }
+
+  private async enqueueWrite<Result>(
+    stream: string,
+    operation: () => Promise<Result>,
+  ): Promise<Result> {
+    const previousWrite = this.writeQueues.get(stream) ?? Promise.resolve();
+    const write = previousWrite
+      .catch(() => undefined)
+      .then(operation);
+    this.writeQueues.set(stream, write);
+
+    try {
+      return await write;
+    } finally {
+      if (this.writeQueues.get(stream) === write) {
+        this.writeQueues.delete(stream);
+      }
+    }
   }
 }

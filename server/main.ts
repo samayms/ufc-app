@@ -35,6 +35,7 @@ import {
 } from "../src/sources/espnSchedule.ts";
 import { nextUpcomingEventId } from "../src/lib/eventIdentity.ts";
 import { readUpcomingOddsDocument } from "./upcomingOddsStore.ts";
+import { StreamJanitor } from "./retention.ts";
 
 export const EVENT_ROTATION_INTERVAL_MS = 15 * 60 * 1_000;
 
@@ -44,6 +45,12 @@ export async function startApp(): Promise<{
   materializeKalshiPrivateKey();
   const config = loadConfig(process.env);
   const storage = new JsonlStorage(config.persistencePath);
+  const streamJanitor = new StreamJanitor({ storage });
+
+  // Compact before restore so a legacy oversized stream cannot make startup
+  // pay its full historical cost, then keep sweeping on wall-clock time even
+  // after the final fight has ended and lifecycle events stop arriving.
+  await streamJanitor.start();
 
   console.log("Running database migrations…");
   runMigrations();
@@ -198,6 +205,7 @@ export async function startApp(): Promise<{
     if (stopped) return;
     stopped = true;
     eventArchiver.stop();
+    await streamJanitor.stop();
     await rotation?.close();
     await collector.close();
     closeDb();

@@ -672,6 +672,7 @@ describe("MarketTickStore", () => {
         }
         await inner.replace(stream, records);
       },
+      compact: (stream, policy) => inner.compact(stream, policy),
       read: (stream) => inner.read(stream),
       listStreams: () => inner.listStreams(),
     };

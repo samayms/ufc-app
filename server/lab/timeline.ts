@@ -1,5 +1,7 @@
 import type { TimelineEntry } from "./contract.ts";
 
+export const LAB_TIMELINE_STREAM = "lab-timeline";
+
 export interface LabTimelineOptions {
   /** Injected for tests. Defaults to the process clock. */
   now?: () => number;
