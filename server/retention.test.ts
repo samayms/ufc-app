@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import ts from "typescript";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -44,7 +45,79 @@ async function typescriptSources(directory: string): Promise<string[]> {
   return sources;
 }
 
+function containsFullStorageRead(path: string, source: string): boolean {
+  const sourceFile = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.TS,
+  );
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (found) return;
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "read"
+    ) {
+      const receiver = node.expression.expression;
+      const storageReceiver =
+        (ts.isIdentifier(receiver) && receiver.text === "storage") ||
+        (ts.isPropertyAccessExpression(receiver) &&
+          receiver.name.text === "storage");
+      const unknownRead = node.typeArguments?.some(
+        (argument) => argument.kind === ts.SyntaxKind.UnknownKeyword,
+      ) ?? false;
+      if (storageReceiver || unknownRead) {
+        found = true;
+        return;
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return found;
+}
+
 describe("stream retention registry", () => {
+  it("allows full storage reads only in reviewed boot-once paths", async () => {
+    const serverDirectory = dirname(fileURLToPath(import.meta.url));
+    // This allowlist makes the unsafe pattern visible in review. Read the
+    // failure message before adding a file instead of merely making it green.
+    const allowedFullReadFiles = [
+      "eventRotationSupervisor.ts",
+      "health.ts",
+      "main.ts",
+      "mapping.ts",
+      "preEventPoller.ts",
+      "quota.ts",
+      "replay.ts",
+      "roundJobs.ts",
+      "roundStats.ts",
+      "sherdogEventDiscovery.ts",
+      "sherdogJobs.ts",
+      "sherdogScorerProfiles.ts",
+      "storage.ts",
+      "upcomingDecisionMappingBridge.ts",
+      "upcomingMappingBridge.ts",
+    ];
+    const actualFullReadFiles: string[] = [];
+
+    for (const source of await typescriptSources(serverDirectory)) {
+      if (source.endsWith(".test.ts")) continue;
+      const contents = await readFile(source, "utf8");
+      if (containsFullStorageRead(source, contents)) {
+        actualFullReadFiles.push(source.slice(serverDirectory.length + 1));
+      }
+    }
+
+    expect(
+      actualFullReadFiles.sort(),
+      "A full storage.read() loads an entire stream into memory and is safe only on a boot-once path. Anything that can run per request or per tick must use readStorageRecords. If you are intentionally adding a boot-once read, add its file to the allowlist; if the code can run per request, stream it instead.",
+    ).toEqual(allowedFullReadFiles);
+  });
+
   it("declares a policy for every stream constant", async () => {
     const serverDirectory = dirname(fileURLToPath(import.meta.url));
     const streamPattern =

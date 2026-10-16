@@ -5,7 +5,7 @@ import {
 } from "./roundJobs.ts";
 import type { Metrics } from "./health.ts";
 import { NOOP_METRICS } from "./health.ts";
-import type { Storage } from "./storage.ts";
+import { readStorageRecords, type Storage } from "./storage.ts";
 
 export const PARSER_ERROR_STORAGE_STREAM = "parser-errors";
 
@@ -132,17 +132,33 @@ export class ReviewRegistry implements ParserErrorSink {
   }
 
   async getReviewRecords(): Promise<ReviewRecords> {
-    const [deadLetters, parserErrors, ambiguousMappings] =
-      await Promise.all([
-        this.storage.read<unknown>(
-          DEFAULT_ROUND_JOB_DEAD_LETTER_STREAM,
-        ),
-        this.storage.read<unknown>(PARSER_ERROR_STORAGE_STREAM),
-        this.storage.read<unknown>(AMBIGUOUS_MAPPING_STREAM),
-      ]);
+    const deadLetters: RoundJobDeadLetter[] = [];
+    const parserErrors: ParserErrorRecord[] = [];
+    const ambiguousMappings: unknown[] = [];
+    await Promise.all([
+      readStorageRecords(
+        this.storage,
+        DEFAULT_ROUND_JOB_DEAD_LETTER_STREAM,
+        (record) => {
+          if (isDeadLetter(record)) deadLetters.push(record);
+        },
+      ),
+      readStorageRecords(
+        this.storage,
+        PARSER_ERROR_STORAGE_STREAM,
+        (record) => {
+          if (isParserError(record)) parserErrors.push(record);
+        },
+      ),
+      readStorageRecords(
+        this.storage,
+        AMBIGUOUS_MAPPING_STREAM,
+        (record) => ambiguousMappings.push(record),
+      ),
+    ]);
     return {
-      deadLetters: deadLetters.filter(isDeadLetter),
-      parserErrors: parserErrors.filter(isParserError),
+      deadLetters,
+      parserErrors,
       ambiguousMappings,
     };
   }
