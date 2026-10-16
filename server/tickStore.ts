@@ -70,6 +70,11 @@ export interface MarketTickStoreOptions {
    * eventually lands even without further ticks. `0` disables sampling.
    */
   persistIntervalMs?: number;
+  /**
+   * Overrides the retained tick-history bound; production uses
+   * MAX_RESTORED_TICKS.
+   */
+  maxRestoredTicks?: number;
   timer?: TickStoreTimer;
   publish?: (snapshot: MarketSnapshot) => Promise<void>;
   onSnapshot?: (snapshot: MarketSnapshot) => Promise<void>;
@@ -817,6 +822,8 @@ export class MarketTickStore implements TickHistorySource {
 
   private readonly persistIntervalMs: number;
 
+  private readonly maxRestoredTicks: number;
+
   private readonly timer: TickStoreTimer;
 
   private readonly lastPersistedAt = new Map<string, number>();
@@ -861,10 +868,10 @@ export class MarketTickStore implements TickHistorySource {
 
   // Durable history rewrites (see persistHistory()) run on their own queue,
   // deliberately separate from operationQueue: on a long-running deployment
-  // market-ticks.jsonl can still be large, and a confirmed round boundary
-  // must never make every subsequent live tick wait behind a slow rewrite of
-  // the whole file. The prune itself is applied to in-memory `history`
-  // synchronously in snapshotBoundary(); only the durable write is deferred
+  // market-ticks.jsonl can still be large, and neither a confirmed-boundary
+  // prune nor an amortized retention trim may make subsequent live ticks wait
+  // behind a slow rewrite of the whole file. Each prune is applied to
+  // in-memory `history` synchronously; only the durable write is deferred
   // here. idle() and close() still wait for this queue, so tests and a clean
   // shutdown continue to observe the rewrite's effect.
   private historyPersistQueue: Promise<void> = Promise.resolve();
@@ -880,11 +887,17 @@ export class MarketTickStore implements TickHistorySource {
     if (!Number.isFinite(persistIntervalMs) || persistIntervalMs < 0) {
       throw new TypeError("persistIntervalMs must be a non-negative number");
     }
+    const maxRestoredTicks =
+      options.maxRestoredTicks ?? MAX_RESTORED_TICKS;
+    if (!Number.isSafeInteger(maxRestoredTicks) || maxRestoredTicks < 1) {
+      throw new TypeError("maxRestoredTicks must be a positive safe integer");
+    }
     this.eventBus = options.eventBus;
     this.storage = options.storage;
     this.staleAfterMs = staleAfterMs;
     this.clock = options.clock ?? { now: () => Date.now() };
     this.persistIntervalMs = persistIntervalMs;
+    this.maxRestoredTicks = maxRestoredTicks;
     this.timer = options.timer ?? DEFAULT_TICK_STORE_TIMER;
     this.metrics = options.metrics ?? NOOP_METRICS;
     this.restoreTicks = options.restoreTicks ?? true;
@@ -929,13 +942,22 @@ export class MarketTickStore implements TickHistorySource {
       // In-memory state is always applied immediately, for UI freshness and
       // for accurate round-boundary reconstruction; only the durable write
       // below is sampled.
-    this.history.push(accepted);
-    // Keep the live process bounded even between confirmed round boundaries.
-    // A busy exchange can emit enough ticks in a single round to exhaust the
-    // VM before the lifecycle driver gets a chance to compact the durable log.
-    if (this.history.length >= MAX_RESTORED_TICKS * 2) {
-      this.history.splice(0, this.history.length - MAX_RESTORED_TICKS);
-    }
+      this.history.push(accepted);
+      // Keep the live process bounded even between confirmed round boundaries.
+      // After the final fight, transports continue polling upcoming cards but
+      // no later confirmed boundary exists to rewrite market-ticks.jsonl. The
+      // amortized in-memory trim must therefore schedule that durable rewrite
+      // too, or the process stays bounded while the Fly volume grows forever.
+      if (this.history.length >= this.maxRestoredTicks * 2) {
+        const before = this.history.length;
+        this.history.splice(
+          0,
+          this.history.length - this.maxRestoredTicks,
+        );
+        if (this.history.length !== before) {
+          this.schedulePersistHistory();
+        }
+      }
       const state = applyTick(this.latest, accepted);
       result = this.toLocalState(state, this.clock.now());
       await this.persistSampled(accepted);
@@ -1151,6 +1173,7 @@ export class MarketTickStore implements TickHistorySource {
   private async restoreFromStorage(): Promise<void> {
     this.history.splice(0);
     this.latest.clear();
+    let historyTrimmed = false;
     if (this.restoreTicks) {
       await readStorageRecords(this.storage, MARKET_TICKS_STORAGE_STREAM, (record) => {
         const persisted = record;
@@ -1159,12 +1182,24 @@ export class MarketTickStore implements TickHistorySource {
         // straight out of JSON.parse in storage.read() and isn't aliased by
         // any caller that could later mutate it, so history can hold it
         // directly.
-        if (this.history.length >= MAX_RESTORED_TICKS * 2) {
-          this.history.splice(0, this.history.length - MAX_RESTORED_TICKS);
+        if (this.history.length >= this.maxRestoredTicks * 2) {
+          const before = this.history.length;
+          this.history.splice(
+            0,
+            this.history.length - this.maxRestoredTicks,
+          );
+          historyTrimmed ||= this.history.length !== before;
         }
         this.history.push(persisted.tick);
         applyTick(this.latest, persisted.tick);
       });
+    }
+    if (historyTrimmed) {
+      // Do not replace market-ticks.jsonl from inside readStorageRecords():
+      // JsonlStorage may still be streaming that same file. Schedule one
+      // rewrite only after restore has finished reading, which compacts a
+      // legacy oversized stream without racing its own iterator.
+      this.schedulePersistHistory();
     }
 
     this.snapshots.clear();
@@ -1516,9 +1551,9 @@ export class MarketTickStore implements TickHistorySource {
   /**
    * Rewrites market-ticks.jsonl from the current (already-pruned)
    * `history`, physically shrinking the durable file to match — an append
-   * can only grow a stream, so this is the only way a prune (see the
-   * "confirmed" branch in snapshotBoundary) ever takes effect on disk
-   * rather than just in memory.
+   * can only grow a stream, so this is the only way a confirmed-boundary or
+   * retention-limit prune ever takes effect on disk rather than just in
+   * memory.
    */
   private async persistHistory(): Promise<void> {
     const records = this.history.map(

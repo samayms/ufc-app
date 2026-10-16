@@ -57,6 +57,7 @@ async function setup(options: {
   // the sampled-persistence behavior; default to immediate writes here and
   // opt individual tests into sampling explicitly.
   persistIntervalMs?: number;
+  maxRestoredTicks?: number;
   onSnapshot?: (snapshot: Parameters<
     NonNullable<
       ConstructorParameters<typeof MarketTickStore>[0]["onSnapshot"]
@@ -77,6 +78,9 @@ async function setup(options: {
     clock,
     staleAfterMs: options.staleAfterMs ?? 30_000,
     persistIntervalMs: options.persistIntervalMs ?? 0,
+    ...(options.maxRestoredTicks === undefined
+      ? {}
+      : { maxRestoredTicks: options.maxRestoredTicks }),
     ...(options.onSnapshot === undefined
       ? {}
       : { onSnapshot: options.onSnapshot }),
@@ -111,6 +115,54 @@ describe("MarketTickStore", () => {
         impliedProbability: 0.63,
       }),
     ]);
+    await store.close();
+  });
+
+  it("bounds the durable tick stream without a confirmed round boundary", async () => {
+    const maxRestoredTicks = 3;
+    const { storage, store } = await setup({ maxRestoredTicks });
+
+    for (let sequence = 0; sequence < maxRestoredTicks * 2 + 1; sequence += 1) {
+      await store.appendTick(
+        tick("red", {
+          bid: 0.5 + sequence / 100,
+          ask: 0.51 + sequence / 100,
+          sourceUpdatedAt: at(sequence),
+          receivedAt: at(sequence),
+        }),
+      );
+    }
+    await store.idle();
+
+    await expect(store.getTickHistory(BOUT_ID)).resolves.toHaveLength(4);
+    await expect(
+      storage.read(MARKET_TICKS_STORAGE_STREAM),
+    ).resolves.toHaveLength(4);
+    await store.close();
+  });
+
+  it("compacts an oversized restored tick stream after reading it", async () => {
+    const maxRestoredTicks = 3;
+    const storage = new MemoryStorage();
+    for (let sequence = 0; sequence < maxRestoredTicks * 2 + 1; sequence += 1) {
+      await storage.append(MARKET_TICKS_STORAGE_STREAM, {
+        version: 1,
+        tick: tick("red", {
+          bid: 0.5 + sequence / 100,
+          ask: 0.51 + sequence / 100,
+          sourceUpdatedAt: at(sequence),
+          receivedAt: at(sequence),
+        }),
+      });
+    }
+
+    const { store } = await setup({ storage, maxRestoredTicks });
+    await store.idle();
+
+    await expect(store.getTickHistory(BOUT_ID)).resolves.toHaveLength(4);
+    await expect(
+      storage.read(MARKET_TICKS_STORAGE_STREAM),
+    ).resolves.toHaveLength(4);
     await store.close();
   });
 
